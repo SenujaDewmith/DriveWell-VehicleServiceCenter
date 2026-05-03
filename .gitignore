@@ -1,0 +1,85 @@
+# ========================
+# Dependencies
+# ========================
+node_modules/
+**/node_modules/
+
+# ========================
+# Environment Variables
+# ========================
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+.dev.vars
+
+# ========================
+# Logs
+# ========================
+logs/*
+!logs/.gitkeep
+**/logs/*
+!**/logs/.gitkeep
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ========================
+# Build Output
+# ========================
+dist/
+dist-ssr/
+build/
+**/dist/
+**/dist-ssr/
+**/build/
+
+# ========================
+# Vite / TanStack / Vinxi
+# ========================
+.tanstack/
+**/.tanstack/
+.vinxi/
+.output/
+.nitro/
+
+# ========================
+# Wrangler / Cloudflare
+# ========================
+.wrangler/
+
+# ========================
+# TypeScript
+# ========================
+*.tsbuildinfo
+
+# ========================
+# Coverage
+# ========================
+coverage/
+**/coverage/
+
+# ========================
+# OS
+# ========================
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ========================
+# IDE
+# ========================
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
