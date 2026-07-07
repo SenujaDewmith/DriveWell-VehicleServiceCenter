@@ -112,10 +112,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </DropdownMenu>
               ) : (
                 <div className="hidden md:flex items-center space-x-2">
-                  <Button variant="ghost" onClick={() => navigate("/auth")}>
+                  <Button variant="ghost" onClick={() => navigate("/login")}>
                     Login
                   </Button>
-                  <Button className="bg-cta text-cta-foreground hover:bg-cta/90" onClick={() => navigate("/auth?mode=register")}>
+                  <Button className="bg-cta text-cta-foreground hover:bg-cta/90" onClick={() => navigate("/register")}>
                     Sign Up
                   </Button>
                 </div>
@@ -147,10 +147,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 ))}
                 {!user && (
                   <>
-                    <Button variant="ghost" onClick={() => { navigate("/auth"); setMobileMenuOpen(false); }}>
+                    <Button variant="ghost" onClick={() => { navigate("/login"); setMobileMenuOpen(false); }}>
                       Login
                     </Button>
-                    <Button className="bg-cta text-cta-foreground hover:bg-cta/90" onClick={() => { navigate("/auth?mode=register"); setMobileMenuOpen(false); }}>
+                    <Button className="bg-cta text-cta-foreground hover:bg-cta/90" onClick={() => { navigate("/register"); setMobileMenuOpen(false); }}>
                       Sign Up
                     </Button>
                   </>
@@ -179,7 +179,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <h3 className="font-semibold mb-3">Quick Links</h3>
               <ul className="space-y-2 text-sm">
                 <li><Link to="/services" className="hover:text-cta transition-colors">Services</Link></li>
-                <li><Link to="/auth" className="hover:text-cta transition-colors">Login</Link></li>
+                <li><Link to="/login" className="hover:text-cta transition-colors">Login</Link></li>
                 <li><Link to="/dashboard" className="hover:text-cta transition-colors">Dashboard</Link></li>
               </ul>
             </div>

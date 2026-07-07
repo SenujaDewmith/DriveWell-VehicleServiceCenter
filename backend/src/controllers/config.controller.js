@@ -1,11 +1,15 @@
-const pool = require("../config/db");
+const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
+const { fmtTime } = require("../lib/format");
 
 const getConfig = async (req, res) => {
   try {
-    const config = await pool.query(`SELECT * FROM working_config LIMIT 1`);
-    const slots = await pool.query(`SELECT * FROM time_slots ORDER BY slot_time`);
-    res.status(200).json({ config: config.rows[0], slots: slots.rows });
+    const config = await prisma.workingConfig.findFirst();
+    const slots = await prisma.timeSlot.findMany({ orderBy: { slot_time: "asc" } });
+    res.status(200).json({
+      config,
+      slots: slots.map((s) => ({ ...s, slot_time: fmtTime(s.slot_time) })),
+    });
   } catch (error) {
     logger.error(`getConfig failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -18,12 +22,12 @@ const updateConfig = async (req, res) => {
     return res.status(400).json({ message: "daily_capacity and working_days are required" });
 
   try {
-    const result = await pool.query(
-      `UPDATE working_config SET daily_capacity=$1, working_days=$2 RETURNING *`,
-      [daily_capacity, working_days]
-    );
+    const config = await prisma.workingConfig.updateMany({
+      data: { daily_capacity, working_days },
+    });
     logger.info(`Working config updated by manager user_id: ${req.user.user_id}`);
-    res.status(200).json({ message: "Config updated", config: result.rows[0] });
+    const updated = await prisma.workingConfig.findFirst();
+    res.status(200).json({ message: "Config updated", config: updated });
   } catch (error) {
     logger.error(`updateConfig failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -35,14 +39,12 @@ const addSlot = async (req, res) => {
   if (!slot_time) return res.status(400).json({ message: "slot_time is required (HH:MM)" });
 
   try {
-    const result = await pool.query(
-      `INSERT INTO time_slots (slot_time) VALUES ($1) RETURNING *`,
-      [slot_time]
-    );
-    res.status(201).json({ message: "Slot added", slot: result.rows[0] });
+    const slot = await prisma.timeSlot.create({
+      data: { slot_time: new Date(`1970-01-01T${slot_time}:00.000Z`) },
+    });
+    res.status(201).json({ message: "Slot added", slot: { ...slot, slot_time: fmtTime(slot.slot_time) } });
   } catch (error) {
-    if (error.code === "23505")
-      return res.status(400).json({ message: "Slot already exists" });
+    if (error.code === "P2002") return res.status(400).json({ message: "Slot already exists" });
     logger.error(`addSlot failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -54,13 +56,13 @@ const toggleSlot = async (req, res) => {
   if (is_active === undefined) return res.status(400).json({ message: "is_active is required" });
 
   try {
-    const result = await pool.query(
-      `UPDATE time_slots SET is_active=$1 WHERE slot_id=$2 RETURNING *`,
-      [is_active, id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ message: "Slot not found" });
-    res.status(200).json({ message: "Slot updated", slot: result.rows[0] });
+    const slot = await prisma.timeSlot.update({
+      where: { slot_id: parseInt(id) },
+      data: { is_active },
+    });
+    res.status(200).json({ message: "Slot updated", slot: { ...slot, slot_time: fmtTime(slot.slot_time) } });
   } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Slot not found" });
     logger.error(`toggleSlot failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -68,13 +70,10 @@ const toggleSlot = async (req, res) => {
 
 const deleteSlot = async (req, res) => {
   try {
-    const result = await pool.query(
-      `DELETE FROM time_slots WHERE slot_id=$1 RETURNING slot_id`,
-      [req.params.id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ message: "Slot not found" });
+    await prisma.timeSlot.delete({ where: { slot_id: parseInt(req.params.id) } });
     res.status(200).json({ message: "Slot deleted" });
   } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Slot not found" });
     logger.error(`deleteSlot failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }

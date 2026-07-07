@@ -19,7 +19,7 @@ export default function Profile() {
 
   useEffect(() => {
     if (!user) {
-      navigate("/auth");
+      navigate("/login");
     } else {
       setFormData({
         name: user.name,

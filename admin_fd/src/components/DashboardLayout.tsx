@@ -95,8 +95,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
             <div className="p-4 border-t-2 border-border">
               <button
-                onClick={() => {
-                  logout();
+                onClick={async () => {
+                  await logout();
                   window.location.href = "/login";
                 }}
                 className="flex items-center gap-2 text-xs font-mono uppercase text-muted-foreground hover:text-foreground transition-colors w-full"
@@ -134,8 +134,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
             <ThemeToggle />
             {!isManager && (
               <button
-                onClick={() => {
-                  logout();
+                onClick={async () => {
+                  await logout();
                   window.location.href = "/login";
                 }}
                 className="p-2 border border-border bg-card text-foreground hover:bg-muted transition-colors"

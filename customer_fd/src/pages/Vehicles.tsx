@@ -21,7 +21,7 @@ export default function Vehicles() {
 
   useEffect(() => {
     if (!user) {
-      navigate("/auth");
+      navigate("/login");
     }
   }, [user, navigate]);
 

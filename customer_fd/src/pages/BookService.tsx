@@ -23,7 +23,7 @@ export default function BookService() {
 
   useEffect(() => {
     if (!user) {
-      navigate("/auth");
+      navigate("/login");
     }
   }, [user, navigate]);
 

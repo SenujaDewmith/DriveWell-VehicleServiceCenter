@@ -16,7 +16,7 @@ export default function Feedback() {
 
   useEffect(() => {
     if (!user) {
-      navigate("/auth");
+      navigate("/login");
     }
   }, [user, navigate]);
 

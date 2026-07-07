@@ -1,4 +1,4 @@
-const pool = require("../config/db");
+const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { sendStatusUpdate } = require("../services/email.service");
 
@@ -7,25 +7,32 @@ const NOTIFY_STATUSES = ["Completed", "Ready for Pickup"];
 const getServiceRecord = async (req, res) => {
   const { booking_id } = req.params;
   try {
-    const record = await pool.query(
-      `SELECT sr.*, s.full_name AS supervisor_name
-       FROM service_records sr
-       LEFT JOIN staff s ON s.user_id = sr.supervisor_id
-       WHERE sr.reservation_id = $1`,
-      [booking_id]
-    );
-    if (record.rows.length === 0)
-      return res.status(404).json({ message: "Service record not found" });
+    const record = await prisma.serviceRecord.findUnique({
+      where: { reservation_id: parseInt(booking_id) },
+      include: {
+        supervisor: { select: { staff: { select: { full_name: true } } } },
+        assignments: {
+          include: { staff: { select: { staff: { select: { full_name: true } } } } },
+        },
+      },
+    });
+    if (!record) return res.status(404).json({ message: "Service record not found" });
 
-    const assignments = await pool.query(
-      `SELECT ssa.*, st.full_name AS staff_name
-       FROM service_staff_assignments ssa
-       JOIN staff st ON st.user_id = ssa.staff_id
-       WHERE ssa.record_id = $1`,
-      [record.rows[0].record_id]
-    );
+    const flatRecord = {
+      ...record,
+      supervisor_name: record.supervisor?.staff?.full_name ?? null,
+      supervisor: undefined,
+    };
 
-    res.status(200).json({ record: record.rows[0], assignments: assignments.rows });
+    const assignments = record.assignments.map((a) => ({
+      assignment_id: a.assignment_id,
+      record_id: a.record_id,
+      staff_id: a.staff_id,
+      task_type: a.task_type,
+      staff_name: a.staff?.staff?.full_name ?? null,
+    }));
+
+    res.status(200).json({ record: flatRecord, assignments });
   } catch (error) {
     logger.error(`getServiceRecord failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -37,54 +44,52 @@ const createServiceRecord = async (req, res) => {
   const { booking_id } = req.params;
   const { remarks, additional_work, consumables, additional_charges } = req.body;
 
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
+    const record = await prisma.$transaction(async (tx) => {
+      const booking = await tx.reservation.findUnique({
+        where: { reservation_id: parseInt(booking_id) },
+        select: { status: true },
+      });
+      if (!booking) {
+        const err = new Error("Booking not found"); err.status = 404; throw err;
+      }
+      if (!["Booked", "Started"].includes(booking.status)) {
+        const err = new Error("Booking is not in a state that can be started"); err.status = 400; throw err;
+      }
 
-    // Verify booking exists and is in a startable state
-    const bookingResult = await client.query(
-      `SELECT status FROM reservations WHERE reservation_id=$1`,
-      [booking_id]
-    );
-    if (bookingResult.rows.length === 0) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ message: "Booking not found" });
-    }
-    if (!["Booked", "Started"].includes(bookingResult.rows[0].status)) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: "Booking is not in a state that can be started" });
-    }
+      const existing = await tx.serviceRecord.findUnique({
+        where: { reservation_id: parseInt(booking_id) },
+      });
+      if (existing) {
+        const err = new Error("Service record already exists for this booking"); err.status = 400; throw err;
+      }
 
-    // Prevent duplicate records
-    const existing = await client.query(
-      `SELECT record_id FROM service_records WHERE reservation_id=$1`,
-      [booking_id]
-    );
-    if (existing.rows.length > 0) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: "Service record already exists for this booking" });
-    }
+      const created = await tx.serviceRecord.create({
+        data: {
+          reservation_id: parseInt(booking_id),
+          supervisor_id: user_id,
+          remarks: remarks || null,
+          additional_work: additional_work || null,
+          consumables: consumables || null,
+          additional_charges: additional_charges || 0,
+          started_at: new Date(),
+        },
+      });
 
-    const result = await client.query(
-      `INSERT INTO service_records (reservation_id, supervisor_id, remarks, additional_work, consumables, additional_charges, started_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
-      [booking_id, user_id, remarks || null, additional_work || null, consumables || null, additional_charges || 0]
-    );
+      await tx.reservation.update({
+        where: { reservation_id: parseInt(booking_id) },
+        data: { status: "Started" },
+      });
 
-    await client.query(
-      `UPDATE reservations SET status='Started' WHERE reservation_id=$1`,
-      [booking_id]
-    );
+      return created;
+    });
 
-    await client.query("COMMIT");
-    logger.info(`Service record created — record_id: ${result.rows[0].record_id}`);
-    res.status(201).json({ message: "Service record created", record: result.rows[0] });
+    logger.info(`Service record created — record_id: ${record.record_id}`);
+    res.status(201).json({ message: "Service record created", record });
   } catch (error) {
-    await client.query("ROLLBACK");
+    if (error.status) return res.status(error.status).json({ message: error.message });
     logger.error(`createServiceRecord failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
-  } finally {
-    client.release();
   }
 };
 
@@ -93,15 +98,19 @@ const updateServiceRecord = async (req, res) => {
   const { remarks, additional_work, consumables, additional_charges, quality_checked } = req.body;
 
   try {
-    const result = await pool.query(
-      `UPDATE service_records
-       SET remarks=$1, additional_work=$2, consumables=$3, additional_charges=$4, quality_checked=$5
-       WHERE reservation_id=$6 RETURNING *`,
-      [remarks || null, additional_work || null, consumables || null, additional_charges ?? 0, quality_checked ?? false, booking_id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ message: "Service record not found" });
-    res.status(200).json({ message: "Service record updated", record: result.rows[0] });
+    const record = await prisma.serviceRecord.update({
+      where: { reservation_id: parseInt(booking_id) },
+      data: {
+        remarks: remarks || null,
+        additional_work: additional_work || null,
+        consumables: consumables || null,
+        additional_charges: additional_charges ?? 0,
+        quality_checked: quality_checked ?? false,
+      },
+    });
+    res.status(200).json({ message: "Service record updated", record });
   } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Service record not found" });
     logger.error(`updateServiceRecord failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -115,52 +124,42 @@ const updateStatus = async (req, res) => {
   if (!status || !valid.includes(status))
     return res.status(400).json({ message: `status must be one of: ${valid.join(", ")}` });
 
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
+    const booking = await prisma.$transaction(async (tx) => {
+      if (status === "Completed") {
+        await tx.serviceRecord.updateMany({
+          where: { reservation_id: parseInt(booking_id) },
+          data: { completed_at: new Date() },
+        });
+      }
 
-    const updates = {};
-    if (status === "Completed") updates.completed_at = "NOW()";
+      const updated = await tx.reservation.update({
+        where: { reservation_id: parseInt(booking_id) },
+        data: { status },
+        select: { reservation_id: true, booking_ref: true, customer_id: true },
+      });
 
-    const setClause = Object.keys(updates).map(k => `${k} = ${updates[k]}`).join(", ");
-    if (setClause) {
-      await client.query(
-        `UPDATE service_records SET ${setClause} WHERE reservation_id=$1`,
-        [booking_id]
-      );
-    }
-
-    const bookingResult = await client.query(
-      `UPDATE reservations SET status=$1 WHERE reservation_id=$2
-       RETURNING reservation_id, booking_ref, customer_id`,
-      [status, booking_id]
-    );
-
-    if (bookingResult.rows.length === 0) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ message: "Booking not found" });
-    }
-
-    await client.query("COMMIT");
+      return updated;
+    });
 
     if (NOTIFY_STATUSES.includes(status)) {
-      const booking = bookingResult.rows[0];
-      const customerResult = await pool.query(
-        `SELECT u.email, c.full_name FROM users u JOIN customers c ON c.user_id=u.user_id WHERE u.user_id=$1`,
-        [booking.customer_id]
-      );
-      const { email, full_name } = customerResult.rows[0];
-      sendStatusUpdate(email, { customerName: full_name, bookingRef: booking.booking_ref, status });
+      const customer = await prisma.user.findUnique({
+        where: { user_id: booking.customer_id },
+        select: { email: true, customer: { select: { full_name: true } } },
+      });
+      sendStatusUpdate(customer.email, {
+        customerName: customer.customer?.full_name,
+        bookingRef: booking.booking_ref,
+        status,
+      });
     }
 
     logger.info(`Service status updated to '${status}' for reservation_id: ${booking_id}`);
     res.status(200).json({ message: "Status updated", status });
   } catch (error) {
-    await client.query("ROLLBACK");
+    if (error.code === "P2025") return res.status(404).json({ message: "Booking not found" });
     logger.error(`updateStatus failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
-  } finally {
-    client.release();
   }
 };
 
@@ -172,22 +171,19 @@ const assignStaff = async (req, res) => {
     return res.status(400).json({ message: "staff_id and task_type are required" });
 
   try {
-    const recordResult = await pool.query(
-      `SELECT record_id FROM service_records WHERE reservation_id=$1`,
-      [booking_id]
-    );
-    if (recordResult.rows.length === 0)
-      return res.status(404).json({ message: "Service record not found" });
+    const record = await prisma.serviceRecord.findUnique({
+      where: { reservation_id: parseInt(booking_id) },
+      select: { record_id: true },
+    });
+    if (!record) return res.status(404).json({ message: "Service record not found" });
 
-    const result = await pool.query(
-      `INSERT INTO service_staff_assignments (record_id, staff_id, task_type)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (record_id, staff_id, task_type) DO NOTHING
-       RETURNING *`,
-      [recordResult.rows[0].record_id, staff_id, task_type]
-    );
-    res.status(201).json({ message: "Staff assigned", assignment: result.rows[0] || null });
+    const assignment = await prisma.serviceStaffAssignment.create({
+      data: { record_id: record.record_id, staff_id: parseInt(staff_id), task_type },
+    });
+    res.status(201).json({ message: "Staff assigned", assignment });
   } catch (error) {
+    if (error.code === "P2002")
+      return res.status(200).json({ message: "Staff already assigned", assignment: null });
     logger.error(`assignStaff failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -196,13 +192,12 @@ const assignStaff = async (req, res) => {
 const removeStaffAssignment = async (req, res) => {
   const { assignment_id } = req.params;
   try {
-    const result = await pool.query(
-      `DELETE FROM service_staff_assignments WHERE assignment_id=$1 RETURNING assignment_id`,
-      [assignment_id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ message: "Assignment not found" });
+    await prisma.serviceStaffAssignment.delete({
+      where: { assignment_id: parseInt(assignment_id) },
+    });
     res.status(200).json({ message: "Staff assignment removed" });
   } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Assignment not found" });
     logger.error(`removeStaffAssignment failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }

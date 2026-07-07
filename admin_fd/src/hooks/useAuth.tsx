@@ -1,32 +1,66 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
-import type { Role } from "@/data/dummyData";
+import { api } from "@/lib/api";
+
+export type Role = "manager" | "supervisor" | "cashier" | "staff";
+
+const ROLE_MAP: Record<number, Role> = {
+  1: "manager",
+  2: "supervisor",
+  3: "cashier",
+  4: "staff",
+};
 
 interface AuthState {
   isAuthenticated: boolean;
   username: string;
+  email: string;
+  userId: number | null;
   role: Role;
 }
 
 interface AuthContextType extends AuthState {
-  login: (username: string, role: Role) => void;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+}
+
+const STORAGE_KEY = "drivewell_auth";
+
+function loadAuth(): AuthState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw) as AuthState;
+  } catch {
+    // ignore corrupt storage
+  }
+  return { isAuthenticated: false, username: "", email: "", userId: null, role: "manager" };
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [auth, setAuth] = useState<AuthState>({
-    isAuthenticated: false,
-    username: "",
-    role: "manager",
-  });
+  const [auth, setAuth] = useState<AuthState>(loadAuth);
 
-  const login = (username: string, role: Role) => {
-    setAuth({ isAuthenticated: true, username, role });
+  const login = async (email: string, password: string) => {
+    const data = await api.post<{ user: { id: number; email: string; role_id: number } }>(
+      "/api/auth/login",
+      { email, password },
+    );
+    const role = ROLE_MAP[data.user.role_id] ?? "staff";
+    const next: AuthState = {
+      isAuthenticated: true,
+      username: data.user.email.split("@")[0],
+      email: data.user.email,
+      userId: data.user.id,
+      role,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    setAuth(next);
   };
 
-  const logout = () => {
-    setAuth({ isAuthenticated: false, username: "", role: "manager" });
+  const logout = async () => {
+    await api.post("/api/auth/logout", {}).catch(() => {});
+    localStorage.removeItem(STORAGE_KEY);
+    setAuth({ isAuthenticated: false, username: "", email: "", userId: null, role: "manager" });
   };
 
   return (

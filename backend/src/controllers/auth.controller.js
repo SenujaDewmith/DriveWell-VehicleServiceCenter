@@ -1,96 +1,77 @@
-const pool = require("../config/db");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 require("dotenv").config();
 
 const register = async (req, res) => {
   const { name, email, password } = req.body;
 
-  if (!name || !email || !password)
-    return res.status(400).json({ message: "name, email, and password are required" });
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email))
-    return res.status(400).json({ message: "Invalid email format" });
-
-  if (password.length < 6)
-    return res.status(400).json({ message: "Password must be at least 6 characters" });
-
-  if (name.trim().length < 2)
-    return res.status(400).json({ message: "Name must be at least 2 characters" });
-
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
+    const user = await prisma.$transaction(async (tx) => {
+      const existing = await tx.user.findUnique({ where: { email } });
+      if (existing) {
+        const err = new Error("Email already registered");
+        err.status = 400;
+        throw err;
+      }
 
-    const existing = await client.query("SELECT user_id FROM users WHERE email = $1", [email]);
-    if (existing.rows.length > 0) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: "Email already registered" });
-    }
+      const role = await tx.role.findFirst({ where: { role_name: "Customer" } });
+      if (!role) {
+        const err = new Error("Role configuration error");
+        err.status = 500;
+        throw err;
+      }
 
-    const roleResult = await client.query("SELECT role_id FROM roles WHERE role_name = 'Customer'");
-    if (roleResult.rows.length === 0) {
-      await client.query("ROLLBACK");
-      return res.status(500).json({ message: "Role configuration error" });
-    }
+      const hashedPassword = await bcrypt.hash(password, 10);
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const userResult = await client.query(
-      `INSERT INTO users (email, password_hash, role_id) VALUES ($1, $2, $3) RETURNING user_id, email, role_id`,
-      [email, hashedPassword, roleResult.rows[0].role_id]
-    );
+      return tx.user.create({
+        data: {
+          email,
+          password_hash: hashedPassword,
+          role_id: role.role_id,
+          customer: { create: { full_name: name.trim() } },
+        },
+        select: { user_id: true, email: true, role_id: true },
+      });
+    });
 
-    await client.query(
-      `INSERT INTO customers (user_id, full_name) VALUES ($1, $2)`,
-      [userResult.rows[0].user_id, name.trim()]
-    );
-
-    await client.query("COMMIT");
-    logger.info(`New customer registered — user_id: ${userResult.rows[0].user_id}`);
-
-    res.status(201).json({ message: "User registered successfully", user: userResult.rows[0] });
+    logger.info(`New customer registered — user_id: ${user.user_id}`);
+    res.status(201).json({ message: "User registered successfully", user });
   } catch (error) {
-    await client.query("ROLLBACK");
+    if (error.status) return res.status(error.status).json({ message: error.message });
     logger.error(`Register failed for ${email} — ${error.message}`);
     res.status(500).json({ message: "Server error" });
-  } finally {
-    client.release();
   }
 };
 
 const login = async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password)
-    return res.status(400).json({ message: "Email and password are required" });
+  const { email, password, rememberMe = false } = req.body;
 
   try {
-    const result = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-    if (result.rows.length === 0)
-      return res.status(401).json({ message: "Invalid email or password" });
-
-    const user = result.rows[0];
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return res.status(401).json({ message: "Invalid email or password" });
 
     if (user.account_status !== "active")
       return res.status(403).json({ message: "Account is inactive. Contact the service center." });
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
-    if (!isMatch)
-      return res.status(401).json({ message: "Invalid email or password" });
+    if (!isMatch) return res.status(401).json({ message: "Invalid email or password" });
+
+    const expiresIn = rememberMe ? "30d" : "1d";
+    const maxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
 
     const token = jwt.sign(
       { user_id: user.user_id, email: user.email, role_id: user.role_id },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" }
+      { expiresIn }
     );
 
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-      maxAge: 24 * 60 * 60 * 1000,
+      maxAge,
     });
 
     logger.info(`Login successful — user_id: ${user.user_id}`);
@@ -118,23 +99,23 @@ const getProfile = async (req, res) => {
   const CUSTOMER_ROLE_ID = 5;
 
   try {
-    const userResult = await pool.query(
-      `SELECT user_id, email, role_id, account_status, created_at FROM users WHERE user_id = $1`,
-      [user_id]
-    );
-    if (userResult.rows.length === 0)
-      return res.status(404).json({ message: "User not found" });
+    const userRecord = await prisma.user.findUnique({
+      where: { user_id },
+      select: {
+        user_id: true,
+        email: true,
+        role_id: true,
+        account_status: true,
+        created_at: true,
+        customer: role_id === CUSTOMER_ROLE_ID,
+        staff: role_id !== CUSTOMER_ROLE_ID,
+      },
+    });
 
-    const user = userResult.rows[0];
-    let profile = null;
+    if (!userRecord) return res.status(404).json({ message: "User not found" });
 
-    if (role_id === CUSTOMER_ROLE_ID) {
-      const r = await pool.query(`SELECT full_name, phone, address FROM customers WHERE user_id = $1`, [user_id]);
-      profile = r.rows[0] || null;
-    } else {
-      const r = await pool.query(`SELECT full_name, phone_no FROM staff WHERE user_id = $1`, [user_id]);
-      profile = r.rows[0] || null;
-    }
+    const { customer, staff, ...user } = userRecord;
+    const profile = role_id === CUSTOMER_ROLE_ID ? customer : staff;
 
     res.status(200).json({ user, profile });
   } catch (error) {

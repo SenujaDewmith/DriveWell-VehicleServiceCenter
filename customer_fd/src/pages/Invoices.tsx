@@ -14,7 +14,7 @@ export default function Invoices() {
 
   useEffect(() => {
     if (!user) {
-      navigate("/auth");
+      navigate("/login");
     }
   }, [user, navigate]);
 

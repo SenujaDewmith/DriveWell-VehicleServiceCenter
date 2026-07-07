@@ -1,14 +1,14 @@
-const pool = require("../config/db");
+const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 
 const listPackages = async (req, res) => {
   try {
-    const showAll = req.user?.role_id === 1; // manager sees inactive too
-    const query = showAll
-      ? `SELECT * FROM service_packages ORDER BY created_at DESC`
-      : `SELECT * FROM service_packages WHERE is_active = TRUE ORDER BY name`;
-    const result = await pool.query(query);
-    res.status(200).json({ packages: result.rows });
+    const isManager = req.user?.role_id === 1;
+    const packages = await prisma.servicePackage.findMany({
+      where: isManager ? {} : { is_active: true },
+      orderBy: isManager ? { created_at: "desc" } : { name: "asc" },
+    });
+    res.status(200).json({ packages });
   } catch (error) {
     logger.error(`listPackages failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -17,9 +17,11 @@ const listPackages = async (req, res) => {
 
 const getPackage = async (req, res) => {
   try {
-    const result = await pool.query(`SELECT * FROM service_packages WHERE package_id = $1`, [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ message: "Package not found" });
-    res.status(200).json({ package: result.rows[0] });
+    const pkg = await prisma.servicePackage.findUnique({
+      where: { package_id: parseInt(req.params.id) },
+    });
+    if (!pkg) return res.status(404).json({ message: "Package not found" });
+    res.status(200).json({ package: pkg });
   } catch (error) {
     logger.error(`getPackage failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -32,13 +34,11 @@ const createPackage = async (req, res) => {
     return res.status(400).json({ message: "name, estimated_duration, and price are required" });
 
   try {
-    const result = await pool.query(
-      `INSERT INTO service_packages (name, description, estimated_duration, price)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [name.trim(), description || null, estimated_duration, price]
-    );
-    logger.info(`Package created — package_id: ${result.rows[0].package_id}`);
-    res.status(201).json({ message: "Package created", package: result.rows[0] });
+    const pkg = await prisma.servicePackage.create({
+      data: { name: name.trim(), description: description || null, estimated_duration, price },
+    });
+    logger.info(`Package created — package_id: ${pkg.package_id}`);
+    res.status(201).json({ message: "Package created", package: pkg });
   } catch (error) {
     logger.error(`createPackage failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -51,14 +51,13 @@ const updatePackage = async (req, res) => {
     return res.status(400).json({ message: "name, estimated_duration, and price are required" });
 
   try {
-    const result = await pool.query(
-      `UPDATE service_packages SET name=$1, description=$2, estimated_duration=$3, price=$4
-       WHERE package_id=$5 RETURNING *`,
-      [name.trim(), description || null, estimated_duration, price, req.params.id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ message: "Package not found" });
-    res.status(200).json({ message: "Package updated", package: result.rows[0] });
+    const pkg = await prisma.servicePackage.update({
+      where: { package_id: parseInt(req.params.id) },
+      data: { name: name.trim(), description: description || null, estimated_duration, price },
+    });
+    res.status(200).json({ message: "Package updated", package: pkg });
   } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Package not found" });
     logger.error(`updatePackage failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -66,13 +65,14 @@ const updatePackage = async (req, res) => {
 
 const deactivatePackage = async (req, res) => {
   try {
-    const result = await pool.query(
-      `UPDATE service_packages SET is_active = FALSE WHERE package_id=$1 RETURNING package_id, name`,
-      [req.params.id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ message: "Package not found" });
-    res.status(200).json({ message: "Package deactivated", package: result.rows[0] });
+    const pkg = await prisma.servicePackage.update({
+      where: { package_id: parseInt(req.params.id) },
+      data: { is_active: false },
+      select: { package_id: true, name: true },
+    });
+    res.status(200).json({ message: "Package deactivated", package: pkg });
   } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Package not found" });
     logger.error(`deactivatePackage failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -80,13 +80,14 @@ const deactivatePackage = async (req, res) => {
 
 const activatePackage = async (req, res) => {
   try {
-    const result = await pool.query(
-      `UPDATE service_packages SET is_active = TRUE WHERE package_id=$1 RETURNING package_id, name`,
-      [req.params.id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ message: "Package not found" });
-    res.status(200).json({ message: "Package activated", package: result.rows[0] });
+    const pkg = await prisma.servicePackage.update({
+      where: { package_id: parseInt(req.params.id) },
+      data: { is_active: true },
+      select: { package_id: true, name: true },
+    });
+    res.status(200).json({ message: "Package activated", package: pkg });
   } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Package not found" });
     logger.error(`activatePackage failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }

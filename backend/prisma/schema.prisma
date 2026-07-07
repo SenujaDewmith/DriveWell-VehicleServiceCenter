@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  role_id   Int    @id @default(autoincrement())
+  role_name String @unique @db.VarChar(50)
+  users     User[]
+
+  @@map("roles")
+}
+
+model User {
+  user_id        Int      @id @default(autoincrement())
+  email          String   @unique @db.VarChar(150)
+  password_hash  String   @db.VarChar(255)
+  role_id        Int
+  account_status String   @default("active") @db.VarChar(30)
+  created_at     DateTime @default(now())
+
+  role     Role      @relation(fields: [role_id], references: [role_id])
+  customer Customer?
+  staff    Staff?
+
+  vehicles           Vehicle[]                @relation("CustomerVehicles")
+  reservations       Reservation[]            @relation("CustomerReservations")
+  supervised_records ServiceRecord[]          @relation("SupervisorRecords")
+  staff_assignments  ServiceStaffAssignment[]
+  invoices_issued    Invoice[]                @relation("CashierInvoices")
+  feedback_submitted Feedback[]               @relation("CustomerFeedback")
+  activity_logs      ActivityLog[]
+
+  @@map("users")
+}
+
+model Customer {
+  user_id   Int     @id
+  full_name String  @db.VarChar(150)
+  phone     String? @db.VarChar(20)
+  address   String?
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@map("customers")
+}
+
+model Staff {
+  user_id   Int     @id
+  full_name String  @db.VarChar(150)
+  phone_no  String? @db.VarChar(20)
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@map("staff")
+}
+
+model Vehicle {
+  vehicle_id  Int      @id @default(autoincrement())
+  customer_id Int
+  make        String   @db.VarChar(100)
+  model       String   @db.VarChar(100)
+  year        Int?
+  plate_no    String   @unique @db.VarChar(30)
+  color       String?  @db.VarChar(50)
+  created_at  DateTime @default(now())
+
+  customer     User          @relation("CustomerVehicles", fields: [customer_id], references: [user_id], onDelete: Cascade)
+  reservations Reservation[]
+
+  @@map("vehicles")
+}
+
+model ServicePackage {
+  package_id         Int      @id @default(autoincrement())
+  name               String   @db.VarChar(150)
+  description        String?
+  estimated_duration Int      @default(60)
+  price              Decimal  @db.Decimal(10, 2)
+  is_active          Boolean  @default(true)
+  created_at         DateTime @default(now())
+
+  reservations Reservation[]
+
+  @@map("service_packages")
+}
+
+model WorkingConfig {
+  config_id      Int    @id @default(autoincrement())
+  daily_capacity Int    @default(10)
+  working_days   String @default("1,2,3,4,5")
+
+  @@map("working_config")
+}
+
+model TimeSlot {
+  slot_id   Int      @id @default(autoincrement())
+  slot_time DateTime @db.Time
+  is_active Boolean  @default(true)
+
+  reservations Reservation[]
+
+  @@map("time_slots")
+}
+
+model Reservation {
+  reservation_id Int      @id @default(autoincrement())
+  booking_ref    String?  @unique @db.VarChar(20)
+  customer_id    Int
+  vehicle_id     Int
+  package_id     Int
+  slot_id        Int?
+  service_date   DateTime @db.Date
+  status         String   @default("Booked") @db.VarChar(30)
+  created_at     DateTime @default(now())
+
+  customer_user  User           @relation("CustomerReservations", fields: [customer_id], references: [user_id])
+  vehicle        Vehicle        @relation(fields: [vehicle_id], references: [vehicle_id])
+  package        ServicePackage @relation(fields: [package_id], references: [package_id])
+  slot           TimeSlot?      @relation(fields: [slot_id], references: [slot_id])
+  service_record ServiceRecord?
+  invoice        Invoice?
+  feedback       Feedback?
+
+  @@map("reservations")
+}
+
+model ServiceRecord {
+  record_id          Int       @id @default(autoincrement())
+  reservation_id     Int       @unique
+  supervisor_id      Int?
+  remarks            String?
+  additional_work    String?
+  consumables        String?
+  additional_charges Decimal   @default(0) @db.Decimal(10, 2)
+  quality_checked    Boolean   @default(false)
+  started_at         DateTime?
+  completed_at       DateTime?
+
+  reservation Reservation @relation(fields: [reservation_id], references: [reservation_id], onDelete: Cascade)
+  supervisor  User?                   @relation("SupervisorRecords", fields: [supervisor_id], references: [user_id])
+  assignments ServiceStaffAssignment[]
+
+  @@map("service_records")
+}
+
+model ServiceStaffAssignment {
+  assignment_id Int     @id @default(autoincrement())
+  record_id     Int
+  staff_id      Int
+  task_type     String? @db.VarChar(100)
+
+  record ServiceRecord @relation(fields: [record_id], references: [record_id], onDelete: Cascade)
+  staff  User          @relation(fields: [staff_id], references: [user_id])
+
+  @@unique([record_id, staff_id, task_type])
+  @@map("service_staff_assignments")
+}
+
+model Invoice {
+  invoice_id         Int      @id @default(autoincrement())
+  reservation_id     Int      @unique
+  cashier_id         Int?
+  base_amount        Decimal  @db.Decimal(10, 2)
+  additional_charges Decimal  @default(0) @db.Decimal(10, 2)
+  discount           Decimal  @default(0) @db.Decimal(10, 2)
+  total_amount       Decimal  @db.Decimal(10, 2)
+  payment_status     String   @default("Unpaid") @db.VarChar(20)
+  payment_method     String?  @db.VarChar(30)
+  notes              String?
+  generated_at       DateTime @default(now())
+
+  reservation Reservation @relation(fields: [reservation_id], references: [reservation_id])
+  cashier     User?       @relation("CashierInvoices", fields: [cashier_id], references: [user_id])
+
+  @@map("invoices")
+}
+
+model Feedback {
+  feedback_id    Int      @id @default(autoincrement())
+  reservation_id Int      @unique
+  customer_id    Int
+  rating         Int
+  comment        String?
+  submitted_at   DateTime @default(now())
+
+  reservation Reservation @relation(fields: [reservation_id], references: [reservation_id])
+  customer    User        @relation("CustomerFeedback", fields: [customer_id], references: [user_id])
+
+  @@map("feedback")
+}
+
+model ActivityLog {
+  log_id      Int      @id @default(autoincrement())
+  user_id     Int?
+  action      String   @db.VarChar(255)
+  entity_type String?  @db.VarChar(50)
+  entity_id   Int?
+  created_at  DateTime @default(now())
+
+  user User? @relation(fields: [user_id], references: [user_id])
+
+  @@map("activity_log")
+}

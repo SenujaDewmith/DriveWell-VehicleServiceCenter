@@ -7,7 +7,8 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Layout } from "@/components/Layout";
 import Landing from "./pages/Landing";
-import Auth from "./pages/Auth";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 import Vehicles from "./pages/Vehicles";
@@ -23,7 +24,7 @@ const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  return user ? <>{children}</> : <Navigate to="/auth" />;
+  return user ? <>{children}</> : <Navigate to="/login" />;
 }
 
 const App = () => (
@@ -37,7 +38,8 @@ const App = () => (
             <Layout>
               <Routes>
                 <Route path="/" element={<Landing />} />
-                <Route path="/auth" element={<Auth />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
                 <Route path="/services" element={<Services />} />
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />

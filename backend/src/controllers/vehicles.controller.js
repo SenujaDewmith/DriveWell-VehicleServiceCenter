@@ -1,14 +1,14 @@
-const pool = require("../config/db");
+const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 
 const listVehicles = async (req, res) => {
   const { user_id } = req.user;
   try {
-    const result = await pool.query(
-      `SELECT * FROM vehicles WHERE customer_id = $1 ORDER BY created_at DESC`,
-      [user_id]
-    );
-    res.status(200).json({ vehicles: result.rows });
+    const vehicles = await prisma.vehicle.findMany({
+      where: { customer_id: user_id },
+      orderBy: { created_at: "desc" },
+    });
+    res.status(200).json({ vehicles });
   } catch (error) {
     logger.error(`listVehicles failed for user_id: ${user_id} — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -23,15 +23,20 @@ const addVehicle = async (req, res) => {
     return res.status(400).json({ message: "make, model, and plate_no are required" });
 
   try {
-    const result = await pool.query(
-      `INSERT INTO vehicles (customer_id, make, model, year, plate_no, color)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [user_id, make.trim(), model.trim(), year || null, plate_no.trim().toUpperCase(), color || null]
-    );
-    logger.info(`Vehicle added — vehicle_id: ${result.rows[0].vehicle_id}, user_id: ${user_id}`);
-    res.status(201).json({ message: "Vehicle added", vehicle: result.rows[0] });
+    const vehicle = await prisma.vehicle.create({
+      data: {
+        customer_id: user_id,
+        make: make.trim(),
+        model: model.trim(),
+        year: year || null,
+        plate_no: plate_no.trim().toUpperCase(),
+        color: color || null,
+      },
+    });
+    logger.info(`Vehicle added — vehicle_id: ${vehicle.vehicle_id}, user_id: ${user_id}`);
+    res.status(201).json({ message: "Vehicle added", vehicle });
   } catch (error) {
-    if (error.code === "23505")
+    if (error.code === "P2002")
       return res.status(400).json({ message: "Plate number already registered" });
     logger.error(`addVehicle failed for user_id: ${user_id} — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -47,17 +52,22 @@ const updateVehicle = async (req, res) => {
     return res.status(400).json({ message: "make, model, and plate_no are required" });
 
   try {
-    const result = await pool.query(
-      `UPDATE vehicles SET make=$1, model=$2, year=$3, plate_no=$4, color=$5
-       WHERE vehicle_id=$6 AND customer_id=$7 RETURNING *`,
-      [make.trim(), model.trim(), year || null, plate_no.trim().toUpperCase(), color || null, id, user_id]
-    );
-    if (result.rows.length === 0)
-      return res.status(404).json({ message: "Vehicle not found" });
+    const vehicle = await prisma.vehicle.updateMany({
+      where: { vehicle_id: parseInt(id), customer_id: user_id },
+      data: {
+        make: make.trim(),
+        model: model.trim(),
+        year: year || null,
+        plate_no: plate_no.trim().toUpperCase(),
+        color: color || null,
+      },
+    });
+    if (vehicle.count === 0) return res.status(404).json({ message: "Vehicle not found" });
 
-    res.status(200).json({ message: "Vehicle updated", vehicle: result.rows[0] });
+    const updated = await prisma.vehicle.findUnique({ where: { vehicle_id: parseInt(id) } });
+    res.status(200).json({ message: "Vehicle updated", vehicle: updated });
   } catch (error) {
-    if (error.code === "23505")
+    if (error.code === "P2002")
       return res.status(400).json({ message: "Plate number already registered" });
     logger.error(`updateVehicle failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -69,16 +79,14 @@ const deleteVehicle = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const result = await pool.query(
-      `DELETE FROM vehicles WHERE vehicle_id=$1 AND customer_id=$2 RETURNING vehicle_id`,
-      [id, user_id]
-    );
-    if (result.rows.length === 0)
-      return res.status(404).json({ message: "Vehicle not found" });
+    const result = await prisma.vehicle.deleteMany({
+      where: { vehicle_id: parseInt(id), customer_id: user_id },
+    });
+    if (result.count === 0) return res.status(404).json({ message: "Vehicle not found" });
 
     res.status(200).json({ message: "Vehicle deleted" });
   } catch (error) {
-    if (error.code === "23503")
+    if (error.code === "P2003")
       return res.status(400).json({ message: "Cannot delete vehicle with existing bookings" });
     logger.error(`deleteVehicle failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });

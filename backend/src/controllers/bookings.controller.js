@@ -1,53 +1,68 @@
-const pool = require("../config/db");
+const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
+const { fmtDate, fmtTime } = require("../lib/format");
 const { sendBookingConfirmation, sendBookingCancellation } = require("../services/email.service");
 
 const CUSTOMER_ROLE = 5;
 const MANAGER_ROLE = 1;
 
-// Base query to get enriched booking details
-const BOOKING_QUERY = `
-  SELECT
-    r.reservation_id, r.booking_ref, r.service_date, r.status, r.created_at,
-    r.customer_id, r.vehicle_id, r.package_id, r.slot_id,
-    c.full_name AS customer_name,
-    u.email    AS customer_email,
-    v.make, v.model, v.plate_no, v.color,
-    p.name AS package_name, p.price AS package_price, p.estimated_duration,
-    ts.slot_time
-  FROM reservations r
-  JOIN customers c     ON c.user_id = r.customer_id
-  JOIN users u         ON u.user_id = r.customer_id
-  JOIN vehicles v      ON v.vehicle_id = r.vehicle_id
-  JOIN service_packages p ON p.package_id = r.package_id
-  LEFT JOIN time_slots ts ON ts.slot_id = r.slot_id
-`;
+const flattenBooking = (r) => ({
+  reservation_id: r.reservation_id,
+  booking_ref: r.booking_ref,
+  service_date: fmtDate(r.service_date),
+  status: r.status,
+  created_at: r.created_at,
+  customer_id: r.customer_id,
+  vehicle_id: r.vehicle_id,
+  package_id: r.package_id,
+  slot_id: r.slot_id,
+  customer_name: r.customer_user?.customer?.full_name,
+  customer_email: r.customer_user?.email,
+  make: r.vehicle?.make,
+  model: r.vehicle?.model,
+  plate_no: r.vehicle?.plate_no,
+  color: r.vehicle?.color,
+  package_name: r.package?.name,
+  package_price: r.package?.price,
+  estimated_duration: r.package?.estimated_duration,
+  slot_time: r.slot ? fmtTime(r.slot.slot_time) : null,
+});
+
+const BOOKING_INCLUDE = {
+  customer_user: {
+    select: {
+      email: true,
+      customer: { select: { full_name: true } },
+    },
+  },
+  vehicle: { select: { make: true, model: true, plate_no: true, color: true } },
+  package: { select: { name: true, price: true, estimated_duration: true } },
+  slot: { select: { slot_time: true } },
+};
 
 const listBookings = async (req, res) => {
   const { user_id, role_id } = req.user;
   const { status, from, to, customer_id, package_id } = req.query;
 
   try {
-    let conditions = [];
-    let values = [];
-    let i = 1;
-
-    if (role_id === CUSTOMER_ROLE) {
-      conditions.push(`r.customer_id = $${i++}`);
-      values.push(user_id);
-    } else if (customer_id) {
-      conditions.push(`r.customer_id = $${i++}`);
-      values.push(customer_id);
+    const where = {};
+    if (role_id === CUSTOMER_ROLE) where.customer_id = user_id;
+    else if (customer_id) where.customer_id = parseInt(customer_id);
+    if (status) where.status = status;
+    if (from || to) {
+      where.service_date = {};
+      if (from) where.service_date.gte = new Date(from);
+      if (to) where.service_date.lte = new Date(to);
     }
+    if (package_id) where.package_id = parseInt(package_id);
 
-    if (status) { conditions.push(`r.status = $${i++}`); values.push(status); }
-    if (from)   { conditions.push(`r.service_date >= $${i++}`); values.push(from); }
-    if (to)     { conditions.push(`r.service_date <= $${i++}`); values.push(to); }
-    if (package_id) { conditions.push(`r.package_id = $${i++}`); values.push(package_id); }
+    const rows = await prisma.reservation.findMany({
+      where,
+      include: BOOKING_INCLUDE,
+      orderBy: [{ service_date: "desc" }, { created_at: "desc" }],
+    });
 
-    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const result = await pool.query(`${BOOKING_QUERY} ${where} ORDER BY r.service_date DESC, r.created_at DESC`, values);
-    res.status(200).json({ bookings: result.rows });
+    res.status(200).json({ bookings: rows.map(flattenBooking) });
   } catch (error) {
     logger.error(`listBookings failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -57,14 +72,15 @@ const listBookings = async (req, res) => {
 const getBooking = async (req, res) => {
   const { user_id, role_id } = req.user;
   try {
-    const result = await pool.query(`${BOOKING_QUERY} WHERE r.reservation_id = $1`, [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ message: "Booking not found" });
-
-    const booking = result.rows[0];
-    if (role_id === CUSTOMER_ROLE && booking.customer_id !== user_id)
+    const row = await prisma.reservation.findUnique({
+      where: { reservation_id: parseInt(req.params.id) },
+      include: BOOKING_INCLUDE,
+    });
+    if (!row) return res.status(404).json({ message: "Booking not found" });
+    if (role_id === CUSTOMER_ROLE && row.customer_id !== user_id)
       return res.status(403).json({ message: "Access denied" });
 
-    res.status(200).json({ booking });
+    res.status(200).json({ booking: flattenBooking(row) });
   } catch (error) {
     logger.error(`getBooking failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -78,91 +94,79 @@ const createBooking = async (req, res) => {
   if (!vehicle_id || !package_id || !service_date)
     return res.status(400).json({ message: "vehicle_id, package_id, and service_date are required" });
 
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
+    const { reservation_id, booking_ref, pkgName } = await prisma.$transaction(async (tx) => {
+      const vehicle = await tx.vehicle.findFirst({
+        where: { vehicle_id: parseInt(vehicle_id), customer_id: user_id },
+      });
+      if (!vehicle) {
+        const err = new Error("Vehicle not found"); err.status = 400; throw err;
+      }
 
-    // Verify vehicle belongs to customer
-    const vehicleCheck = await client.query(
-      `SELECT vehicle_id FROM vehicles WHERE vehicle_id=$1 AND customer_id=$2`,
-      [vehicle_id, user_id]
-    );
-    if (vehicleCheck.rows.length === 0) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: "Vehicle not found" });
-    }
+      const config = await tx.workingConfig.findFirst();
+      const dayOfWeek = new Date(service_date).getDay();
+      const workingDays = config.working_days.split(",").map(Number);
+      if (!workingDays.includes(dayOfWeek)) {
+        const err = new Error("Selected date is not a working day"); err.status = 400; throw err;
+      }
 
-    // Check working config
-    const configResult = await client.query(`SELECT * FROM working_config LIMIT 1`);
-    const config = configResult.rows[0];
-    const dayOfWeek = new Date(service_date).getDay();
-    const workingDays = config.working_days.split(",").map(Number);
+      const booked = await tx.reservation.count({
+        where: { service_date: new Date(service_date), status: { notIn: ["Cancelled", "No-show"] } },
+      });
+      if (booked >= config.daily_capacity) {
+        const err = new Error("No available slots for this date — daily capacity reached"); err.status = 400; throw err;
+      }
 
-    if (!workingDays.includes(dayOfWeek)) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: "Selected date is not a working day" });
-    }
+      const pkg = await tx.servicePackage.findFirst({
+        where: { package_id: parseInt(package_id), is_active: true },
+      });
+      if (!pkg) {
+        const err = new Error("Service package not found or inactive"); err.status = 400; throw err;
+      }
 
-    // Check daily capacity
-    const countResult = await client.query(
-      `SELECT COUNT(*) FROM reservations WHERE service_date=$1 AND status NOT IN ('Cancelled','No-show')`,
-      [service_date]
-    );
-    if (parseInt(countResult.rows[0].count) >= config.daily_capacity) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: "No available slots for this date — daily capacity reached" });
-    }
+      const reservation = await tx.reservation.create({
+        data: {
+          customer_id: user_id,
+          vehicle_id: parseInt(vehicle_id),
+          package_id: parseInt(package_id),
+          slot_id: slot_id ? parseInt(slot_id) : null,
+          service_date: new Date(service_date),
+        },
+      });
 
-    // Check package is active
-    const pkgResult = await client.query(
-      `SELECT package_id, name, price FROM service_packages WHERE package_id=$1 AND is_active=TRUE`,
-      [package_id]
-    );
-    if (pkgResult.rows.length === 0) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: "Service package not found or inactive" });
-    }
+      const ref = `DW-${new Date(service_date).getFullYear()}-${String(reservation.reservation_id).padStart(5, "0")}`;
+      await tx.reservation.update({
+        where: { reservation_id: reservation.reservation_id },
+        data: { booking_ref: ref },
+      });
 
-    // Create reservation
-    const insertResult = await client.query(
-      `INSERT INTO reservations (customer_id, vehicle_id, package_id, slot_id, service_date)
-       VALUES ($1, $2, $3, $4, $5) RETURNING reservation_id`,
-      [user_id, vehicle_id, package_id, slot_id || null, service_date]
-    );
-    const reservation_id = insertResult.rows[0].reservation_id;
+      return { reservation_id: reservation.reservation_id, booking_ref: ref, pkgName: pkg.name };
+    });
 
-    // Set booking_ref
-    const booking_ref = `DW-${new Date(service_date).getFullYear()}-${String(reservation_id).padStart(5, "0")}`;
-    await client.query(`UPDATE reservations SET booking_ref=$1 WHERE reservation_id=$2`, [booking_ref, reservation_id]);
-
-    await client.query("COMMIT");
     logger.info(`Booking created — ref: ${booking_ref}, user_id: ${user_id}`);
 
-    // Fetch customer email and slot time for notification
-    const customerResult = await pool.query(
-      `SELECT u.email, c.full_name, ts.slot_time
-       FROM users u JOIN customers c ON c.user_id=u.user_id
-       LEFT JOIN time_slots ts ON ts.slot_id=$1
-       WHERE u.user_id=$2`,
-      [slot_id || null, user_id]
-    );
-    const { email, full_name, slot_time } = customerResult.rows[0];
+    // Email notification (outside transaction — non-critical)
+    const customer = await prisma.user.findUnique({
+      where: { user_id },
+      select: { email: true, customer: { select: { full_name: true } } },
+    });
+    const slotRow = slot_id
+      ? await prisma.timeSlot.findUnique({ where: { slot_id: parseInt(slot_id) } })
+      : null;
 
-    sendBookingConfirmation(email, {
-      customerName: full_name,
+    sendBookingConfirmation(customer.email, {
+      customerName: customer.customer?.full_name,
       bookingRef: booking_ref,
-      packageName: pkgResult.rows[0].name,
+      packageName: pkgName,
       serviceDate: service_date,
-      slotTime: slot_time || "To be confirmed",
+      slotTime: slotRow ? fmtTime(slotRow.slot_time) : "To be confirmed",
     });
 
     res.status(201).json({ message: "Booking created", booking_ref, reservation_id });
   } catch (error) {
-    await client.query("ROLLBACK");
+    if (error.status) return res.status(error.status).json({ message: error.message });
     logger.error(`createBooking failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
-  } finally {
-    client.release();
   }
 };
 
@@ -171,31 +175,29 @@ const cancelBooking = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const bookingResult = await pool.query(
-      `SELECT r.*, u.email, c.full_name
-       FROM reservations r
-       JOIN users u ON u.user_id=r.customer_id
-       JOIN customers c ON c.user_id=r.customer_id
-       WHERE r.reservation_id=$1`,
-      [id]
-    );
-    if (bookingResult.rows.length === 0)
-      return res.status(404).json({ message: "Booking not found" });
-
-    const booking = bookingResult.rows[0];
-
+    const booking = await prisma.reservation.findUnique({
+      where: { reservation_id: parseInt(id) },
+      include: {
+        customer_user: {
+          select: { email: true, customer: { select: { full_name: true } } },
+        },
+      },
+    });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
     if (role_id === CUSTOMER_ROLE && booking.customer_id !== user_id)
       return res.status(403).json({ message: "Access denied" });
-
-    if (!["Booked"].includes(booking.status))
+    if (booking.status !== "Booked")
       return res.status(400).json({ message: `Cannot cancel a booking with status: ${booking.status}` });
 
-    await pool.query(`UPDATE reservations SET status='Cancelled' WHERE reservation_id=$1`, [id]);
+    await prisma.reservation.update({
+      where: { reservation_id: parseInt(id) },
+      data: { status: "Cancelled" },
+    });
 
-    sendBookingCancellation(booking.email, {
-      customerName: booking.full_name,
+    sendBookingCancellation(booking.customer_user.email, {
+      customerName: booking.customer_user.customer?.full_name,
       bookingRef: booking.booking_ref,
-      serviceDate: booking.service_date,
+      serviceDate: fmtDate(booking.service_date),
     });
 
     logger.info(`Booking cancelled — reservation_id: ${id}`);
@@ -215,13 +217,13 @@ const overrideStatus = async (req, res) => {
     return res.status(400).json({ message: `status must be one of: ${valid.join(", ")}` });
 
   try {
-    const result = await pool.query(
-      `UPDATE reservations SET status=$1 WHERE reservation_id=$2 RETURNING *`,
-      [status, id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ message: "Booking not found" });
-    res.status(200).json({ message: "Status updated", booking: result.rows[0] });
+    const booking = await prisma.reservation.update({
+      where: { reservation_id: parseInt(id) },
+      data: { status },
+    });
+    res.status(200).json({ message: "Status updated", booking });
   } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Booking not found" });
     logger.error(`overrideStatus failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -232,28 +234,29 @@ const getAvailableSlots = async (req, res) => {
   if (!date) return res.status(400).json({ message: "date query param is required (YYYY-MM-DD)" });
 
   try {
-    const configResult = await pool.query(`SELECT * FROM working_config LIMIT 1`);
-    const config = configResult.rows[0];
+    const config = await prisma.workingConfig.findFirst();
     const dayOfWeek = new Date(date).getDay();
     const workingDays = config.working_days.split(",").map(Number);
 
     if (!workingDays.includes(dayOfWeek))
       return res.status(200).json({ available: false, reason: "Not a working day", slots: [] });
 
-    const countResult = await pool.query(
-      `SELECT COUNT(*) FROM reservations WHERE service_date=$1 AND status NOT IN ('Cancelled','No-show')`,
-      [date]
-    );
-    const booked = parseInt(countResult.rows[0].count);
+    const booked = await prisma.reservation.count({
+      where: { service_date: new Date(date), status: { notIn: ["Cancelled", "No-show"] } },
+    });
 
     if (booked >= config.daily_capacity)
       return res.status(200).json({ available: false, reason: "Daily capacity reached", slots: [] });
 
-    const slots = await pool.query(`SELECT * FROM time_slots WHERE is_active=TRUE ORDER BY slot_time`);
+    const slots = await prisma.timeSlot.findMany({
+      where: { is_active: true },
+      orderBy: { slot_time: "asc" },
+    });
+
     res.status(200).json({
       available: true,
       remaining_capacity: config.daily_capacity - booked,
-      slots: slots.rows,
+      slots: slots.map((s) => ({ ...s, slot_time: fmtTime(s.slot_time) })),
     });
   } catch (error) {
     logger.error(`getAvailableSlots failed — ${error.message}`);

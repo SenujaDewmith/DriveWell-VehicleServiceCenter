@@ -11,7 +11,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   updateProfile: (data: Partial<User>) => void;
@@ -39,13 +39,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
-  const login = async (email: string, password: string) => {
-    const data = await authService.login(email, password);
+  const login = async (email: string, password: string, rememberMe = false) => {
+    await authService.login(email, password, rememberMe);
+    const { user: u, profile } = await authService.getProfile();
     setUser({
-      id: data.user.id.toString(),
-      name: "",
-      email: data.user.email,
-      phone: "",
+      id: String(u.user_id),
+      name: profile?.full_name ?? "",
+      email: u.email,
+      phone: profile?.phone ?? "",
     });
   };
 

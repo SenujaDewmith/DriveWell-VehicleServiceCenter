@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import type { Role } from "@/data/dummyData";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -8,24 +7,26 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-const roles: { value: Role; label: string }[] = [
-  { value: "manager", label: "Manager" },
-  { value: "supervisor", label: "Supervisor" },
-  { value: "cashier", label: "Cashier" },
-  { value: "staff", label: "Service Staff" },
-];
-
 function LoginPage() {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>("manager");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    login(username || "Admin", role);
-    navigate({ to: "/dashboard" });
+    setError("");
+    setLoading(true);
+    try {
+      await login(email, password);
+      navigate({ to: "/dashboard" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -46,13 +47,14 @@ function LoginPage() {
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
             <label className="block text-xs font-mono uppercase text-muted-foreground mb-2">
-              Username
+              Email
             </label>
             <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter any username"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="manager@drivewell.com"
+              required
               className="w-full border-2 border-border bg-background px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent"
             />
           </div>
@@ -65,44 +67,26 @@ function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter any password"
+              placeholder="••••••••"
+              required
               className="w-full border-2 border-border bg-background px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent"
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-mono uppercase text-muted-foreground mb-2">
-              Role
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {roles.map((r) => (
-                <button
-                  key={r.value}
-                  type="button"
-                  onClick={() => setRole(r.value)}
-                  className={`border-2 px-3 py-2 text-xs font-mono uppercase transition-colors ${
-                    role === r.value
-                      ? "border-accent bg-accent text-accent-foreground"
-                      : "border-border bg-background text-foreground hover:border-muted-foreground"
-                  }`}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          {error && (
+            <p className="text-xs font-mono text-destructive border border-destructive px-3 py-2">
+              {error}
+            </p>
+          )}
 
           <button
             type="submit"
-            className="w-full border-2 border-accent bg-accent py-3 text-sm font-mono uppercase font-bold text-accent-foreground hover:opacity-90 transition-opacity"
+            disabled={loading}
+            className="w-full border-2 border-accent bg-accent py-3 text-sm font-mono uppercase font-bold text-accent-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
           >
-            ACCESS DASHBOARD →
+            {loading ? "AUTHENTICATING..." : "ACCESS DASHBOARD →"}
           </button>
         </form>
-
-        <p className="text-xs font-mono text-muted-foreground mt-6 text-center">
-          ANY CREDENTIALS ACCEPTED // DEMO MODE
-        </p>
       </div>
     </div>
   );

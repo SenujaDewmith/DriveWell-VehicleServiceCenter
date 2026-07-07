@@ -279,7 +279,7 @@ export default function Landing() {
             <Button
               size="lg"
               className="bg-cta text-cta-foreground hover:bg-cta/90 text-lg px-8 py-6"
-              onClick={() => navigate("/auth?mode=register")}
+              onClick={() => navigate("/register")}
             >
               Sign Up Now
             </Button>

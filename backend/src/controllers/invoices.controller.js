@@ -1,45 +1,79 @@
-const pool = require("../config/db");
+const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
+const { fmtDate } = require("../lib/format");
 
 const CUSTOMER_ROLE = 5;
 
-const INVOICE_QUERY = `
-  SELECT
-    i.*,
-    r.booking_ref, r.service_date, r.status AS booking_status,
-    c.full_name AS customer_name, u.email AS customer_email,
-    v.make, v.model, v.plate_no,
-    p.name AS package_name,
-    st.full_name AS cashier_name
-  FROM invoices i
-  JOIN reservations r   ON r.reservation_id = i.reservation_id
-  JOIN customers c      ON c.user_id = r.customer_id
-  JOIN users u          ON u.user_id = r.customer_id
-  JOIN vehicles v       ON v.vehicle_id = r.vehicle_id
-  JOIN service_packages p ON p.package_id = r.package_id
-  LEFT JOIN staff st    ON st.user_id = i.cashier_id
-`;
+const flattenInvoice = (i) => ({
+  invoice_id: i.invoice_id,
+  reservation_id: i.reservation_id,
+  cashier_id: i.cashier_id,
+  base_amount: i.base_amount,
+  additional_charges: i.additional_charges,
+  discount: i.discount,
+  total_amount: i.total_amount,
+  payment_status: i.payment_status,
+  payment_method: i.payment_method,
+  notes: i.notes,
+  generated_at: i.generated_at,
+  booking_ref: i.reservation?.booking_ref,
+  service_date: i.reservation ? fmtDate(i.reservation.service_date) : null,
+  booking_status: i.reservation?.status,
+  customer_name: i.reservation?.customer_user?.customer?.full_name,
+  customer_email: i.reservation?.customer_user?.email,
+  make: i.reservation?.vehicle?.make,
+  model: i.reservation?.vehicle?.model,
+  plate_no: i.reservation?.vehicle?.plate_no,
+  package_name: i.reservation?.package?.name,
+  cashier_name: i.cashier?.staff?.full_name ?? null,
+});
+
+const INVOICE_INCLUDE = {
+  reservation: {
+    select: {
+      booking_ref: true,
+      service_date: true,
+      status: true,
+      customer_user: {
+        select: {
+          email: true,
+          customer: { select: { full_name: true } },
+        },
+      },
+      vehicle: { select: { make: true, model: true, plate_no: true } },
+      package: { select: { name: true } },
+    },
+  },
+  cashier: { select: { staff: { select: { full_name: true } } } },
+};
 
 const listInvoices = async (req, res) => {
   const { user_id, role_id } = req.user;
   const { from, to, payment_status } = req.query;
 
   try {
-    let conditions = [];
-    let values = [];
-    let i = 1;
-
+    const where = {};
     if (role_id === CUSTOMER_ROLE) {
-      conditions.push(`r.customer_id = $${i++}`);
-      values.push(user_id);
+      where.reservation = { customer_id: user_id };
     }
-    if (from)           { conditions.push(`r.service_date >= $${i++}`); values.push(from); }
-    if (to)             { conditions.push(`r.service_date <= $${i++}`); values.push(to); }
-    if (payment_status) { conditions.push(`i.payment_status = $${i++}`); values.push(payment_status); }
+    if (payment_status) where.payment_status = payment_status;
+    if (from || to) {
+      where.reservation = {
+        ...(where.reservation || {}),
+        service_date: {
+          ...(from && { gte: new Date(from) }),
+          ...(to && { lte: new Date(to) }),
+        },
+      };
+    }
 
-    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const result = await pool.query(`${INVOICE_QUERY} ${where} ORDER BY i.generated_at DESC`, values);
-    res.status(200).json({ invoices: result.rows });
+    const rows = await prisma.invoice.findMany({
+      where,
+      include: INVOICE_INCLUDE,
+      orderBy: { generated_at: "desc" },
+    });
+
+    res.status(200).json({ invoices: rows.map(flattenInvoice) });
   } catch (error) {
     logger.error(`listInvoices failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -49,19 +83,22 @@ const listInvoices = async (req, res) => {
 const getInvoice = async (req, res) => {
   const { user_id, role_id } = req.user;
   try {
-    const result = await pool.query(`${INVOICE_QUERY} WHERE i.invoice_id = $1`, [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ message: "Invoice not found" });
+    const row = await prisma.invoice.findUnique({
+      where: { invoice_id: parseInt(req.params.id) },
+      include: INVOICE_INCLUDE,
+    });
+    if (!row) return res.status(404).json({ message: "Invoice not found" });
 
-    const invoice = result.rows[0];
     if (role_id === CUSTOMER_ROLE) {
-      const ownerCheck = await pool.query(
-        `SELECT customer_id FROM reservations WHERE reservation_id=$1`,
-        [invoice.reservation_id]
-      );
-      if (ownerCheck.rows[0]?.customer_id !== user_id)
+      const booking = await prisma.reservation.findUnique({
+        where: { reservation_id: row.reservation_id },
+        select: { customer_id: true },
+      });
+      if (booking?.customer_id !== user_id)
         return res.status(403).json({ message: "Access denied" });
     }
-    res.status(200).json({ invoice });
+
+    res.status(200).json({ invoice: flattenInvoice(row) });
   } catch (error) {
     logger.error(`getInvoice failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -80,25 +117,31 @@ const createInvoice = async (req, res) => {
   const total = parseFloat(base_amount) + add - dis;
 
   try {
-    // Booking must be in Completed or Ready for Pickup state
-    const bookingResult = await pool.query(
-      `SELECT status FROM reservations WHERE reservation_id=$1`,
-      [reservation_id]
-    );
-    if (bookingResult.rows.length === 0) return res.status(404).json({ message: "Booking not found" });
-    if (!["Completed", "Ready for Pickup"].includes(bookingResult.rows[0].status))
+    const booking = await prisma.reservation.findUnique({
+      where: { reservation_id: parseInt(reservation_id) },
+      select: { status: true },
+    });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    if (!["Completed", "Ready for Pickup"].includes(booking.status))
       return res.status(400).json({ message: "Can only generate invoice for Completed or Ready for Pickup bookings" });
 
-    const result = await pool.query(
-      `INSERT INTO invoices (reservation_id, cashier_id, base_amount, additional_charges, discount, total_amount, payment_method, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [reservation_id, user_id, base_amount, add, dis, total, payment_method || null, notes || null]
-    );
+    const invoice = await prisma.invoice.create({
+      data: {
+        reservation_id: parseInt(reservation_id),
+        cashier_id: user_id,
+        base_amount,
+        additional_charges: add,
+        discount: dis,
+        total_amount: total,
+        payment_method: payment_method || null,
+        notes: notes || null,
+      },
+    });
 
-    logger.info(`Invoice created — invoice_id: ${result.rows[0].invoice_id}, reservation_id: ${reservation_id}`);
-    res.status(201).json({ message: "Invoice created", invoice: result.rows[0] });
+    logger.info(`Invoice created — invoice_id: ${invoice.invoice_id}, reservation_id: ${reservation_id}`);
+    res.status(201).json({ message: "Invoice created", invoice });
   } catch (error) {
-    if (error.code === "23505")
+    if (error.code === "P2002")
       return res.status(400).json({ message: "Invoice already exists for this booking" });
     logger.error(`createInvoice failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -113,14 +156,14 @@ const updatePaymentStatus = async (req, res) => {
     return res.status(400).json({ message: "payment_status must be 'Paid' or 'Unpaid'" });
 
   try {
-    const result = await pool.query(
-      `UPDATE invoices SET payment_status=$1, payment_method=$2 WHERE invoice_id=$3 RETURNING *`,
-      [payment_status, payment_method || null, id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ message: "Invoice not found" });
+    const invoice = await prisma.invoice.update({
+      where: { invoice_id: parseInt(id) },
+      data: { payment_status, payment_method: payment_method || null },
+    });
     logger.info(`Invoice ${id} payment status set to ${payment_status}`);
-    res.status(200).json({ message: "Payment status updated", invoice: result.rows[0] });
+    res.status(200).json({ message: "Payment status updated", invoice });
   } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Invoice not found" });
     logger.error(`updatePaymentStatus failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }

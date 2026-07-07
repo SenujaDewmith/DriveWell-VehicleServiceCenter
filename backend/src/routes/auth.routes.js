@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const { register, login, logout, getProfile } = require("../controllers/auth.controller");
 const { verifyToken } = require("../middlewares/auth.middleware");
+const validate = require("../middlewares/validate.middleware");
+const { registerSchema, loginSchema } = require("../schemas/auth.schema");
 
 /**
  * @swagger
@@ -33,7 +35,7 @@ const { verifyToken } = require("../middlewares/auth.middleware");
  *       400: { description: Validation error or email taken }
  *       500: { description: Server error }
  */
-router.post("/register", register);
+router.post("/register", validate(registerSchema), register);
 
 /**
  * @swagger
@@ -72,7 +74,7 @@ router.post("/register", register);
  *       403: { description: Account inactive }
  *       500: { description: Server error }
  */
-router.post("/login", login);
+router.post("/login", validate(loginSchema), login);
 
 /**
  * @swagger
