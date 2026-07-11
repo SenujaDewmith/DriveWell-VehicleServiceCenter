@@ -13,7 +13,6 @@ const ROLE_MAP = {
 const verifyToken = (req, res, next) => {
   // Token comes from HttpOnly cookie — not the Authorization header
   const token = req.cookies?.token;
-
   if (!token) {
     logger.warn(
       `Auth failed — no token in cookies | ${req.method} ${req.originalUrl}`,
@@ -22,7 +21,6 @@ const verifyToken = (req, res, next) => {
       .status(401)
       .json({ message: "Access denied. Not authenticated." });
   }
-
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded; // { user_id, email, role_id }
@@ -41,7 +39,6 @@ const verifyToken = (req, res, next) => {
     return res.status(403).json({ message: "Invalid token." });
   }
 };
-
 const authorizeRoles = (...allowedRoles) => {
   return (req, res, next) => {
     const userRoleId = req.user?.role_id;

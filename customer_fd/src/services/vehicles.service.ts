@@ -1,27 +1,34 @@
 import { apiClient } from "@/lib/apiClient";
 
 export interface Vehicle {
-  id: string;
+  vehicle_id: number;
+  customer_id: number;
   make: string;
   model: string;
-  year: number;
-  registration: string;
-  color: string;
-  fuelType: string;
+  year: number | null;
+  plate_no: string;
+  color: string | null;
+  created_at: string;
 }
 
-export type CreateVehiclePayload = Omit<Vehicle, "id">;
+export type CreateVehiclePayload = {
+  make: string;
+  model: string;
+  year?: number;
+  plate_no: string;
+  color?: string;
+};
 
 export const vehiclesService = {
-  getVehicles: () => apiClient.get<Vehicle[]>("/vehicles"),
+  getVehicles: () => apiClient.get<{ vehicles: Vehicle[] }>("/vehicles"),
 
-  getVehicle: (id: string) => apiClient.get<Vehicle>(`/vehicles/${id}`),
+  getVehicle: (id: number) => apiClient.get<{ vehicle: Vehicle }>(`/vehicles/${id}`),
 
   createVehicle: (data: CreateVehiclePayload) =>
-    apiClient.post<Vehicle>("/vehicles", data),
+    apiClient.post<{ message: string; vehicle: Vehicle }>("/vehicles", data),
 
-  updateVehicle: (id: string, data: Partial<CreateVehiclePayload>) =>
-    apiClient.put<Vehicle>(`/vehicles/${id}`, data),
+  updateVehicle: (id: number, data: CreateVehiclePayload) =>
+    apiClient.put<{ message: string; vehicle: Vehicle }>(`/vehicles/${id}`, data),
 
-  deleteVehicle: (id: string) => apiClient.delete<void>(`/vehicles/${id}`),
+  deleteVehicle: (id: number) => apiClient.delete<{ message: string }>(`/vehicles/${id}`),
 };

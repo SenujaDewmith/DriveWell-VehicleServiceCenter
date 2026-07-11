@@ -1,6 +1,7 @@
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { fmtTime } = require("../lib/format");
+const { logActivity } = require("../lib/activityLogger");
 
 const getConfig = async (req, res) => {
   try {
@@ -26,6 +27,7 @@ const updateConfig = async (req, res) => {
       data: { daily_capacity, working_days },
     });
     logger.info(`Working config updated by manager user_id: ${req.user.user_id}`);
+    logActivity(prisma, { user_id: req.user.user_id, action: "SCHEDULE_UPDATED", entity_type: "working_config", entity_id: null });
     const updated = await prisma.workingConfig.findFirst();
     res.status(200).json({ message: "Config updated", config: updated });
   } catch (error) {

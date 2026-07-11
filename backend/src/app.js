@@ -20,9 +20,9 @@ const staffRoutes = require("./routes/staff.routes");
 
 const app = express();
 
-// CORS — allow customer frontend (:8080) and admin frontend (:8081)
-const allowedOrigins = [
-  "http://localhost:3000", // Swagger UI (same server)
+// CORS — in development allow any localhost port; in production lock to explicit origins
+const productionOrigins = [
+  "http://localhost:3000",
   "http://localhost:8080",
   "http://localhost:8081",
   "http://localhost:3001",
@@ -31,8 +31,10 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin))
+      if (!origin) return callback(null, true);
+      if (process.env.NODE_ENV !== "production" && /^http:\/\/localhost:\d+$/.test(origin))
         return callback(null, true);
+      if (productionOrigins.includes(origin)) return callback(null, true);
       callback(new Error("CORS not allowed for origin: " + origin));
     },
     credentials: true,

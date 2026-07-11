@@ -87,7 +87,7 @@ export default function Invoices() {
                           </div>
                           <div>
                             <p className="text-muted-foreground">Total Amount</p>
-                            <p className="font-bold text-cta text-lg">${invoice.total}</p>
+                            <p className="font-bold text-cta text-lg">LKR {invoice.total.toLocaleString()}</p>
                           </div>
                         </div>
                       </div>
@@ -136,23 +136,23 @@ export default function Invoices() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span>Base Package ({pkg?.name})</span>
-                      <span className="font-medium">${invoice.baseAmount.toFixed(2)}</span>
+                      <span className="font-medium">LKR {invoice.baseAmount.toLocaleString()}</span>
                     </div>
                     {invoice.additionalCharges.map((charge, idx) => (
                       <div key={idx} className="flex justify-between text-sm">
                         <span className="text-muted-foreground">{charge.item}</span>
-                        <span className="font-medium">${charge.amount.toFixed(2)}</span>
+                        <span className="font-medium">LKR {charge.amount.toLocaleString()}</span>
                       </div>
                     ))}
                     {invoice.discount > 0 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-cta">Discount</span>
-                        <span className="font-medium text-cta">-${invoice.discount.toFixed(2)}</span>
+                        <span className="font-medium text-cta">-LKR {invoice.discount.toLocaleString()}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-base font-bold pt-2 border-t border-border">
                       <span>Total</span>
-                      <span className="text-cta">${invoice.total.toFixed(2)}</span>
+                      <span className="text-cta">LKR {invoice.total.toLocaleString()}</span>
                     </div>
                   </div>
                 </div>

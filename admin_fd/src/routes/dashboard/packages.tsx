@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { Plus, Pencil, ToggleLeft, ToggleRight } from "lucide-react";
+import { Plus, Pencil, ToggleLeft, ToggleRight, X } from "lucide-react";
 import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/dashboard/packages")({
@@ -20,8 +20,46 @@ interface ApiPackage {
 interface PackageForm {
   name: string;
   description: string;
-  estimated_duration: number;
-  price: number;
+  estimated_duration: number | "";
+  price: number | "";
+}
+
+interface FormErrors {
+  name?: string;
+  description?: string;
+  estimated_duration?: string;
+  price?: string;
+}
+
+const EMPTY_FORM: PackageForm = { name: "", description: "", estimated_duration: "", price: "" };
+
+function validate(form: PackageForm): FormErrors {
+  const errors: FormErrors = {};
+  if (!form.name.trim()) {
+    errors.name = "Name is required";
+  } else if (form.name.trim().length > 100) {
+    errors.name = "Name must be 100 characters or less";
+  }
+  if (!form.description.trim()) {
+    errors.description = "Description is required";
+  }
+  if (form.estimated_duration === "" || form.estimated_duration === undefined) {
+    errors.estimated_duration = "Duration is required";
+  } else if (!Number.isInteger(Number(form.estimated_duration)) || Number(form.estimated_duration) < 30) {
+    errors.estimated_duration = "Duration must be at least 30 minutes";
+  }
+  if (form.price === "" || form.price === undefined) {
+    errors.price = "Price is required";
+  } else if (Number(form.price) < 1) {
+    errors.price = "Price must be at least LKR 1";
+  }
+  return errors;
+}
+
+function fmtDuration(mins: number) {
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return m ? `${h}h ${m}min` : `${h}h`;
 }
 
 function PackagesPage() {
@@ -29,26 +67,28 @@ function PackagesPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ApiPackage | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<PackageForm>({ name: "", description: "", estimated_duration: 60, price: 0 });
+  const [form, setForm] = useState<PackageForm>(EMPTY_FORM);
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [pageError, setPageError] = useState("");
 
   const load = () => {
     setLoading(true);
     api
       .get<{ packages: ApiPackage[] }>("/api/packages")
       .then((d) => setPackages(d.packages))
-      .catch(() => setError("Failed to load packages"))
+      .catch(() => setPageError("Failed to load packages"))
       .finally(() => setLoading(false));
   };
 
   useEffect(load, []);
 
   const openNew = () => {
-    setForm({ name: "", description: "", estimated_duration: 60, price: 0 });
+    setForm(EMPTY_FORM);
+    setFormErrors({});
     setEditing(null);
     setShowForm(true);
-    setError("");
+    setPageError("");
   };
 
   const openEdit = (pkg: ApiPackage) => {
@@ -58,31 +98,49 @@ function PackagesPage() {
       estimated_duration: pkg.estimated_duration,
       price: parseFloat(pkg.price),
     });
+    setFormErrors({});
     setEditing(pkg);
     setShowForm(true);
-    setError("");
+    setPageError("");
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setFormErrors({});
+    setPageError("");
   };
 
   const save = async () => {
+    const errors = validate(form);
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
     setSaving(true);
-    setError("");
+    setPageError("");
     try {
+      const payload = {
+        name: form.name.trim(),
+        description: form.description.trim(),
+        estimated_duration: Number(form.estimated_duration),
+        price: Number(form.price),
+      };
       if (editing) {
-        await api.put(`/api/packages/${editing.package_id}`, form);
+        await api.put(`/api/packages/${editing.package_id}`, payload);
       } else {
-        await api.post("/api/packages", form);
+        await api.post("/api/packages", payload);
       }
       setShowForm(false);
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
+      setPageError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setSaving(false);
     }
   };
 
   const toggleActive = async (pkg: ApiPackage) => {
-    setError("");
+    setPageError("");
     try {
       if (pkg.is_active) {
         await api.patch(`/api/packages/${pkg.package_id}/deactivate`);
@@ -91,9 +149,17 @@ function PackagesPage() {
       }
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Toggle failed");
+      setPageError(err instanceof Error ? err.message : "Toggle failed");
     }
   };
+
+  const field = (key: keyof PackageForm) => ({
+    value: form[key] as string | number,
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      setForm({ ...form, [key]: e.target.value });
+      if (formErrors[key]) setFormErrors({ ...formErrors, [key]: undefined });
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -107,51 +173,104 @@ function PackagesPage() {
         </button>
       </div>
 
-      {error && (
-        <p className="text-xs font-mono text-destructive border border-destructive px-3 py-2">{error}</p>
+      {pageError && (
+        <p className="text-xs font-mono text-destructive border border-destructive px-3 py-2">{pageError}</p>
       )}
 
       {showForm && (
-        <div className="border-2 border-border bg-card p-4 space-y-3">
-          <h3 className="text-sm font-extrabold uppercase">{editing ? "Edit" : "New"} Package</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input
-              placeholder="Name"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="border-2 border-border bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent"
-            />
-            <input
-              placeholder="Duration (minutes)"
-              type="number"
-              value={form.estimated_duration}
-              onChange={(e) => setForm({ ...form, estimated_duration: Number(e.target.value) })}
-              className="border-2 border-border bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent"
-            />
-            <input
-              placeholder="Price (LKR)"
-              type="number"
-              value={form.price}
-              onChange={(e) => setForm({ ...form, price: Number(e.target.value) })}
-              className="border-2 border-border bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent"
-            />
-            <input
-              placeholder="Description"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="border-2 border-border bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent"
-            />
+        <div className="border-2 border-border bg-card p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-extrabold uppercase">{editing ? "Edit Package" : "New Package"}</h3>
+            <button onClick={closeForm} className="text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <div className="flex gap-2">
+
+          {/* Name */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-mono uppercase text-muted-foreground">
+              Package Name <span className="text-destructive">*</span>
+            </label>
+            <input
+              placeholder="e.g. Full Engine Service"
+              maxLength={100}
+              {...field("name")}
+              className={`w-full border-2 bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent ${formErrors.name ? "border-destructive" : "border-border"}`}
+            />
+            {formErrors.name && (
+              <p className="text-[10px] font-mono text-destructive">{formErrors.name}</p>
+            )}
+          </div>
+
+          {/* Description */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-mono uppercase text-muted-foreground">
+              What&apos;s Included / Description <span className="text-destructive">*</span>
+            </label>
+            <p className="text-[10px] font-mono text-muted-foreground">
+              Enter each item on a new line — these will be shown as bullet points to customers
+            </p>
+            <textarea
+              rows={5}
+              placeholder={"Oil change & filter replacement\nBrake inspection\nFluid top-up\nTyre pressure check"}
+              {...field("description")}
+              className={`w-full border-2 bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent resize-y ${formErrors.description ? "border-destructive" : "border-border"}`}
+            />
+            {formErrors.description && (
+              <p className="text-[10px] font-mono text-destructive">{formErrors.description}</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Duration */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-mono uppercase text-muted-foreground">
+                Duration (minutes) <span className="text-destructive">*</span>
+              </label>
+              <input
+                type="number"
+                min={30}
+                placeholder="e.g. 90"
+                {...field("estimated_duration")}
+                className={`w-full border-2 bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent ${formErrors.estimated_duration ? "border-destructive" : "border-border"}`}
+              />
+              {formErrors.estimated_duration ? (
+                <p className="text-[10px] font-mono text-destructive">{formErrors.estimated_duration}</p>
+              ) : (
+                <p className="text-[10px] font-mono text-muted-foreground">Minimum 30 minutes</p>
+              )}
+            </div>
+
+            {/* Price */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-mono uppercase text-muted-foreground">
+                Price (LKR) <span className="text-destructive">*</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                placeholder="e.g. 7500"
+                {...field("price")}
+                className={`w-full border-2 bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent ${formErrors.price ? "border-destructive" : "border-border"}`}
+              />
+              {formErrors.price ? (
+                <p className="text-[10px] font-mono text-destructive">{formErrors.price}</p>
+              ) : (
+                <p className="text-[10px] font-mono text-muted-foreground">Amount in Sri Lankan Rupees</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2 pt-1">
             <button
               onClick={save}
               disabled={saving}
               className="border-2 border-accent bg-accent px-4 py-2 text-xs font-mono uppercase font-bold text-accent-foreground hover:opacity-90 disabled:opacity-50"
             >
-              {saving ? "Saving..." : "Save"}
+              {saving ? "Saving..." : editing ? "Update Package" : "Create Package"}
             </button>
             <button
-              onClick={() => setShowForm(false)}
+              onClick={closeForm}
               className="border-2 border-border px-4 py-2 text-xs font-mono uppercase text-muted-foreground hover:border-muted-foreground"
             >
               Cancel
@@ -177,44 +296,53 @@ function PackagesPage() {
             </thead>
             <tbody>
               {packages.map((pkg) => (
-                <tr key={pkg.package_id} className="border-b border-border">
-                  <td className="py-2 px-3 text-muted-foreground">{pkg.package_id}</td>
-                  <td className="py-2 px-3 text-foreground">{pkg.name}</td>
-                  <td className="py-2 px-3 text-foreground">
+                <tr key={pkg.package_id} className="border-b border-border hover:bg-muted/20">
+                  <td className="py-3 px-3 text-muted-foreground">{pkg.package_id}</td>
+                  <td className="py-3 px-3">
+                    <p className="text-foreground font-bold">{pkg.name}</p>
+                    {pkg.description && (
+                      <p className="text-muted-foreground text-[10px] mt-0.5 line-clamp-2 max-w-xs">
+                        {pkg.description.split("\n").filter(Boolean).join(" · ")}
+                      </p>
+                    )}
+                  </td>
+                  <td className="py-3 px-3 text-foreground">
                     {parseFloat(pkg.price).toLocaleString()}
                   </td>
-                  <td className="py-2 px-3 text-foreground">{pkg.estimated_duration} min</td>
-                  <td className="py-2 px-3">
-                    <span
-                      className={`text-[10px] uppercase font-bold ${pkg.is_active ? "text-accent" : "text-muted-foreground"}`}
-                    >
+                  <td className="py-3 px-3 text-foreground">{fmtDuration(pkg.estimated_duration)}</td>
+                  <td className="py-3 px-3">
+                    <span className={`text-[10px] uppercase font-bold ${pkg.is_active ? "text-accent" : "text-muted-foreground"}`}>
                       {pkg.is_active ? "Active" : "Inactive"}
                     </span>
                   </td>
-                  <td className="py-2 px-3 flex gap-1">
-                    <button
-                      onClick={() => openEdit(pkg)}
-                      className="p-1 text-muted-foreground hover:text-foreground"
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </button>
-                    <button
-                      onClick={() => toggleActive(pkg)}
-                      className="p-1 text-muted-foreground hover:text-foreground"
-                    >
-                      {pkg.is_active ? (
-                        <ToggleRight className="h-3 w-3 text-accent" />
-                      ) : (
-                        <ToggleLeft className="h-3 w-3" />
-                      )}
-                    </button>
+                  <td className="py-3 px-3">
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => openEdit(pkg)}
+                        title="Edit"
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={() => toggleActive(pkg)}
+                        title={pkg.is_active ? "Deactivate" : "Activate"}
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                      >
+                        {pkg.is_active ? (
+                          <ToggleRight className="h-3 w-3 text-accent" />
+                        ) : (
+                          <ToggleLeft className="h-3 w-3" />
+                        )}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
               {packages.length === 0 && (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-muted-foreground">
-                    No packages found
+                    No packages found. Click &ldquo;Add Package&rdquo; to create one.
                   </td>
                 </tr>
               )}

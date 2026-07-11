@@ -4,6 +4,8 @@ const {
   listPackages, getPackage, createPackage, updatePackage, deactivatePackage, activatePackage,
 } = require("../controllers/packages.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
+const validate = require("../middlewares/validate.middleware");
+const { packageSchema } = require("../schemas/packages.schema");
 
 const managerOnly = [verifyToken, authorizeRoles("Service Center Manager")];
 
@@ -86,7 +88,7 @@ router.get("/:id", verifyToken, getPackage);
  *       403: { description: Manager only }
  *       500: { description: Server error }
  */
-router.post("/", managerOnly, createPackage);
+router.post("/", managerOnly, validate(packageSchema), createPackage);
 
 /**
  * @swagger
@@ -114,7 +116,7 @@ router.post("/", managerOnly, createPackage);
  *       404: { description: Package not found }
  *       500: { description: Server error }
  */
-router.put("/:id", managerOnly, updatePackage);
+router.put("/:id", managerOnly, validate(packageSchema), updatePackage);
 
 /**
  * @swagger

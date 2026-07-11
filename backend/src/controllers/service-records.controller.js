@@ -1,6 +1,7 @@
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { sendStatusUpdate } = require("../services/email.service");
+const { logActivity } = require("../lib/activityLogger");
 
 const NOTIFY_STATUSES = ["Completed", "Ready for Pickup"];
 
@@ -108,6 +109,9 @@ const updateServiceRecord = async (req, res) => {
         quality_checked: quality_checked ?? false,
       },
     });
+    if (quality_checked) {
+      logActivity(prisma, { user_id: req.user.user_id, action: "QUALITY_CHECK", entity_type: "service_record", entity_id: record.record_id });
+    }
     res.status(200).json({ message: "Service record updated", record });
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ message: "Service record not found" });
@@ -155,6 +159,7 @@ const updateStatus = async (req, res) => {
     }
 
     logger.info(`Service status updated to '${status}' for reservation_id: ${booking_id}`);
+    logActivity(prisma, { user_id: req.user.user_id, action: "STATUS_CHANGED", entity_type: "reservation", entity_id: parseInt(booking_id) });
     res.status(200).json({ message: "Status updated", status });
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ message: "Booking not found" });
@@ -180,6 +185,7 @@ const assignStaff = async (req, res) => {
     const assignment = await prisma.serviceStaffAssignment.create({
       data: { record_id: record.record_id, staff_id: parseInt(staff_id), task_type },
     });
+    logActivity(prisma, { user_id: req.user.user_id, action: "STAFF_ASSIGNED", entity_type: "service_record", entity_id: record.record_id });
     res.status(201).json({ message: "Staff assigned", assignment });
   } catch (error) {
     if (error.code === "P2002")

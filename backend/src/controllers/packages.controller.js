@@ -1,5 +1,6 @@
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
+const { logActivity } = require("../lib/activityLogger");
 
 const listPackages = async (req, res) => {
   try {
@@ -30,14 +31,12 @@ const getPackage = async (req, res) => {
 
 const createPackage = async (req, res) => {
   const { name, description, estimated_duration, price } = req.body;
-  if (!name || !estimated_duration || price === undefined)
-    return res.status(400).json({ message: "name, estimated_duration, and price are required" });
-
   try {
     const pkg = await prisma.servicePackage.create({
-      data: { name: name.trim(), description: description || null, estimated_duration, price },
+      data: { name, description, estimated_duration, price },
     });
     logger.info(`Package created — package_id: ${pkg.package_id}`);
+    logActivity(prisma, { user_id: req.user.user_id, action: "PACKAGE_UPDATED", entity_type: "service_package", entity_id: pkg.package_id });
     res.status(201).json({ message: "Package created", package: pkg });
   } catch (error) {
     logger.error(`createPackage failed — ${error.message}`);
@@ -47,14 +46,12 @@ const createPackage = async (req, res) => {
 
 const updatePackage = async (req, res) => {
   const { name, description, estimated_duration, price } = req.body;
-  if (!name || !estimated_duration || price === undefined)
-    return res.status(400).json({ message: "name, estimated_duration, and price are required" });
-
   try {
     const pkg = await prisma.servicePackage.update({
       where: { package_id: parseInt(req.params.id) },
-      data: { name: name.trim(), description: description || null, estimated_duration, price },
+      data: { name, description, estimated_duration, price },
     });
+    logActivity(prisma, { user_id: req.user.user_id, action: "PACKAGE_UPDATED", entity_type: "service_package", entity_id: pkg.package_id });
     res.status(200).json({ message: "Package updated", package: pkg });
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ message: "Package not found" });

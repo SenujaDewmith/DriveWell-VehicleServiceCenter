@@ -2,6 +2,7 @@ const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { fmtDate, fmtTime } = require("../lib/format");
 const { sendBookingConfirmation, sendBookingCancellation } = require("../services/email.service");
+const { logActivity } = require("../lib/activityLogger");
 
 const CUSTOMER_ROLE = 5;
 const MANAGER_ROLE = 1;
@@ -144,6 +145,7 @@ const createBooking = async (req, res) => {
     });
 
     logger.info(`Booking created — ref: ${booking_ref}, user_id: ${user_id}`);
+    logActivity(prisma, { user_id, action: "BOOKING_CREATED", entity_type: "reservation", entity_id: reservation_id });
 
     // Email notification (outside transaction — non-critical)
     const customer = await prisma.user.findUnique({
@@ -201,6 +203,7 @@ const cancelBooking = async (req, res) => {
     });
 
     logger.info(`Booking cancelled — reservation_id: ${id}`);
+    logActivity(prisma, { user_id, action: "STATUS_CHANGED", entity_type: "reservation", entity_id: parseInt(id) });
     res.status(200).json({ message: "Booking cancelled" });
   } catch (error) {
     logger.error(`cancelBooking failed — ${error.message}`);
@@ -221,6 +224,7 @@ const overrideStatus = async (req, res) => {
       where: { reservation_id: parseInt(id) },
       data: { status },
     });
+    logActivity(prisma, { user_id: req.user.user_id, action: "STATUS_CHANGED", entity_type: "reservation", entity_id: parseInt(id) });
     res.status(200).json({ message: "Status updated", booking });
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ message: "Booking not found" });

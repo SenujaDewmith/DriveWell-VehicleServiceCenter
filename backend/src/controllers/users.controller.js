@@ -1,6 +1,7 @@
 const bcrypt = require("bcryptjs");
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
+const { logActivity } = require("../lib/activityLogger");
 
 const STAFF_ROLES = [1, 2, 3, 4];
 
@@ -133,6 +134,9 @@ const setAccountStatus = async (req, res) => {
     if (user.count === 0) return res.status(404).json({ message: "Staff member not found" });
 
     logger.info(`User ${id} status set to ${account_status}`);
+    if (account_status === "inactive") {
+      logActivity(prisma, { user_id: req.user.user_id, action: "USER_DEACTIVATED", entity_type: "user", entity_id: parseInt(id) });
+    }
     const updated = await prisma.user.findUnique({
       where: { user_id: parseInt(id) },
       select: { user_id: true, email: true, account_status: true },

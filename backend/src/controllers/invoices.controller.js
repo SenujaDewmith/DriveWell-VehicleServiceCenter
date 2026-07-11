@@ -1,6 +1,7 @@
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { fmtDate } = require("../lib/format");
+const { logActivity } = require("../lib/activityLogger");
 
 const CUSTOMER_ROLE = 5;
 
@@ -139,6 +140,7 @@ const createInvoice = async (req, res) => {
     });
 
     logger.info(`Invoice created — invoice_id: ${invoice.invoice_id}, reservation_id: ${reservation_id}`);
+    logActivity(prisma, { user_id, action: "INVOICE_GENERATED", entity_type: "invoice", entity_id: invoice.invoice_id });
     res.status(201).json({ message: "Invoice created", invoice });
   } catch (error) {
     if (error.code === "P2002")
@@ -161,6 +163,9 @@ const updatePaymentStatus = async (req, res) => {
       data: { payment_status, payment_method: payment_method || null },
     });
     logger.info(`Invoice ${id} payment status set to ${payment_status}`);
+    if (payment_status === "Paid") {
+      logActivity(prisma, { user_id: req.user.user_id, action: "PAYMENT_RECEIVED", entity_type: "invoice", entity_id: parseInt(id) });
+    }
     res.status(200).json({ message: "Payment status updated", invoice });
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ message: "Invoice not found" });

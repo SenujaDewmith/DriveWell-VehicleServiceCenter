@@ -100,21 +100,21 @@ export default function Landing() {
             {[
               {
                 name: "Basic Wash",
-                price: "$29.99",
+                price: "LKR 2,999",
                 duration: "30 min",
                 features: ["Exterior wash", "Tire cleaning", "Interior vacuum", "Window cleaning"],
                 popular: true,
               },
               {
                 name: "Full Service",
-                price: "$79.99",
+                price: "LKR 7,999",
                 duration: "1h 30min",
                 features: ["Everything in Basic", "Interior detailing", "Waxing", "Engine bay cleaning", "Undercarriage wash"],
                 popular: true,
               },
               {
                 name: "Premium Detailing",
-                price: "$149.99",
+                price: "LKR 14,999",
                 duration: "3h",
                 features: ["Everything in Full Service", "Paint correction", "Ceramic coating", "Leather conditioning", "Headlight restoration"],
                 premium: true,

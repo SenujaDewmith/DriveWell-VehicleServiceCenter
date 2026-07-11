@@ -1,16 +1,17 @@
 import { apiClient } from "@/lib/apiClient";
 
 export interface ServicePackage {
-  id: string;
+  package_id: number;
   name: string;
-  description: string;
-  price: number;
-  duration: number;
-  features: string[];
+  description: string | null;
+  estimated_duration: number;
+  price: string;
+  is_active: boolean;
+  created_at: string;
 }
 
 export const servicesService = {
-  getPackages: () => apiClient.get<ServicePackage[]>("/packages"),
+  getPackages: () => apiClient.get<{ packages: ServicePackage[] }>("/packages"),
 
-  getPackage: (id: string) => apiClient.get<ServicePackage>(`/packages/${id}`),
+  getPackage: (id: number) => apiClient.get<{ package: ServicePackage }>(`/packages/${id}`),
 };
