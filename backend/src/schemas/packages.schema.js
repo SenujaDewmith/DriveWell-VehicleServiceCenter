@@ -17,6 +17,12 @@ const packageSchema = z.object({
   price: z
     .number({ required_error: "Price is required", invalid_type_error: "Price must be a number" })
     .min(1, "Price must be at least LKR 1"),
+  max_capacity: z
+    .number({ invalid_type_error: "Max capacity must be a number" })
+    .int("Max capacity must be a whole number")
+    .min(1, "Max capacity must be at least 1")
+    .optional()
+    .default(3),
 });
 
 module.exports = { packageSchema };

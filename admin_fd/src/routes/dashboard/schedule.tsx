@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { Plus, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/dashboard/schedule")({
@@ -17,44 +17,55 @@ const NUM_TO_DAY: Record<number, string> = {
   4: "Thursday", 5: "Friday", 6: "Saturday",
 };
 
-interface ApiSlot {
-  slot_id: number;
-  slot_time: string;
-  capacity: number;
-  is_active: boolean;
-}
-
 interface ApiConfig {
   config_id: number;
   working_days: string;
+  day_start_time: string;
+  day_end_time: string;
+}
+
+interface ApiBlockedTime {
+  block_id: number;
+  date: string | null;
+  start_time: string;
+  end_time: string;
+  reason: string | null;
+}
+
+function toHHMM(t: string) {
+  return t.slice(0, 5);
 }
 
 function SchedulePage() {
   const [workingDays, setWorkingDays] = useState<string[]>([]);
-  const [slots, setSlots] = useState<ApiSlot[]>([]);
-  const [slotCapacities, setSlotCapacities] = useState<Record<number, string>>({});
-  const [newSlotTime, setNewSlotTime] = useState("");
-  const [newSlotCapacity, setNewSlotCapacity] = useState("5");
+  const [dayStart, setDayStart] = useState("");
+  const [dayEnd, setDayEnd] = useState("");
+  const [blockedTimes, setBlockedTimes] = useState<ApiBlockedTime[]>([]);
+
+  const [newBlockDate, setNewBlockDate] = useState("");
+  const [newBlockStart, setNewBlockStart] = useState("");
+  const [newBlockEnd, setNewBlockEnd] = useState("");
+  const [newBlockReason, setNewBlockReason] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [savingSlotId, setSavingSlotId] = useState<number | null>(null);
+  const [addingBlock, setAddingBlock] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
   const load = () => {
     setLoading(true);
     api
-      .get<{ config: ApiConfig; slots: ApiSlot[] }>("/api/config")
-      .then(({ config, slots: s }) => {
+      .get<{ config: ApiConfig; blocked_times: ApiBlockedTime[] }>("/api/config")
+      .then(({ config, blocked_times }) => {
         const days = config.working_days
           .split(",")
           .map((n) => NUM_TO_DAY[parseInt(n)])
           .filter(Boolean);
         setWorkingDays(days);
-        setSlots(s);
-        const capMap: Record<number, string> = {};
-        s.forEach((slot) => { capMap[slot.slot_id] = String(slot.capacity); });
-        setSlotCapacities(capMap);
+        setDayStart(toHHMM(config.day_start_time));
+        setDayEnd(toHHMM(config.day_end_time));
+        setBlockedTimes(blocked_times);
       })
       .catch(() => setError("Failed to load config"))
       .finally(() => setLoading(false));
@@ -68,7 +79,15 @@ function SchedulePage() {
     );
   };
 
-  const saveWorkingDays = async () => {
+  const saveBusinessHours = async () => {
+    if (!dayStart || !dayEnd) {
+      setError("Start and end time are required");
+      return;
+    }
+    if (dayEnd <= dayStart) {
+      setError("End time must be after start time");
+      return;
+    }
     setSaving(true);
     setError("");
     setSuccess("");
@@ -77,8 +96,8 @@ function SchedulePage() {
         .map((d) => DAY_TO_NUM[d])
         .sort((a, b) => a - b)
         .join(",");
-      await api.put("/api/config", { working_days });
-      setSuccess("Working days saved.");
+      await api.put("/api/config", { working_days, day_start_time: dayStart, day_end_time: dayEnd });
+      setSuccess("Business hours saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -86,59 +105,43 @@ function SchedulePage() {
     }
   };
 
-  const addSlot = async () => {
-    if (!newSlotTime) return;
-    const capacity = Number(newSlotCapacity);
-    if (!Number.isInteger(capacity) || capacity < 1) {
-      setError("Capacity must be a positive whole number");
+  const addBlockedTime = async () => {
+    if (!newBlockStart || !newBlockEnd) {
+      setError("Start time and end time are required");
       return;
     }
-    setError("");
-    try {
-      await api.post("/api/config/slots", { slot_time: newSlotTime, capacity });
-      setNewSlotTime("");
-      setNewSlotCapacity("5");
-      load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add slot");
-    }
-  };
-
-  const saveSlotCapacity = async (slot: ApiSlot) => {
-    const capacity = Number(slotCapacities[slot.slot_id]);
-    if (!Number.isInteger(capacity) || capacity < 1) {
-      setError("Capacity must be a positive whole number");
+    if (newBlockEnd <= newBlockStart) {
+      setError("End time must be after start time");
       return;
     }
-    setSavingSlotId(slot.slot_id);
+    setAddingBlock(true);
     setError("");
     try {
-      await api.patch(`/api/config/slots/${slot.slot_id}`, { capacity });
+      await api.post("/api/config/blocked-times", {
+        date: newBlockDate || undefined,
+        start_time: newBlockStart,
+        end_time: newBlockEnd,
+        reason: newBlockReason || undefined,
+      });
+      setNewBlockDate("");
+      setNewBlockStart("");
+      setNewBlockEnd("");
+      setNewBlockReason("");
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update capacity");
+      setError(err instanceof Error ? err.message : "Failed to add blocked time");
     } finally {
-      setSavingSlotId(null);
+      setAddingBlock(false);
     }
   };
 
-  const toggleActive = async (slot: ApiSlot) => {
+  const removeBlockedTime = async (block: ApiBlockedTime) => {
     setError("");
     try {
-      await api.patch(`/api/config/slots/${slot.slot_id}`, { is_active: !slot.is_active });
+      await api.delete(`/api/config/blocked-times/${block.block_id}`);
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update slot");
-    }
-  };
-
-  const removeSlot = async (slot: ApiSlot) => {
-    setError("");
-    try {
-      await api.delete(`/api/config/slots/${slot.slot_id}`);
-      load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to remove slot");
+      setError(err instanceof Error ? err.message : "Failed to remove blocked time");
     }
   };
 
@@ -159,15 +162,20 @@ function SchedulePage() {
 
       <div className="border-2 border-border bg-card p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-mono uppercase text-muted-foreground">Working Days</h3>
+          <h3 className="text-xs font-mono uppercase text-muted-foreground">Business Hours</h3>
           <button
-            onClick={saveWorkingDays}
+            onClick={saveBusinessHours}
             disabled={saving}
             className="border-2 border-accent bg-accent px-3 py-1.5 text-[10px] font-mono uppercase font-bold text-accent-foreground hover:opacity-90 disabled:opacity-50"
           >
-            {saving ? "Saving..." : "Save Working Days"}
+            {saving ? "Saving..." : "Save Business Hours"}
           </button>
         </div>
+        <p className="text-[10px] font-mono text-muted-foreground">
+          Appointment windows are generated automatically for each service package based on its duration and
+          these hours — you no longer need to create individual time slots.
+        </p>
+
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {ALL_DAYS.map((day) => (
             <button
@@ -183,39 +191,80 @@ function SchedulePage() {
             </button>
           ))}
         </div>
-      </div>
 
-      <div className="border-2 border-border bg-card p-4 space-y-4">
-        <h3 className="text-xs font-mono uppercase text-muted-foreground">Time Slots &amp; Capacity</h3>
-        <p className="text-[10px] font-mono text-muted-foreground">
-          Each slot's capacity controls how many bookings customers can make at that specific time.
-        </p>
-
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="flex flex-wrap items-end gap-4">
           <div className="space-y-1">
-            <label className="block text-[10px] font-mono uppercase text-muted-foreground">Time</label>
+            <label className="block text-[10px] font-mono uppercase text-muted-foreground">Day Start</label>
             <input
               type="time"
-              value={newSlotTime}
-              onChange={(e) => setNewSlotTime(e.target.value)}
+              value={dayStart}
+              onChange={(e) => setDayStart(e.target.value)}
               className="border-2 border-border bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent"
             />
           </div>
           <div className="space-y-1">
-            <label className="block text-[10px] font-mono uppercase text-muted-foreground">Capacity</label>
+            <label className="block text-[10px] font-mono uppercase text-muted-foreground">Day End</label>
             <input
-              type="number"
-              min={1}
-              value={newSlotCapacity}
-              onChange={(e) => setNewSlotCapacity(e.target.value)}
-              className="w-20 border-2 border-border bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent"
+              type="time"
+              value={dayEnd}
+              onChange={(e) => setDayEnd(e.target.value)}
+              className="border-2 border-border bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="border-2 border-border bg-card p-4 space-y-4">
+        <h3 className="text-xs font-mono uppercase text-muted-foreground">Blocked / Unavailable Times</h3>
+        <p className="text-[10px] font-mono text-muted-foreground">
+          Leave date blank for a recurring block that applies every working day (e.g. lunch break). Set a date
+          for a one-off closure (e.g. a specific holiday or maintenance window).
+        </p>
+
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1">
+            <label className="block text-[10px] font-mono uppercase text-muted-foreground">Date (optional)</label>
+            <input
+              type="date"
+              value={newBlockDate}
+              onChange={(e) => setNewBlockDate(e.target.value)}
+              className="border-2 border-border bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="block text-[10px] font-mono uppercase text-muted-foreground">Start</label>
+            <input
+              type="time"
+              value={newBlockStart}
+              onChange={(e) => setNewBlockStart(e.target.value)}
+              className="border-2 border-border bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="block text-[10px] font-mono uppercase text-muted-foreground">End</label>
+            <input
+              type="time"
+              value={newBlockEnd}
+              onChange={(e) => setNewBlockEnd(e.target.value)}
+              className="border-2 border-border bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent"
+            />
+          </div>
+          <div className="space-y-1 flex-1 min-w-40">
+            <label className="block text-[10px] font-mono uppercase text-muted-foreground">Reason (optional)</label>
+            <input
+              type="text"
+              placeholder="e.g. Lunch break"
+              value={newBlockReason}
+              onChange={(e) => setNewBlockReason(e.target.value)}
+              className="w-full border-2 border-border bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent"
             />
           </div>
           <button
-            onClick={addSlot}
-            className="flex items-center gap-1 border-2 border-accent bg-accent px-3 py-2 text-xs font-mono uppercase font-bold text-accent-foreground hover:opacity-90"
+            onClick={addBlockedTime}
+            disabled={addingBlock}
+            className="flex items-center gap-1 border-2 border-accent bg-accent px-3 py-2 text-xs font-mono uppercase font-bold text-accent-foreground hover:opacity-90 disabled:opacity-50"
           >
-            <Plus className="h-4 w-4" /> Add Slot
+            <Plus className="h-4 w-4" /> {addingBlock ? "Adding..." : "Add Block"}
           </button>
         </div>
 
@@ -223,72 +272,41 @@ function SchedulePage() {
           <table className="w-full text-xs font-mono">
             <thead>
               <tr className="border-b-2 border-border">
-                <th className="text-left py-2 px-2 uppercase text-muted-foreground">Time</th>
-                <th className="text-left py-2 px-2 uppercase text-muted-foreground">Capacity</th>
-                <th className="text-left py-2 px-2 uppercase text-muted-foreground">Status</th>
+                <th className="text-left py-2 px-2 uppercase text-muted-foreground">Scope</th>
+                <th className="text-left py-2 px-2 uppercase text-muted-foreground">Start</th>
+                <th className="text-left py-2 px-2 uppercase text-muted-foreground">End</th>
+                <th className="text-left py-2 px-2 uppercase text-muted-foreground">Reason</th>
                 <th className="text-left py-2 px-2 uppercase text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {slots.map((slot) => (
-                <tr key={slot.slot_id} className={`border-b border-border ${!slot.is_active ? "opacity-50" : ""}`}>
-                  <td className="py-2 px-2 text-foreground">{slot.slot_time.slice(0, 5)}</td>
-                  <td className="py-2 px-2">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={1}
-                        value={slotCapacities[slot.slot_id] ?? ""}
-                        onChange={(e) => setSlotCapacities({ ...slotCapacities, [slot.slot_id]: e.target.value })}
-                        className="w-16 border-2 border-border bg-background px-2 py-1 text-xs font-mono text-foreground focus:outline-none focus:border-accent"
-                      />
-                      <button
-                        onClick={() => saveSlotCapacity(slot)}
-                        disabled={
-                          savingSlotId === slot.slot_id ||
-                          slotCapacities[slot.slot_id] === String(slot.capacity)
-                        }
-                        className="border-2 border-accent bg-accent px-2 py-1 text-[10px] font-mono uppercase font-bold text-accent-foreground hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        {savingSlotId === slot.slot_id ? "..." : "Save"}
-                      </button>
-                    </div>
+              {blockedTimes.map((b) => (
+                <tr key={b.block_id} className="border-b border-border">
+                  <td className="py-2 px-2 text-foreground">
+                    {b.date ? (
+                      <span>{b.date}</span>
+                    ) : (
+                      <span className="text-accent font-bold">Every day</span>
+                    )}
                   </td>
+                  <td className="py-2 px-2 text-foreground">{toHHMM(b.start_time)}</td>
+                  <td className="py-2 px-2 text-foreground">{toHHMM(b.end_time)}</td>
+                  <td className="py-2 px-2 text-muted-foreground">{b.reason ?? "—"}</td>
                   <td className="py-2 px-2">
-                    <span
-                      className={`text-[10px] uppercase font-bold ${slot.is_active ? "text-accent" : "text-muted-foreground"}`}
+                    <button
+                      onClick={() => removeBlockedTime(b)}
+                      title="Delete"
+                      className="p-1 text-muted-foreground hover:text-destructive"
                     >
-                      {slot.is_active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="py-2 px-2">
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => toggleActive(slot)}
-                        title={slot.is_active ? "Deactivate" : "Activate"}
-                        className="p-1 text-muted-foreground hover:text-foreground"
-                      >
-                        {slot.is_active ? (
-                          <ToggleRight className="h-3 w-3 text-accent" />
-                        ) : (
-                          <ToggleLeft className="h-3 w-3" />
-                        )}
-                      </button>
-                      <button
-                        onClick={() => removeSlot(slot)}
-                        title="Delete"
-                        className="p-1 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
+                      <Trash2 className="h-3 w-3" />
+                    </button>
                   </td>
                 </tr>
               ))}
-              {slots.length === 0 && (
+              {blockedTimes.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-8 text-center text-muted-foreground">
-                    No time slots configured
+                  <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                    No blocked times configured
                   </td>
                 </tr>
               )}

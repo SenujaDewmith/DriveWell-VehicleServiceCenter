@@ -120,6 +120,7 @@ model ServicePackage {
   estimated_duration Int      @default(60)
   price              Decimal  @db.Decimal(10, 2)
   image_url          String?  @db.VarChar(500)
+  max_capacity       Int      @default(3)
   is_active          Boolean  @default(true)
   created_at         DateTime @default(now())
 
@@ -129,21 +130,23 @@ model ServicePackage {
 }
 
 model WorkingConfig {
-  config_id    Int    @id @default(autoincrement())
-  working_days String @default("1,2,3,4,5")
+  config_id      Int      @id @default(autoincrement())
+  working_days   String   @default("1,2,3,4,5")
+  day_start_time DateTime @db.Time
+  day_end_time   DateTime @db.Time
 
   @@map("working_config")
 }
 
-model TimeSlot {
-  slot_id   Int      @id @default(autoincrement())
-  slot_time DateTime @db.Time
-  capacity  Int      @default(5)
-  is_active Boolean  @default(true)
+model BlockedTime {
+  block_id   Int       @id @default(autoincrement())
+  date       DateTime? @db.Date
+  start_time DateTime  @db.Time
+  end_time   DateTime  @db.Time
+  reason     String?   @db.VarChar(255)
+  created_at DateTime  @default(now())
 
-  reservations Reservation[]
-
-  @@map("time_slots")
+  @@map("blocked_times")
 }
 
 model Reservation {
@@ -152,7 +155,8 @@ model Reservation {
   customer_id    Int
   vehicle_id     Int
   package_id     Int
-  slot_id        Int
+  start_time     DateTime @db.Time
+  end_time       DateTime @db.Time
   service_date   DateTime @db.Date
   status         String   @default("Booked") @db.VarChar(30)
   created_at     DateTime @default(now())
@@ -160,7 +164,6 @@ model Reservation {
   customer_user  User           @relation("CustomerReservations", fields: [customer_id], references: [user_id])
   vehicle        Vehicle        @relation(fields: [vehicle_id], references: [vehicle_id])
   package        ServicePackage @relation(fields: [package_id], references: [package_id])
-  slot           TimeSlot       @relation(fields: [slot_id], references: [slot_id])
   service_record ServiceRecord?
   invoice        Invoice?
   feedback       Feedback?

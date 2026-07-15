@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { getConfig, updateConfig, addSlot, updateSlot, deleteSlot } = require("../controllers/config.controller");
+const { getConfig, updateConfig, addBlockedTime, deleteBlockedTime } = require("../controllers/config.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
 
 const managerOnly = [verifyToken, authorizeRoles("Service Center Manager")];
@@ -9,14 +9,14 @@ const managerOnly = [verifyToken, authorizeRoles("Service Center Manager")];
  * @swagger
  * tags:
  *   name: Config
- *   description: Working hours and scheduling configuration (Manager only)
+ *   description: Business hours and scheduling configuration (Manager only)
  */
 
 /**
  * @swagger
  * /api/config:
  *   get:
- *     summary: Get working configuration and all time slots
+ *     summary: Get working configuration and all blocked times
  *     tags: [Config]
  *     security:
  *       - cookieAuth: []
@@ -30,10 +30,10 @@ const managerOnly = [verifyToken, authorizeRoles("Service Center Manager")];
  *               properties:
  *                 config:
  *                   $ref: '#/components/schemas/WorkingConfig'
- *                 slots:
+ *                 blocked_times:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/TimeSlot'
+ *                     $ref: '#/components/schemas/BlockedTime'
  *       401: { description: Not authenticated }
  *       500: { description: Server error }
  */
@@ -43,7 +43,7 @@ router.get("/", verifyToken, getConfig);
  * @swagger
  * /api/config:
  *   put:
- *     summary: Update working days (Manager only)
+ *     summary: Update working days and business hours (Manager only)
  *     tags: [Config]
  *     security:
  *       - cookieAuth: []
@@ -53,9 +53,11 @@ router.get("/", verifyToken, getConfig);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [working_days]
+ *             required: [working_days, day_start_time, day_end_time]
  *             properties:
- *               working_days: { type: string, example: "1,2,3,4,5", description: "Comma-separated: 0=Sun, 1=Mon … 6=Sat" }
+ *               working_days:   { type: string, example: "1,2,3,4,5", description: "Comma-separated: 0=Sun, 1=Mon … 6=Sat" }
+ *               day_start_time: { type: string, example: "08:00", description: "HH:MM format" }
+ *               day_end_time:   { type: string, example: "18:00", description: "HH:MM format; must be after day_start_time" }
  *     responses:
  *       200: { description: Config updated }
  *       400: { description: Validation error }
@@ -66,9 +68,9 @@ router.put("/", managerOnly, updateConfig);
 
 /**
  * @swagger
- * /api/config/slots:
+ * /api/config/blocked-times:
  *   post:
- *     summary: Add a new time slot with its own capacity (Manager only)
+ *     summary: Add a blocked/unavailable time period (Manager only)
  *     tags: [Config]
  *     security:
  *       - cookieAuth: []
@@ -78,53 +80,25 @@ router.put("/", managerOnly, updateConfig);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [slot_time]
+ *             required: [start_time, end_time]
  *             properties:
- *               slot_time: { type: string, example: "07:00", description: "HH:MM format" }
- *               capacity:  { type: integer, example: 5, description: "Max bookings for this slot; defaults to 5" }
+ *               date:       { type: string, format: date, example: "2026-07-20", description: "Omit for a recurring block that applies every working day (e.g. lunch break)" }
+ *               start_time: { type: string, example: "12:00", description: "HH:MM format" }
+ *               end_time:   { type: string, example: "13:00", description: "HH:MM format; must be after start_time" }
+ *               reason:     { type: string, example: "Lunch break" }
  *     responses:
- *       201: { description: Slot added }
- *       400: { description: Slot already exists }
+ *       201: { description: Blocked time added }
+ *       400: { description: Validation error }
  *       403: { description: Manager only }
  *       500: { description: Server error }
  */
-router.post("/slots", managerOnly, addSlot);
+router.post("/blocked-times", managerOnly, addBlockedTime);
 
 /**
  * @swagger
- * /api/config/slots/{id}:
- *   patch:
- *     summary: Update a time slot's capacity and/or active status (Manager only)
- *     tags: [Config]
- *     security:
- *       - cookieAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: integer }
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               is_active: { type: boolean, example: false }
- *               capacity:  { type: integer, example: 8 }
- *     responses:
- *       200: { description: Slot updated }
- *       403: { description: Manager only }
- *       404: { description: Slot not found }
- *       500: { description: Server error }
- */
-router.patch("/slots/:id", managerOnly, updateSlot);
-
-/**
- * @swagger
- * /api/config/slots/{id}:
+ * /api/config/blocked-times/{id}:
  *   delete:
- *     summary: Delete a time slot (Manager only)
+ *     summary: Remove a blocked/unavailable time period (Manager only)
  *     tags: [Config]
  *     security:
  *       - cookieAuth: []
@@ -134,12 +108,11 @@ router.patch("/slots/:id", managerOnly, updateSlot);
  *         required: true
  *         schema: { type: integer }
  *     responses:
- *       200: { description: Slot deleted }
- *       400: { description: Slot has existing bookings }
+ *       200: { description: Blocked time removed }
  *       403: { description: Manager only }
- *       404: { description: Slot not found }
+ *       404: { description: Blocked time not found }
  *       500: { description: Server error }
  */
-router.delete("/slots/:id", managerOnly, deleteSlot);
+router.delete("/blocked-times/:id", managerOnly, deleteBlockedTime);
 
 module.exports = router;

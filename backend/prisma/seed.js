@@ -60,23 +60,33 @@ async function main() {
   }
   console.log("✅ Roles seeded");
 
-  // Seed working config (single row)
+  // Seed working config (single row) — business hours + working days. Appointment windows
+  // are auto-generated per package from these hours, not manually created time slots.
   const configCount = await prisma.workingConfig.count();
   if (configCount === 0) {
-    await prisma.workingConfig.create({ data: { working_days: "1,2,3,4,5" } });
+    await prisma.workingConfig.create({
+      data: {
+        working_days: "1,2,3,4,5",
+        day_start_time: new Date("1970-01-01T08:00:00.000Z"),
+        day_end_time: new Date("1970-01-01T18:00:00.000Z"),
+      },
+    });
   }
   console.log("✅ Working config seeded");
 
-  // Seed time slots — capacity is per-slot and admin-configurable from here on
-  const slotCount = await prisma.timeSlot.count();
-  if (slotCount === 0) {
-    const times = ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00"];
-    for (const t of times) {
-      // Store as full ISO string — Prisma maps the time portion to the TIME column
-      await prisma.timeSlot.create({ data: { slot_time: new Date(`1970-01-01T${t}:00.000Z`), capacity: 5 } });
-    }
+  // Seed a recurring lunch-break blocked time (applies to every working day)
+  const blockedCount = await prisma.blockedTime.count();
+  if (blockedCount === 0) {
+    await prisma.blockedTime.create({
+      data: {
+        date: null,
+        start_time: new Date("1970-01-01T12:00:00.000Z"),
+        end_time: new Date("1970-01-01T13:00:00.000Z"),
+        reason: "Lunch break",
+      },
+    });
   }
-  console.log("✅ Time slots seeded");
+  console.log("✅ Blocked times seeded");
 
   // Seed default manager account (always syncs password so credentials are predictable)
   const managerRole = await prisma.role.findUnique({ where: { role_name: "Service Center Manager" } });
@@ -111,18 +121,21 @@ async function main() {
           description: "Exterior hand wash, interior vacuum, and window cleaning",
           estimated_duration: 60,
           price: 2500,
+          max_capacity: 5,
         },
         {
           name: "Standard Service",
           description: "Oil change, filter replacement, fluid top-up, and basic inspection",
           estimated_duration: 120,
           price: 7500,
+          max_capacity: 3,
         },
         {
           name: "Full Detail & Polish",
           description: "Complete interior and exterior detail with wax polish and engine clean",
           estimated_duration: 180,
           price: 14999,
+          max_capacity: 2,
         },
       ],
     });

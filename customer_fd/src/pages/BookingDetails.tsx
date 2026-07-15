@@ -171,7 +171,9 @@ export default function BookingDetails() {
                 <div>
                   <p className="text-sm text-muted-foreground">Time Slot</p>
                   <p className="font-semibold">
-                    {booking.slot_time ? fmtTime(booking.slot_time) : "To be confirmed"}
+                    {booking.slot_time
+                      ? `${fmtTime(booking.slot_time)}${booking.slot_end_time ? ` - ${fmtTime(booking.slot_end_time)}` : ""}`
+                      : "To be confirmed"}
                   </p>
                 </div>
               </div>

@@ -47,7 +47,7 @@ export default function BookService() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
   const [selectedPackageId, setSelectedPackageId] = useState<number | null>(null);
   const [selectedDate, setSelectedDate] = useState("");
-  const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null);
+  const [selectedStartTime, setSelectedStartTime] = useState<string | null>(null);
   const [selectedSlotTime, setSelectedSlotTime] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addVehicleOpen, setAddVehicleOpen] = useState(false);
@@ -69,12 +69,13 @@ export default function BookService() {
   }, [user, navigate, preselectedPackage]);
 
   const handleDateChange = async (date: string) => {
+    if (!selectedPackageId) return;
     setSelectedDate(date);
-    setSelectedSlotId(null);
+    setSelectedStartTime(null);
     setSelectedSlotTime("");
     setSlotsLoading(true);
     try {
-      const res = await bookingsService.getAvailableSlots(date);
+      const res = await bookingsService.getAvailableSlots(date, selectedPackageId);
       setDateAvailable(res.available);
       setSlots(res.slots);
       if (!res.available) toast.error(res.reason ?? "No availability on this date");
@@ -86,14 +87,14 @@ export default function BookService() {
   };
 
   const handleConfirm = async () => {
-    if (!selectedVehicleId || !selectedPackageId || !selectedDate || !selectedSlotId) return;
+    if (!selectedVehicleId || !selectedPackageId || !selectedDate || !selectedStartTime) return;
     setIsSubmitting(true);
     try {
       const res = await bookingsService.createBooking({
         vehicle_id: selectedVehicleId,
         package_id: selectedPackageId,
         service_date: selectedDate,
-        slot_id: selectedSlotId,
+        start_time: selectedStartTime,
       });
       toast.success(`Booking confirmed! Ref: ${res.booking_ref}`);
       navigate("/bookings");
@@ -286,7 +287,7 @@ export default function BookService() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label>Date</Label>
-                <BookingCalendar selectedDate={selectedDate} onSelectDate={handleDateChange} />
+                <BookingCalendar packageId={selectedPackageId!} selectedDate={selectedDate} onSelectDate={handleDateChange} />
               </div>
 
               <div className="space-y-2">
@@ -319,16 +320,16 @@ export default function BookService() {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {slots.map((slot) => {
-                      const isSelected = selectedSlotId === slot.slot_id;
+                      const isSelected = selectedStartTime === slot.start_time;
                       const isFull = slot.remaining <= 0;
                       return (
                         <button
-                          key={slot.slot_id}
+                          key={slot.start_time}
                           type="button"
                           disabled={isFull}
                           onClick={() => {
-                            setSelectedSlotId(slot.slot_id);
-                            setSelectedSlotTime(fmtTime(slot.slot_time));
+                            setSelectedStartTime(slot.start_time);
+                            setSelectedSlotTime(`${fmtTime(slot.start_time)} - ${fmtTime(slot.end_time)}`);
                           }}
                           className={`text-left border-2 rounded-lg p-3 transition-colors ${
                             isSelected
@@ -340,8 +341,8 @@ export default function BookService() {
                         >
                           <div className="flex items-start justify-between mb-2">
                             <div>
-                              <p className="font-semibold">{fmtTime(slot.slot_time)}</p>
-                              {pkg && <p className="text-xs text-muted-foreground">{fmtDuration(pkg.estimated_duration)}</p>}
+                              <p className="font-semibold">{fmtTime(slot.start_time)} - {fmtTime(slot.end_time)}</p>
+                              {pkg && <p className="text-xs text-muted-foreground">Est. service time: {fmtDuration(pkg.estimated_duration)}</p>}
                             </div>
                             <span
                               className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
@@ -377,7 +378,7 @@ export default function BookService() {
               <Button
                 className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90"
                 onClick={() => setStep(4)}
-                disabled={!selectedDate || !selectedSlotId || dateAvailable === false}
+                disabled={!selectedDate || !selectedStartTime || dateAvailable === false}
               >
                 Confirm Selection
               </Button>

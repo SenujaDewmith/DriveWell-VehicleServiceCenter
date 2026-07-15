@@ -8,7 +8,6 @@ export interface Booking {
   created_at: string;
   vehicle_id: number;
   package_id: number;
-  slot_id: number | null;
   make?: string;
   model?: string;
   plate_no?: string;
@@ -17,19 +16,19 @@ export interface Booking {
   package_price?: string;
   estimated_duration?: number;
   slot_time?: string | null;
+  slot_end_time?: string | null;
 }
 
 export interface CreateBookingPayload {
   vehicle_id: number;
   package_id: number;
   service_date: string;
-  slot_id: number;
+  start_time: string;
 }
 
 export interface AvailableSlot {
-  slot_id: number;
-  slot_time: string;
-  is_active: boolean;
+  start_time: string;
+  end_time: string;
   capacity: number;
   booked_count: number;
   remaining: number;
@@ -47,7 +46,7 @@ export interface DayAvailability {
   date: string;
   status: DayAvailabilityStatus;
   remaining_capacity: number;
-  daily_capacity: number;
+  total_windows: number;
 }
 
 export interface MonthAvailabilityResponse {
@@ -65,9 +64,9 @@ export const bookingsService = {
   cancelBooking: (id: number) =>
     apiClient.patch<{ message: string }>(`/bookings/${id}/cancel`, {}),
 
-  getAvailableSlots: (date: string) =>
-    apiClient.get<AvailableSlotsResponse>(`/bookings/available-slots?date=${date}`),
+  getAvailableSlots: (date: string, packageId: number) =>
+    apiClient.get<AvailableSlotsResponse>(`/bookings/available-slots?date=${date}&package_id=${packageId}`),
 
-  getMonthAvailability: (year: number, month: number) =>
-    apiClient.get<MonthAvailabilityResponse>(`/bookings/calendar?year=${year}&month=${month}`),
+  getMonthAvailability: (year: number, month: number, packageId: number) =>
+    apiClient.get<MonthAvailabilityResponse>(`/bookings/calendar?year=${year}&month=${month}&package_id=${packageId}`),
 };

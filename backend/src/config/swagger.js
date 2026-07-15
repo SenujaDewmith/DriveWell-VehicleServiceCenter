@@ -90,24 +90,27 @@ const options = {
             description:        { type: "string",  example: "Complete vehicle service" },
             estimated_duration: { type: "integer", example: 120 },
             price:              { type: "number",  example: 4500.00 },
+            max_capacity:       { type: "integer", example: 3, description: "Concurrent bookings of this package allowed at once" },
           },
         },
-        // ── Time Slots ──────────────────────────────────────────
-        TimeSlot: {
-          type: "object",
-          properties: {
-            slot_id:   { type: "integer", example: 1 },
-            slot_time: { type: "string",  example: "08:00:00" },
-            capacity:  { type: "integer", example: 5, description: "Max simultaneous bookings for this slot (admin-configurable)" },
-            is_active: { type: "boolean", example: true },
-          },
-        },
-        // ── Working Config ──────────────────────────────────────
+        // ── Working Config & Blocked Times ───────────────────────
         WorkingConfig: {
           type: "object",
           properties: {
-            config_id:    { type: "integer", example: 1 },
-            working_days: { type: "string",  example: "1,2,3,4,5", description: "Comma-separated day numbers: 0=Sun, 1=Mon ... 6=Sat" },
+            config_id:      { type: "integer", example: 1 },
+            working_days:   { type: "string",  example: "1,2,3,4,5", description: "Comma-separated day numbers: 0=Sun, 1=Mon ... 6=Sat" },
+            day_start_time: { type: "string",  example: "08:00:00" },
+            day_end_time:   { type: "string",  example: "18:00:00" },
+          },
+        },
+        BlockedTime: {
+          type: "object",
+          properties: {
+            block_id:   { type: "integer", example: 1 },
+            date:       { type: "string",  format: "date", nullable: true, example: null, description: "null = recurring, applies every working day (e.g. lunch break)" },
+            start_time: { type: "string",  example: "12:00:00" },
+            end_time:   { type: "string",  example: "13:00:00" },
+            reason:     { type: "string",  example: "Lunch break", nullable: true },
           },
         },
         // ── Reservations ────────────────────────────────────────
@@ -119,7 +122,8 @@ const options = {
             customer_id:    { type: "integer", example: 5 },
             vehicle_id:     { type: "integer", example: 2 },
             package_id:     { type: "integer", example: 1 },
-            slot_id:        { type: "integer", example: 3 },
+            start_time:     { type: "string",  example: "08:00:00" },
+            end_time:       { type: "string",  example: "09:30:00" },
             service_date:   { type: "string",  format: "date", example: "2025-06-15" },
             status:         { type: "string",  example: "Booked", enum: ["Booked", "Started", "In Progress", "Completed", "Ready for Pickup", "Cancelled", "No-show"] },
             created_at:     { type: "string",  format: "date-time" },
@@ -127,12 +131,12 @@ const options = {
         },
         ReservationInput: {
           type: "object",
-          required: ["vehicle_id", "package_id", "slot_id", "service_date"],
+          required: ["vehicle_id", "package_id", "service_date", "start_time"],
           properties: {
             vehicle_id:   { type: "integer", example: 2 },
             package_id:   { type: "integer", example: 1 },
-            slot_id:      { type: "integer", example: 3 },
             service_date: { type: "string",  format: "date", example: "2025-06-15" },
+            start_time:   { type: "string",  example: "08:00", description: "HH:MM — must match one of the package's generated appointment windows for that date" },
           },
         },
         // ── Service Records ─────────────────────────────────────

@@ -17,7 +17,7 @@ const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware"
  * @swagger
  * /api/bookings/available-slots:
  *   get:
- *     summary: Check available time slots for a given date
+ *     summary: Get package-aware appointment windows for a given date. Business hours are chunked into back-to-back windows sized to the package's duration; each window's capacity comes from the package's max_capacity.
  *     tags: [Bookings]
  *     security:
  *       - cookieAuth: []
@@ -26,29 +26,33 @@ const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware"
  *         name: date
  *         required: true
  *         schema: { type: string, format: date, example: "2025-06-15" }
+ *       - in: query
+ *         name: package_id
+ *         required: true
+ *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: Per-slot availability for the date
+ *         description: Appointment windows for the date
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 available: { type: boolean, description: "True if at least one slot has remaining capacity" }
+ *                 available: { type: boolean, description: "True if at least one window has remaining capacity" }
  *                 reason:    { type: string }
  *                 slots:
  *                   type: array
  *                   items:
  *                     type: object
  *                     properties:
- *                       slot_id:      { type: integer }
- *                       slot_time:    { type: string, example: "08:00 AM" }
- *                       is_active:    { type: boolean }
- *                       capacity:     { type: integer, description: "Admin-configured max bookings for this slot" }
+ *                       start_time:   { type: string, example: "08:00" }
+ *                       end_time:     { type: string, example: "09:30" }
+ *                       capacity:     { type: integer, description: "Package's max_capacity — concurrent bookings allowed" }
  *                       booked_count: { type: integer }
  *                       remaining:    { type: integer }
- *       400: { description: date param missing }
+ *       400: { description: date or package_id param missing }
  *       401: { description: Not authenticated }
+ *       404: { description: Service package not found }
  *       500: { description: Server error }
  */
 router.get("/available-slots", verifyToken, getAvailableSlots);
@@ -57,7 +61,7 @@ router.get("/available-slots", verifyToken, getAvailableSlots);
  * @swagger
  * /api/bookings/calendar:
  *   get:
- *     summary: Day-level availability status for every day in a given month (for the booking calendar)
+ *     summary: Day-level availability status for every day in a given month, for a specific package (for the booking calendar)
  *     tags: [Bookings]
  *     security:
  *       - cookieAuth: []
@@ -70,6 +74,10 @@ router.get("/available-slots", verifyToken, getAvailableSlots);
  *         name: month
  *         required: true
  *         schema: { type: integer, example: 5, description: "1-12" }
+ *       - in: query
+ *         name: package_id
+ *         required: true
+ *         schema: { type: integer }
  *     responses:
  *       200:
  *         description: Per-day availability
@@ -85,10 +93,11 @@ router.get("/available-slots", verifyToken, getAvailableSlots);
  *                     properties:
  *                       date:               { type: string, format: date }
  *                       status:             { type: string, enum: [available, limited, full, closed] }
- *                       remaining_capacity: { type: integer }
- *                       daily_capacity:     { type: integer }
- *       400: { description: year/month params missing }
+ *                       remaining_capacity: { type: integer, description: "Number of still-bookable appointment windows that day" }
+ *                       total_windows:      { type: integer, description: "Total appointment windows generated for this package that day" }
+ *       400: { description: year, month, or package_id param missing }
  *       401: { description: Not authenticated }
+ *       404: { description: Service package not found }
  *       500: { description: Server error }
  */
 router.get("/calendar", verifyToken, getMonthAvailability);

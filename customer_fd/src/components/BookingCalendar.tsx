@@ -34,11 +34,12 @@ const LEGEND: { status: DayAvailabilityStatus; label: string }[] = [
 ];
 
 interface BookingCalendarProps {
+  packageId: number;
   selectedDate: string;
   onSelectDate: (date: string) => void;
 }
 
-export function BookingCalendar({ selectedDate, onSelectDate }: BookingCalendarProps) {
+export function BookingCalendar({ packageId, selectedDate, onSelectDate }: BookingCalendarProps) {
   const today = new Date();
   const todayKey = toDateKey(today);
   const [viewMonth, setViewMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -48,11 +49,11 @@ export function BookingCalendar({ selectedDate, onSelectDate }: BookingCalendarP
   useEffect(() => {
     setLoading(true);
     bookingsService
-      .getMonthAvailability(viewMonth.getFullYear(), viewMonth.getMonth() + 1)
+      .getMonthAvailability(viewMonth.getFullYear(), viewMonth.getMonth() + 1, packageId)
       .then(({ days }) => setDays(days))
       .catch(() => toast.error("Failed to load calendar availability"))
       .finally(() => setLoading(false));
-  }, [viewMonth]);
+  }, [viewMonth, packageId]);
 
   const dayMap = useMemo(() => {
     const map: Record<string, DayAvailability> = {};

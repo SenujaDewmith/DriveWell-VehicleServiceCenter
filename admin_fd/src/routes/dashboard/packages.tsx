@@ -14,6 +14,7 @@ interface ApiPackage {
   estimated_duration: number;
   price: string;
   image_url: string | null;
+  max_capacity: number;
   is_active: boolean;
   created_at: string;
 }
@@ -23,6 +24,7 @@ interface PackageForm {
   description: string;
   estimated_duration: number | "";
   price: number | "";
+  max_capacity: number | "";
 }
 
 interface FormErrors {
@@ -30,9 +32,10 @@ interface FormErrors {
   description?: string;
   estimated_duration?: string;
   price?: string;
+  max_capacity?: string;
 }
 
-const EMPTY_FORM: PackageForm = { name: "", description: "", estimated_duration: "", price: "" };
+const EMPTY_FORM: PackageForm = { name: "", description: "", estimated_duration: "", price: "", max_capacity: 3 };
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
@@ -59,6 +62,11 @@ function validate(form: PackageForm): FormErrors {
     errors.price = "Price is required";
   } else if (Number(form.price) < 1) {
     errors.price = "Price must be at least LKR 1";
+  }
+  if (form.max_capacity === "" || form.max_capacity === undefined) {
+    errors.max_capacity = "Max capacity is required";
+  } else if (!Number.isInteger(Number(form.max_capacity)) || Number(form.max_capacity) < 1) {
+    errors.max_capacity = "Max capacity must be at least 1";
   }
   return errors;
 }
@@ -125,6 +133,7 @@ function PackagesPage() {
       description: pkg.description ?? "",
       estimated_duration: pkg.estimated_duration,
       price: parseFloat(pkg.price),
+      max_capacity: pkg.max_capacity,
     });
     setFormErrors({});
     resetImageState();
@@ -171,6 +180,7 @@ function PackagesPage() {
         description: form.description.trim(),
         estimated_duration: Number(form.estimated_duration),
         price: Number(form.price),
+        max_capacity: Number(form.max_capacity),
       };
 
       let packageId = editing?.package_id;
@@ -331,7 +341,7 @@ function PackagesPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Duration */}
             <div className="space-y-1">
               <label className="text-[10px] font-mono uppercase text-muted-foreground">
@@ -369,6 +379,25 @@ function PackagesPage() {
                 <p className="text-[10px] font-mono text-muted-foreground">Amount in Sri Lankan Rupees</p>
               )}
             </div>
+
+            {/* Max Capacity */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-mono uppercase text-muted-foreground">
+                Max Capacity <span className="text-destructive">*</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                placeholder="e.g. 3"
+                {...field("max_capacity")}
+                className={`w-full border-2 bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent ${formErrors.max_capacity ? "border-destructive" : "border-border"}`}
+              />
+              {formErrors.max_capacity ? (
+                <p className="text-[10px] font-mono text-destructive">{formErrors.max_capacity}</p>
+              ) : (
+                <p className="text-[10px] font-mono text-muted-foreground">Concurrent bookings allowed</p>
+              )}
+            </div>
           </div>
 
           <div className="flex gap-2 pt-1">
@@ -400,6 +429,7 @@ function PackagesPage() {
                 <th className="text-left py-3 px-3 uppercase text-muted-foreground">Name</th>
                 <th className="text-left py-3 px-3 uppercase text-muted-foreground">Price (LKR)</th>
                 <th className="text-left py-3 px-3 uppercase text-muted-foreground">Duration</th>
+                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Capacity</th>
                 <th className="text-left py-3 px-3 uppercase text-muted-foreground">Status</th>
                 <th className="text-left py-3 px-3 uppercase text-muted-foreground">Actions</th>
               </tr>
@@ -428,6 +458,7 @@ function PackagesPage() {
                     {parseFloat(pkg.price).toLocaleString()}
                   </td>
                   <td className="py-3 px-3 text-foreground">{fmtDuration(pkg.estimated_duration)}</td>
+                  <td className="py-3 px-3 text-foreground">{pkg.max_capacity}</td>
                   <td className="py-3 px-3">
                     <span className={`text-[10px] uppercase font-bold ${pkg.is_active ? "text-accent" : "text-muted-foreground"}`}>
                       {pkg.is_active ? "Active" : "Inactive"}
@@ -459,7 +490,7 @@ function PackagesPage() {
               ))}
               {packages.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
                     No packages found. Click &ldquo;Add Package&rdquo; to create one.
                   </td>
                 </tr>
