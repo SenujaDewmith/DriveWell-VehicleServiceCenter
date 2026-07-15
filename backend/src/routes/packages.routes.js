@@ -1,11 +1,24 @@
 const express = require("express");
 const router = express.Router();
 const {
-  listPackages, getPackage, createPackage, updatePackage, deactivatePackage, activatePackage,
+  listPackages,
+  getPackage,
+  createPackage,
+  updatePackage,
+  deactivatePackage,
+  activatePackage,
+  uploadPackageImage,
+  removePackageImage,
 } = require("../controllers/packages.controller");
-const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
+const {
+  verifyToken,
+  authorizeRoles,
+} = require("../middlewares/auth.middleware");
 const validate = require("../middlewares/validate.middleware");
 const { packageSchema } = require("../schemas/packages.schema");
+const {
+  uploadPackageImage: uploadMiddleware,
+} = require("../middlewares/upload.middleware");
 
 const managerOnly = [verifyToken, authorizeRoles("Service Center Manager")];
 
@@ -38,7 +51,7 @@ const managerOnly = [verifyToken, authorizeRoles("Service Center Manager")];
  *                     $ref: '#/components/schemas/ServicePackage'
  *       500: { description: Server error }
  */
-router.get("/", verifyToken, listPackages);
+router.get("/", listPackages);
 
 /**
  * @swagger
@@ -66,7 +79,7 @@ router.get("/", verifyToken, listPackages);
  *       404: { description: Package not found }
  *       500: { description: Server error }
  */
-router.get("/:id", verifyToken, getPackage);
+router.get("/:id", getPackage);
 
 /**
  * @swagger
@@ -159,5 +172,66 @@ router.patch("/:id/deactivate", managerOnly, deactivatePackage);
  *       500: { description: Server error }
  */
 router.patch("/:id/activate", managerOnly, activatePackage);
+
+const handleImageUpload = (req, res, next) => {
+  uploadMiddleware.single("image")(req, res, (err) => {
+    if (err)
+      return res
+        .status(400)
+        .json({ message: err.message || "Image upload failed" });
+    next();
+  });
+};
+
+/**
+ * @swagger
+ * /api/packages/{id}/image:
+ *   post:
+ *     summary: Upload or replace a service package's image (Manager only)
+ *     tags: [Packages]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               image: { type: string, format: binary }
+ *     responses:
+ *       200: { description: Image uploaded }
+ *       400: { description: Invalid file }
+ *       403: { description: Manager only }
+ *       404: { description: Package not found }
+ *       500: { description: Server error }
+ */
+router.post("/:id/image", managerOnly, handleImageUpload, uploadPackageImage);
+
+/**
+ * @swagger
+ * /api/packages/{id}/image:
+ *   delete:
+ *     summary: Remove a service package's image (Manager only)
+ *     tags: [Packages]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Image removed }
+ *       403: { description: Manager only }
+ *       404: { description: Package not found }
+ *       500: { description: Server error }
+ */
+router.delete("/:id/image", managerOnly, removePackageImage);
 
 module.exports = router;

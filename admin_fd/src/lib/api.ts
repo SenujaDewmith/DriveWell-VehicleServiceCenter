@@ -1,4 +1,4 @@
-const BASE = "http://localhost:3000";
+export const BASE = "http://localhost:3000";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -25,4 +25,13 @@ export const api = {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  // FormData uploads — browser must set its own multipart Content-Type with boundary
+  upload: <T>(path: string, formData: FormData) =>
+    fetch(`${BASE}${path}`, { method: "POST", credentials: "include", body: formData }).then(async (res) => {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(err.message || "Upload failed");
+      }
+      return res.json() as Promise<T>;
+    }),
 };

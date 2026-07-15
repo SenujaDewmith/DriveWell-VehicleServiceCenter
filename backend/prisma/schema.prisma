@@ -81,6 +81,7 @@ model ServicePackage {
   description        String?
   estimated_duration Int      @default(60)
   price              Decimal  @db.Decimal(10, 2)
+  image_url          String?  @db.VarChar(500)
   is_active          Boolean  @default(true)
   created_at         DateTime @default(now())
 

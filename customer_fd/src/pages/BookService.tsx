@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { vehiclesService, type Vehicle } from "@/services/vehicles.service";
 import { servicesService, type ServicePackage } from "@/services/services.service";
 import { bookingsService, type AvailableSlot } from "@/services/bookings.service";
+import { ASSET_BASE_URL } from "@/lib/apiClient";
 import { Calendar, Car, Clock, CheckCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,6 +16,10 @@ function fmtTime(t: string) {
   const [h, m] = t.split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
   return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
+}
+
+function imageSrc(image_url: string | null) {
+  return image_url ? `${ASSET_BASE_URL}${image_url}` : null;
 }
 
 function fmtDuration(mins: number) {
@@ -209,20 +214,31 @@ export default function BookService() {
                   onClick={() => setSelectedPackageId(p.package_id)}
                 >
                   <CardContent className="p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <h3 className="font-semibold text-lg">{p.name}</h3>
-                        <p className="text-sm text-muted-foreground">{p.description}</p>
+                    <div className="flex items-start gap-4">
+                      <div className="h-16 w-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                        {imageSrc(p.image_url) ? (
+                          <img src={imageSrc(p.image_url)!} alt={p.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <Car className="h-6 w-6 text-muted-foreground" />
+                        )}
                       </div>
-                      {selectedPackageId === p.package_id && (
-                        <CheckCircle className="h-6 w-6 text-cta shrink-0" />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-4 text-sm">
-                      <span className="text-2xl font-bold text-cta">
-                        LKR {parseFloat(p.price).toLocaleString()}
-                      </span>
-                      <span className="text-muted-foreground">• {fmtDuration(p.estimated_duration)}</span>
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h3 className="font-semibold text-lg">{p.name}</h3>
+                            <p className="text-sm text-muted-foreground">{p.description}</p>
+                          </div>
+                          {selectedPackageId === p.package_id && (
+                            <CheckCircle className="h-6 w-6 text-cta shrink-0" />
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 text-sm">
+                          <span className="text-2xl font-bold text-cta">
+                            LKR {parseFloat(p.price).toLocaleString()}
+                          </span>
+                          <span className="text-muted-foreground">• {fmtDuration(p.estimated_duration)}</span>
+                        </div>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

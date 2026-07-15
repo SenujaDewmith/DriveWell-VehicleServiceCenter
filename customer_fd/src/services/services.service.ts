@@ -6,6 +6,7 @@ export interface ServicePackage {
   description: string | null;
   estimated_duration: number;
   price: string;
+  image_url: string | null;
   is_active: boolean;
   created_at: string;
 }

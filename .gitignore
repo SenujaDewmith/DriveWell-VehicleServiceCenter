@@ -16,6 +16,12 @@ node_modules/
 .dev.vars
 
 # ========================
+# Uploaded files
+# ========================
+backend/uploads/packages/*
+!backend/uploads/packages/.gitkeep
+
+# ========================
 # Logs
 # ========================
 logs/*

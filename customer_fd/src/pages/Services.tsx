@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { servicesService, type ServicePackage } from "@/services/services.service";
-import { CheckCircle, Clock, Loader2 } from "lucide-react";
+import { ASSET_BASE_URL } from "@/lib/apiClient";
+import { CheckCircle, Clock, Loader2, Car } from "lucide-react";
 
 function fmtDuration(mins: number) {
   if (mins < 60) return `${mins} min`;
@@ -14,6 +15,10 @@ function fmtDuration(mins: number) {
 function getBullets(description: string | null): string[] {
   if (!description) return [];
   return description.split("\n").map((l) => l.trim()).filter(Boolean);
+}
+
+function imageSrc(image_url: string | null) {
+  return image_url ? `${ASSET_BASE_URL}${image_url}` : null;
 }
 
 export default function Services() {
@@ -66,8 +71,16 @@ export default function Services() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {packages.map((pkg) => {
             const bullets = getBullets(pkg.description);
+            const src = imageSrc(pkg.image_url);
             return (
-              <Card key={pkg.package_id} className="flex flex-col hover:shadow-xl transition-all">
+              <Card key={pkg.package_id} className="flex flex-col hover:shadow-xl transition-all overflow-hidden pt-0">
+                <div className="h-44 w-full bg-muted flex items-center justify-center overflow-hidden">
+                  {src ? (
+                    <img src={src} alt={pkg.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <Car className="h-12 w-12 text-muted-foreground" />
+                  )}
+                </div>
                 <CardHeader>
                   <CardTitle className="text-2xl">{pkg.name}</CardTitle>
                   <div className="flex items-baseline gap-2 mt-2">

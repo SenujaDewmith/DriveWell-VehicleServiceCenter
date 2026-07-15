@@ -1,4 +1,5 @@
 const express = require("express");
+const path = require("path");
 const cors = require("cors");
 const swaggerUi = require("swagger-ui-express");
 const cookieParser = require("cookie-parser");
@@ -43,6 +44,7 @@ app.use(
 
 app.use(express.json());
 app.use(cookieParser());
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // Swagger UI
 app.use(

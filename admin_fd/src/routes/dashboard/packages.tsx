@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
-import { Plus, Pencil, ToggleLeft, ToggleRight, X } from "lucide-react";
-import { api } from "@/lib/api";
+import { useState, useEffect, useRef } from "react";
+import { Plus, Pencil, ToggleLeft, ToggleRight, X, ImagePlus, Trash2, Car } from "lucide-react";
+import { api, BASE } from "@/lib/api";
 
 export const Route = createFileRoute("/dashboard/packages")({
   component: PackagesPage,
@@ -13,6 +13,7 @@ interface ApiPackage {
   description: string | null;
   estimated_duration: number;
   price: string;
+  image_url: string | null;
   is_active: boolean;
   created_at: string;
 }
@@ -32,6 +33,12 @@ interface FormErrors {
 }
 
 const EMPTY_FORM: PackageForm = { name: "", description: "", estimated_duration: "", price: "" };
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+function imageSrc(image_url: string | null) {
+  return image_url ? `${BASE}${image_url}` : null;
+}
 
 function validate(form: PackageForm): FormErrors {
   const errors: FormErrors = {};
@@ -72,6 +79,12 @@ function PackagesPage() {
   const [saving, setSaving] = useState(false);
   const [pageError, setPageError] = useState("");
 
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageError, setImageError] = useState("");
+  const [removingImage, setRemovingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const load = () => {
     setLoading(true);
     api
@@ -83,10 +96,25 @@ function PackagesPage() {
 
   useEffect(load, []);
 
+  useEffect(() => {
+    return () => {
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+    };
+  }, [imagePreview]);
+
+  const resetImageState = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview(null);
+    setImageError("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const openNew = () => {
     setForm(EMPTY_FORM);
     setFormErrors({});
     setEditing(null);
+    resetImageState();
     setShowForm(true);
     setPageError("");
   };
@@ -99,6 +127,7 @@ function PackagesPage() {
       price: parseFloat(pkg.price),
     });
     setFormErrors({});
+    resetImageState();
     setEditing(pkg);
     setShowForm(true);
     setPageError("");
@@ -107,7 +136,25 @@ function PackagesPage() {
   const closeForm = () => {
     setShowForm(false);
     setFormErrors({});
+    resetImageState();
     setPageError("");
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setImageError("Only JPEG, PNG, WEBP, or GIF images are allowed");
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setImageError("Image must be 5MB or smaller");
+      return;
+    }
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setImageError("");
   };
 
   const save = async () => {
@@ -125,17 +172,43 @@ function PackagesPage() {
         estimated_duration: Number(form.estimated_duration),
         price: Number(form.price),
       };
+
+      let packageId = editing?.package_id;
       if (editing) {
         await api.put(`/api/packages/${editing.package_id}`, payload);
       } else {
-        await api.post("/api/packages", payload);
+        const res = await api.post<{ package: ApiPackage }>("/api/packages", payload);
+        packageId = res.package.package_id;
       }
+
+      if (imageFile && packageId) {
+        const formData = new FormData();
+        formData.append("image", imageFile);
+        await api.upload(`/api/packages/${packageId}/image`, formData);
+      }
+
       setShowForm(false);
+      resetImageState();
       load();
     } catch (err) {
       setPageError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const removeExistingImage = async () => {
+    if (!editing) return;
+    setRemovingImage(true);
+    setPageError("");
+    try {
+      await api.delete(`/api/packages/${editing.package_id}/image`);
+      setEditing({ ...editing, image_url: null });
+      load();
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "Failed to remove image");
+    } finally {
+      setRemovingImage(false);
     }
   };
 
@@ -161,6 +234,8 @@ function PackagesPage() {
     },
   });
 
+  const currentImageSrc = imagePreview ?? imageSrc(editing?.image_url ?? null);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -184,6 +259,41 @@ function PackagesPage() {
             <button onClick={closeForm} className="text-muted-foreground hover:text-foreground">
               <X className="h-4 w-4" />
             </button>
+          </div>
+
+          {/* Image */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-mono uppercase text-muted-foreground">Package Image</label>
+            <div className="flex items-start gap-4">
+              <div className="h-28 w-40 border-2 border-border bg-background flex items-center justify-center overflow-hidden shrink-0">
+                {currentImageSrc ? (
+                  <img src={currentImageSrc} alt="Package preview" className="h-full w-full object-cover" />
+                ) : (
+                  <Car className="h-8 w-8 text-muted-foreground" />
+                )}
+              </div>
+              <div className="space-y-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handleImageSelect}
+                  className="text-[10px] font-mono text-muted-foreground file:mr-3 file:border-2 file:border-border file:bg-card file:px-3 file:py-1.5 file:text-[10px] file:font-mono file:uppercase file:text-foreground hover:file:border-accent"
+                />
+                <p className="text-[10px] font-mono text-muted-foreground">JPEG, PNG, WEBP, or GIF — max 5MB</p>
+                {imageError && <p className="text-[10px] font-mono text-destructive">{imageError}</p>}
+                {editing?.image_url && !imageFile && (
+                  <button
+                    type="button"
+                    onClick={removeExistingImage}
+                    disabled={removingImage}
+                    className="flex items-center gap-1 border-2 border-destructive px-2 py-1 text-[10px] font-mono uppercase text-destructive hover:bg-destructive hover:text-destructive-foreground disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3 w-3" /> {removingImage ? "Removing..." : "Remove Image"}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Name */}
@@ -286,7 +396,7 @@ function PackagesPage() {
           <table className="w-full text-xs font-mono">
             <thead>
               <tr className="border-b-2 border-border">
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">ID</th>
+                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Image</th>
                 <th className="text-left py-3 px-3 uppercase text-muted-foreground">Name</th>
                 <th className="text-left py-3 px-3 uppercase text-muted-foreground">Price (LKR)</th>
                 <th className="text-left py-3 px-3 uppercase text-muted-foreground">Duration</th>
@@ -297,7 +407,15 @@ function PackagesPage() {
             <tbody>
               {packages.map((pkg) => (
                 <tr key={pkg.package_id} className="border-b border-border hover:bg-muted/20">
-                  <td className="py-3 px-3 text-muted-foreground">{pkg.package_id}</td>
+                  <td className="py-2 px-3">
+                    <div className="h-12 w-16 border border-border bg-background flex items-center justify-center overflow-hidden">
+                      {pkg.image_url ? (
+                        <img src={imageSrc(pkg.image_url)!} alt={pkg.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <ImagePlus className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                  </td>
                   <td className="py-3 px-3">
                     <p className="text-foreground font-bold">{pkg.name}</p>
                     {pkg.description && (
