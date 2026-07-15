@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { getConfig, updateConfig, addSlot, toggleSlot, deleteSlot } = require("../controllers/config.controller");
+const { getConfig, updateConfig, addSlot, updateSlot, deleteSlot } = require("../controllers/config.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
 
 const managerOnly = [verifyToken, authorizeRoles("Service Center Manager")];
@@ -43,7 +43,7 @@ router.get("/", verifyToken, getConfig);
  * @swagger
  * /api/config:
  *   put:
- *     summary: Update working days and daily capacity (Manager only)
+ *     summary: Update working days (Manager only)
  *     tags: [Config]
  *     security:
  *       - cookieAuth: []
@@ -53,10 +53,9 @@ router.get("/", verifyToken, getConfig);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [daily_capacity, working_days]
+ *             required: [working_days]
  *             properties:
- *               daily_capacity: { type: integer, example: 10 }
- *               working_days:   { type: string, example: "1,2,3,4,5", description: "Comma-separated: 0=Sun, 1=Mon … 6=Sat" }
+ *               working_days: { type: string, example: "1,2,3,4,5", description: "Comma-separated: 0=Sun, 1=Mon … 6=Sat" }
  *     responses:
  *       200: { description: Config updated }
  *       400: { description: Validation error }
@@ -69,7 +68,7 @@ router.put("/", managerOnly, updateConfig);
  * @swagger
  * /api/config/slots:
  *   post:
- *     summary: Add a new time slot (Manager only)
+ *     summary: Add a new time slot with its own capacity (Manager only)
  *     tags: [Config]
  *     security:
  *       - cookieAuth: []
@@ -82,6 +81,7 @@ router.put("/", managerOnly, updateConfig);
  *             required: [slot_time]
  *             properties:
  *               slot_time: { type: string, example: "07:00", description: "HH:MM format" }
+ *               capacity:  { type: integer, example: 5, description: "Max bookings for this slot; defaults to 5" }
  *     responses:
  *       201: { description: Slot added }
  *       400: { description: Slot already exists }
@@ -94,7 +94,7 @@ router.post("/slots", managerOnly, addSlot);
  * @swagger
  * /api/config/slots/{id}:
  *   patch:
- *     summary: Enable or disable a time slot (Manager only)
+ *     summary: Update a time slot's capacity and/or active status (Manager only)
  *     tags: [Config]
  *     security:
  *       - cookieAuth: []
@@ -109,16 +109,16 @@ router.post("/slots", managerOnly, addSlot);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [is_active]
  *             properties:
  *               is_active: { type: boolean, example: false }
+ *               capacity:  { type: integer, example: 8 }
  *     responses:
  *       200: { description: Slot updated }
  *       403: { description: Manager only }
  *       404: { description: Slot not found }
  *       500: { description: Server error }
  */
-router.patch("/slots/:id", managerOnly, toggleSlot);
+router.patch("/slots/:id", managerOnly, updateSlot);
 
 /**
  * @swagger
@@ -135,6 +135,7 @@ router.patch("/slots/:id", managerOnly, toggleSlot);
  *         schema: { type: integer }
  *     responses:
  *       200: { description: Slot deleted }
+ *       400: { description: Slot has existing bookings }
  *       403: { description: Manager only }
  *       404: { description: Slot not found }
  *       500: { description: Server error }

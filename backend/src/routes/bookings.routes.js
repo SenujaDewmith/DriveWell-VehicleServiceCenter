@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const {
-  listBookings, getBooking, createBooking, cancelBooking, overrideStatus, getAvailableSlots,
+  listBookings, getBooking, createBooking, cancelBooking, overrideStatus,
+  getAvailableSlots, getMonthAvailability,
 } = require("../controllers/bookings.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
 
@@ -27,24 +28,70 @@ const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware"
  *         schema: { type: string, format: date, example: "2025-06-15" }
  *     responses:
  *       200:
- *         description: Availability information
+ *         description: Per-slot availability for the date
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 available:           { type: boolean }
- *                 reason:              { type: string }
- *                 remaining_capacity:  { type: integer }
+ *                 available: { type: boolean, description: "True if at least one slot has remaining capacity" }
+ *                 reason:    { type: string }
  *                 slots:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/TimeSlot'
+ *                     type: object
+ *                     properties:
+ *                       slot_id:      { type: integer }
+ *                       slot_time:    { type: string, example: "08:00 AM" }
+ *                       is_active:    { type: boolean }
+ *                       capacity:     { type: integer, description: "Admin-configured max bookings for this slot" }
+ *                       booked_count: { type: integer }
+ *                       remaining:    { type: integer }
  *       400: { description: date param missing }
  *       401: { description: Not authenticated }
  *       500: { description: Server error }
  */
 router.get("/available-slots", verifyToken, getAvailableSlots);
+
+/**
+ * @swagger
+ * /api/bookings/calendar:
+ *   get:
+ *     summary: Day-level availability status for every day in a given month (for the booking calendar)
+ *     tags: [Bookings]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: year
+ *         required: true
+ *         schema: { type: integer, example: 2026 }
+ *       - in: query
+ *         name: month
+ *         required: true
+ *         schema: { type: integer, example: 5, description: "1-12" }
+ *     responses:
+ *       200:
+ *         description: Per-day availability
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 days:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       date:               { type: string, format: date }
+ *                       status:             { type: string, enum: [available, limited, full, closed] }
+ *                       remaining_capacity: { type: integer }
+ *                       daily_capacity:     { type: integer }
+ *       400: { description: year/month params missing }
+ *       401: { description: Not authenticated }
+ *       500: { description: Server error }
+ */
+router.get("/calendar", verifyToken, getMonthAvailability);
 
 /**
  * @swagger

@@ -4,12 +4,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { vehiclesService, type Vehicle } from "@/services/vehicles.service";
 import { servicesService, type ServicePackage } from "@/services/services.service";
 import { bookingsService, type AvailableSlot } from "@/services/bookings.service";
+import { AddVehicleDialog } from "@/components/AddVehicleDialog";
+import { BookingCalendar } from "@/components/BookingCalendar";
 import { ASSET_BASE_URL } from "@/lib/apiClient";
-import { Calendar, Car, Clock, CheckCircle, Loader2 } from "lucide-react";
+import { Calendar, Car, Clock, CheckCircle, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 function fmtTime(t: string) {
@@ -48,6 +50,7 @@ export default function BookService() {
   const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null);
   const [selectedSlotTime, setSelectedSlotTime] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [addVehicleOpen, setAddVehicleOpen] = useState(false);
 
   useEffect(() => {
     if (!user) { navigate("/login"); return; }
@@ -83,14 +86,14 @@ export default function BookService() {
   };
 
   const handleConfirm = async () => {
-    if (!selectedVehicleId || !selectedPackageId || !selectedDate) return;
+    if (!selectedVehicleId || !selectedPackageId || !selectedDate || !selectedSlotId) return;
     setIsSubmitting(true);
     try {
       const res = await bookingsService.createBooking({
         vehicle_id: selectedVehicleId,
         package_id: selectedPackageId,
         service_date: selectedDate,
-        ...(selectedSlotId ? { slot_id: selectedSlotId } : {}),
+        slot_id: selectedSlotId,
       });
       toast.success(`Booking confirmed! Ref: ${res.booking_ref}`);
       navigate("/bookings");
@@ -101,11 +104,10 @@ export default function BookService() {
     }
   };
 
-  const dates = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i + 1);
-    return d.toISOString().split("T")[0];
-  });
+  const handleVehicleAdded = (vehicle: Vehicle) => {
+    setVehicles((prev) => [vehicle, ...prev]);
+    setSelectedVehicleId(vehicle.vehicle_id);
+  };
 
   const vehicle = vehicles.find((v) => v.vehicle_id === selectedVehicleId);
   const pkg = packages.find((p) => p.package_id === selectedPackageId);
@@ -154,7 +156,8 @@ export default function BookService() {
             ) : vehicles.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-muted-foreground mb-4">You haven't added any vehicles yet</p>
-                <Button onClick={() => navigate("/vehicles")} variant="outline">
+                <Button onClick={() => setAddVehicleOpen(true)} variant="outline">
+                  <Plus className="mr-2 h-4 w-4" />
                   Add a Vehicle
                 </Button>
               </div>
@@ -173,7 +176,7 @@ export default function BookService() {
                       <div className="flex-1">
                         <p className="font-semibold">{v.make} {v.model}</p>
                         <p className="text-sm text-muted-foreground">
-                          {v.plate_no}{v.year ? ` • ${v.year}` : ""}{v.color ? ` • ${v.color}` : ""}
+                          {v.plate_no}{v.year ? ` • ${v.year}` : ""} • {v.vehicle_type}
                         </p>
                       </div>
                       {selectedVehicleId === v.vehicle_id && (
@@ -182,6 +185,17 @@ export default function BookService() {
                     </CardContent>
                   </Card>
                 ))}
+                <Card
+                  className="cursor-pointer border-dashed hover:border-cta/50 transition-all"
+                  onClick={() => setAddVehicleOpen(true)}
+                >
+                  <CardContent className="flex items-center gap-4 p-4">
+                    <div className="h-12 w-12 bg-muted rounded-lg flex items-center justify-center">
+                      <Plus className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <p className="font-semibold text-muted-foreground">Add New Vehicle</p>
+                  </CardContent>
+                </Card>
               </div>
             )}
             <Button
@@ -269,66 +283,103 @@ export default function BookService() {
             <CardDescription>Select your preferred appointment slot</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label>Date</Label>
-              <Select value={selectedDate} onValueChange={handleDateChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a date" />
-                </SelectTrigger>
-                <SelectContent>
-                  {dates.map((date) => (
-                    <SelectItem key={date} value={date}>
-                      {new Date(date).toLocaleDateString("en-LK", {
-                        weekday: "long",
-                        month: "long",
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <BookingCalendar selectedDate={selectedDate} onSelectDate={handleDateChange} />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Available Time Slots</Label>
+                  {selectedDate && (
+                    <Badge variant="outline" className="border-cta text-cta">
+                      {new Date(selectedDate).toLocaleDateString("en-LK", {
+                        weekday: "short",
+                        month: "short",
                         day: "numeric",
                         year: "numeric",
                       })}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                    </Badge>
+                  )}
+                </div>
 
-            {selectedDate && (
-              <div className="space-y-2">
-                <Label>Time Slot</Label>
-                {slotsLoading ? (
-                  <div className="flex justify-center py-4">
+                {!selectedDate ? (
+                  <p className="text-sm text-muted-foreground py-8 text-center">
+                    Select a date to see available slots.
+                  </p>
+                ) : slotsLoading ? (
+                  <div className="flex justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-cta" />
                   </div>
                 ) : dateAvailable === false ? (
-                  <p className="text-sm text-destructive">No slots available on this date. Please choose another date.</p>
-                ) : slots.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Select a date to see available slots.</p>
+                  <p className="text-sm text-destructive py-8 text-center">
+                    No slots available on this date. Please choose another date.
+                  </p>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {slots.map((slot) => (
-                      <Button
-                        key={slot.slot_id}
-                        variant={selectedSlotId === slot.slot_id ? "default" : "outline"}
-                        className={selectedSlotId === slot.slot_id ? "bg-cta text-cta-foreground hover:bg-cta/90" : ""}
-                        onClick={() => {
-                          setSelectedSlotId(slot.slot_id);
-                          setSelectedSlotTime(fmtTime(slot.slot_time));
-                        }}
-                      >
-                        {fmtTime(slot.slot_time)}
-                      </Button>
-                    ))}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {slots.map((slot) => {
+                      const isSelected = selectedSlotId === slot.slot_id;
+                      const isFull = slot.remaining <= 0;
+                      return (
+                        <button
+                          key={slot.slot_id}
+                          type="button"
+                          disabled={isFull}
+                          onClick={() => {
+                            setSelectedSlotId(slot.slot_id);
+                            setSelectedSlotTime(fmtTime(slot.slot_time));
+                          }}
+                          className={`text-left border-2 rounded-lg p-3 transition-colors ${
+                            isSelected
+                              ? "border-cta bg-cta/5"
+                              : isFull
+                                ? "opacity-50 cursor-not-allowed border-border"
+                                : "border-border hover:border-cta/50"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <p className="font-semibold">{fmtTime(slot.slot_time)}</p>
+                              {pkg && <p className="text-xs text-muted-foreground">{fmtDuration(pkg.estimated_duration)}</p>}
+                            </div>
+                            <span
+                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                                isFull ? "bg-destructive/10 text-destructive" : "bg-cta/10 text-cta"
+                              }`}
+                            >
+                              {isFull ? "FULL" : "AVAILABLE"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4 text-xs">
+                            <span className="text-muted-foreground">
+                              Free <span className="font-medium text-foreground">{slot.remaining}</span>
+                            </span>
+                            <span className="text-muted-foreground">
+                              Booked <span className="font-medium text-foreground">{slot.booked_count}</span>
+                            </span>
+                          </div>
+                          {isSelected && (
+                            <p className="text-xs text-cta font-medium mt-2 flex items-center gap-1">
+                              <CheckCircle className="h-3 w-3" /> Selected
+                            </p>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
-            )}
+            </div>
 
             <div className="flex gap-3">
               <Button variant="outline" onClick={() => setStep(2)} className="flex-1">Back</Button>
               <Button
                 className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90"
                 onClick={() => setStep(4)}
-                disabled={!selectedDate || dateAvailable === false}
+                disabled={!selectedDate || !selectedSlotId || dateAvailable === false}
               >
-                Continue
+                Confirm Selection
               </Button>
             </div>
           </CardContent>
@@ -411,6 +462,12 @@ export default function BookService() {
           </CardContent>
         </Card>
       )}
+
+      <AddVehicleDialog
+        open={addVehicleOpen}
+        onOpenChange={setAddVehicleOpen}
+        onVehicleAdded={handleVehicleAdded}
+      />
     </div>
   );
 }

@@ -115,10 +115,10 @@ export default function BookingDetails() {
                 <p className="text-sm text-muted-foreground mb-1">Plate Number</p>
                 <p className="font-semibold">{booking.plate_no ?? "—"}</p>
               </div>
-              {booking.color && (
+              {booking.vehicle_type && (
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Color</p>
-                  <p className="font-semibold">{booking.color}</p>
+                  <p className="text-sm text-muted-foreground mb-1">Vehicle Type</p>
+                  <p className="font-semibold">{booking.vehicle_type}</p>
                 </div>
               )}
             </div>

@@ -2,6 +2,7 @@ const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { fmtDate } = require("../lib/format");
 const { logActivity } = require("../lib/activityLogger");
+const { VEHICLE_SELECT, flattenVehicleRef } = require("../lib/vehicleFlatten");
 
 const CUSTOMER_ROLE = 5;
 
@@ -22,9 +23,7 @@ const flattenInvoice = (i) => ({
   booking_status: i.reservation?.status,
   customer_name: i.reservation?.customer_user?.customer?.full_name,
   customer_email: i.reservation?.customer_user?.email,
-  make: i.reservation?.vehicle?.make,
-  model: i.reservation?.vehicle?.model,
-  plate_no: i.reservation?.vehicle?.plate_no,
+  ...flattenVehicleRef(i.reservation?.vehicle),
   package_name: i.reservation?.package?.name,
   cashier_name: i.cashier?.staff?.full_name ?? null,
 });
@@ -41,7 +40,7 @@ const INVOICE_INCLUDE = {
           customer: { select: { full_name: true } },
         },
       },
-      vehicle: { select: { make: true, model: true, plate_no: true } },
+      vehicle: VEHICLE_SELECT,
       package: { select: { name: true } },
     },
   },

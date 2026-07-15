@@ -45,25 +45,28 @@ const options = {
         Vehicle: {
           type: "object",
           properties: {
-            vehicle_id:  { type: "integer", example: 1 },
-            customer_id: { type: "integer", example: 5 },
-            make:        { type: "string",  example: "Toyota" },
-            model:       { type: "string",  example: "Corolla" },
-            year:        { type: "integer", example: 2020 },
-            plate_no:    { type: "string",  example: "CAB-1234" },
-            color:       { type: "string",  example: "White" },
-            created_at:  { type: "string",  format: "date-time" },
+            vehicle_id:      { type: "integer", example: 1 },
+            customer_id:     { type: "integer", example: 5 },
+            make_id:         { type: "integer", example: 1 },
+            make:            { type: "string",  example: "Toyota" },
+            model_id:        { type: "integer", example: 56 },
+            model:           { type: "string",  example: "Corolla" },
+            vehicle_type_id: { type: "integer", example: 1 },
+            vehicle_type:    { type: "string",  example: "Car" },
+            year:            { type: "integer", example: 2020 },
+            plate_no:        { type: "string",  example: "CAB-1234" },
+            created_at:      { type: "string",  format: "date-time" },
           },
         },
         VehicleInput: {
           type: "object",
-          required: ["make", "model", "plate_no"],
+          required: ["make_id", "model_id", "vehicle_type_id", "plate_no"],
           properties: {
-            make:     { type: "string",  example: "Toyota" },
-            model:    { type: "string",  example: "Corolla" },
-            year:     { type: "integer", example: 2020 },
-            plate_no: { type: "string",  example: "CAB-1234" },
-            color:    { type: "string",  example: "White" },
+            make_id:         { type: "integer", example: 1 },
+            model_id:        { type: "integer", example: 56 },
+            vehicle_type_id: { type: "integer", example: 1 },
+            year:            { type: "integer", example: 2020 },
+            plate_no:        { type: "string",  example: "CAB-1234" },
           },
         },
         // ── Service Packages ────────────────────────────────────
@@ -95,6 +98,7 @@ const options = {
           properties: {
             slot_id:   { type: "integer", example: 1 },
             slot_time: { type: "string",  example: "08:00:00" },
+            capacity:  { type: "integer", example: 5, description: "Max simultaneous bookings for this slot (admin-configurable)" },
             is_active: { type: "boolean", example: true },
           },
         },
@@ -102,9 +106,8 @@ const options = {
         WorkingConfig: {
           type: "object",
           properties: {
-            config_id:      { type: "integer", example: 1 },
-            daily_capacity: { type: "integer", example: 10 },
-            working_days:   { type: "string",  example: "1,2,3,4,5", description: "Comma-separated day numbers: 0=Sun, 1=Mon ... 6=Sat" },
+            config_id:    { type: "integer", example: 1 },
+            working_days: { type: "string",  example: "1,2,3,4,5", description: "Comma-separated day numbers: 0=Sun, 1=Mon ... 6=Sat" },
           },
         },
         // ── Reservations ────────────────────────────────────────
@@ -124,7 +127,7 @@ const options = {
         },
         ReservationInput: {
           type: "object",
-          required: ["vehicle_id", "package_id", "service_date"],
+          required: ["vehicle_id", "package_id", "slot_id", "service_date"],
           properties: {
             vehicle_id:   { type: "integer", example: 2 },
             package_id:   { type: "integer", example: 1 },

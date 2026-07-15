@@ -12,7 +12,7 @@ export interface Booking {
   make?: string;
   model?: string;
   plate_no?: string;
-  color?: string;
+  vehicle_type?: string;
   package_name?: string;
   package_price?: string;
   estimated_duration?: number;
@@ -23,20 +23,35 @@ export interface CreateBookingPayload {
   vehicle_id: number;
   package_id: number;
   service_date: string;
-  slot_id?: number;
+  slot_id: number;
 }
 
 export interface AvailableSlot {
   slot_id: number;
   slot_time: string;
   is_active: boolean;
+  capacity: number;
+  booked_count: number;
+  remaining: number;
 }
 
 export interface AvailableSlotsResponse {
   available: boolean;
   reason?: string;
-  remaining_capacity?: number;
   slots: AvailableSlot[];
+}
+
+export type DayAvailabilityStatus = "available" | "limited" | "full" | "closed";
+
+export interface DayAvailability {
+  date: string;
+  status: DayAvailabilityStatus;
+  remaining_capacity: number;
+  daily_capacity: number;
+}
+
+export interface MonthAvailabilityResponse {
+  days: DayAvailability[];
 }
 
 export const bookingsService = {
@@ -52,4 +67,7 @@ export const bookingsService = {
 
   getAvailableSlots: (date: string) =>
     apiClient.get<AvailableSlotsResponse>(`/bookings/available-slots?date=${date}`),
+
+  getMonthAvailability: (year: number, month: number) =>
+    apiClient.get<MonthAvailabilityResponse>(`/bookings/calendar?year=${year}&month=${month}`),
 };

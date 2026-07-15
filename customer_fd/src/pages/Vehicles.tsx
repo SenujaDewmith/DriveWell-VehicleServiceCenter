@@ -6,42 +6,40 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-
-import { vehiclesService, type Vehicle, type CreateVehiclePayload } from "@/services/vehicles.service";
+import { Combobox } from "@/components/ui/combobox";
+import {
+  vehiclesService,
+  type Vehicle,
+  type CreateVehiclePayload,
+  type VehicleMake,
+  type VehicleModel,
+  type VehicleTypeOption,
+} from "@/services/vehicles.service";
+import { YEAR_OPTIONS } from "@/lib/vehicleYears";
 import { Car, Edit, Trash2, Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-interface FormData {
-  make: string;
-  model: string;
-  year: string;
-  plate_no: string;
-  color: string;
-}
-
 interface FormErrors {
-  make?: string;
-  model?: string;
+  make_id?: string;
+  model_id?: string;
+  vehicle_type_id?: string;
   plate_no?: string;
-  year?: string;
 }
 
-const EMPTY_FORM: FormData = { make: "", model: "", year: "", plate_no: "", color: "" };
-
-function validateForm(data: FormData): FormErrors {
+function validateForm(data: {
+  makeId: string;
+  modelId: string;
+  vehicleTypeId: string;
+  plateNo: string;
+}): FormErrors {
   const errors: FormErrors = {};
-  if (!data.make.trim()) errors.make = "Make is required";
-  if (!data.model.trim()) errors.model = "Model is required";
-  if (!data.plate_no.trim()) {
+  if (!data.makeId) errors.make_id = "Make is required";
+  if (!data.modelId) errors.model_id = "Model is required";
+  if (!data.vehicleTypeId) errors.vehicle_type_id = "Vehicle type is required";
+  if (!data.plateNo.trim()) {
     errors.plate_no = "Plate number is required";
-  } else if (data.plate_no.trim().length < 2) {
+  } else if (data.plateNo.trim().length < 2) {
     errors.plate_no = "Enter a valid plate number";
-  }
-  if (data.year) {
-    const y = parseInt(data.year);
-    if (isNaN(y) || y < 1900 || y > new Date().getFullYear() + 1) {
-      errors.year = `Year must be between 1900 and ${new Date().getFullYear() + 1}`;
-    }
   }
   return errors;
 }
@@ -53,15 +51,62 @@ export default function Vehicles() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
-  const [form, setForm] = useState<FormData>(EMPTY_FORM);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const [makes, setMakes] = useState<VehicleMake[]>([]);
+  const [models, setModels] = useState<VehicleModel[]>([]);
+  const [types, setTypes] = useState<VehicleTypeOption[]>([]);
+  const [loadingLookups, setLoadingLookups] = useState(false);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [pendingModelId, setPendingModelId] = useState<string | null>(null);
+
+  const [makeId, setMakeId] = useState("");
+  const [modelId, setModelId] = useState("");
+  const [vehicleTypeId, setVehicleTypeId] = useState("");
+  const [year, setYear] = useState("");
+  const [plateNo, setPlateNo] = useState("");
+
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!user) { navigate("/login"); return; }
     loadVehicles();
   }, [user, navigate]);
+
+  useEffect(() => {
+    if (!dialogOpen) return;
+    setLoadingLookups(true);
+    Promise.all([vehiclesService.getMakes(), vehiclesService.getVehicleTypes()])
+      .then(([{ makes }, { types }]) => {
+        setMakes(makes);
+        setTypes(types);
+      })
+      .catch(() => toast.error("Failed to load vehicle data"))
+      .finally(() => setLoadingLookups(false));
+  }, [dialogOpen]);
+
+  useEffect(() => {
+    if (!makeId) {
+      setModels([]);
+      setModelId("");
+      return;
+    }
+    setLoadingModels(true);
+    vehiclesService
+      .getModels(parseInt(makeId))
+      .then(({ models }) => {
+        setModels(models);
+        if (pendingModelId && models.some((m) => m.model_id.toString() === pendingModelId)) {
+          setModelId(pendingModelId);
+        } else {
+          setModelId("");
+        }
+        setPendingModelId(null);
+      })
+      .catch(() => toast.error("Failed to load models"))
+      .finally(() => setLoadingModels(false));
+  }, [makeId]);
 
   const loadVehicles = () => {
     setLoading(true);
@@ -72,24 +117,47 @@ export default function Vehicles() {
       .finally(() => setLoading(false));
   };
 
+  const resetForm = () => {
+    setMakeId("");
+    setModelId("");
+    setVehicleTypeId("");
+    setYear("");
+    setPlateNo("");
+    setFormErrors({});
+    setPendingModelId(null);
+  };
+
   const openAdd = () => {
     setEditingVehicle(null);
-    setForm(EMPTY_FORM);
-    setFormErrors({});
+    resetForm();
     setDialogOpen(true);
   };
 
   const openEdit = (vehicle: Vehicle) => {
     setEditingVehicle(vehicle);
-    setForm({
-      make: vehicle.make,
-      model: vehicle.model,
-      year: vehicle.year ? String(vehicle.year) : "",
-      plate_no: vehicle.plate_no,
-      color: vehicle.color ?? "",
-    });
     setFormErrors({});
+    setPendingModelId(vehicle.model_id.toString());
+    setMakeId(vehicle.make_id.toString());
+    setVehicleTypeId(vehicle.vehicle_type_id.toString());
+    setYear(vehicle.year ? String(vehicle.year) : "");
+    setPlateNo(vehicle.plate_no);
     setDialogOpen(true);
+  };
+
+  const closeDialog = (open: boolean) => {
+    if (saving) return;
+    if (!open) resetForm();
+    setDialogOpen(open);
+  };
+
+  const handleModelChange = (value: string) => {
+    setModelId(value);
+    if (formErrors.model_id) setFormErrors({ ...formErrors, model_id: undefined });
+    const model = models.find((m) => m.model_id.toString() === value);
+    if (model?.vehicle_type_id) {
+      setVehicleTypeId(model.vehicle_type_id.toString());
+      if (formErrors.vehicle_type_id) setFormErrors({ ...formErrors, vehicle_type_id: undefined });
+    }
   };
 
   const handleDelete = async (vehicle: Vehicle) => {
@@ -107,18 +175,18 @@ export default function Vehicles() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const errors = validateForm(form);
+    const errors = validateForm({ makeId, modelId, vehicleTypeId, plateNo });
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
       return;
     }
     setSaving(true);
     const payload: CreateVehiclePayload = {
-      make: form.make.trim(),
-      model: form.model.trim(),
-      plate_no: form.plate_no.trim(),
-      ...(form.year ? { year: parseInt(form.year) } : {}),
-      ...(form.color.trim() ? { color: form.color.trim() } : {}),
+      make_id: parseInt(makeId),
+      model_id: parseInt(modelId),
+      vehicle_type_id: parseInt(vehicleTypeId),
+      plate_no: plateNo.trim(),
+      ...(year ? { year: parseInt(year) } : {}),
     };
     try {
       if (editingVehicle) {
@@ -133,16 +201,12 @@ export default function Vehicles() {
         toast.success("Vehicle added");
       }
       setDialogOpen(false);
+      resetForm();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save vehicle");
     } finally {
       setSaving(false);
     }
-  };
-
-  const setField = (key: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm({ ...form, [key]: e.target.value });
-    if (formErrors[key as keyof FormErrors]) setFormErrors({ ...formErrors, [key]: undefined });
   };
 
   if (!user) return null;
@@ -211,16 +275,14 @@ export default function Vehicles() {
                     <span className="text-muted-foreground">Plate Number</span>
                     <span className="font-medium">{vehicle.plate_no}</span>
                   </p>
+                  <p className="flex justify-between">
+                    <span className="text-muted-foreground">Type</span>
+                    <span className="font-medium">{vehicle.vehicle_type}</span>
+                  </p>
                   {vehicle.year && (
                     <p className="flex justify-between">
                       <span className="text-muted-foreground">Year</span>
                       <span className="font-medium">{vehicle.year}</span>
-                    </p>
-                  )}
-                  {vehicle.color && (
-                    <p className="flex justify-between">
-                      <span className="text-muted-foreground">Color</span>
-                      <span className="font-medium">{vehicle.color}</span>
                     </p>
                   )}
                 </div>
@@ -230,90 +292,117 @@ export default function Vehicles() {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!saving) setDialogOpen(open); }}>
+      <Dialog open={dialogOpen} onOpenChange={closeDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingVehicle ? "Edit Vehicle" : "Add New Vehicle"}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="make">Make <span className="text-destructive">*</span></Label>
-                <Input
-                  id="make"
-                  placeholder="e.g. Toyota"
-                  value={form.make}
-                  onChange={setField("make")}
-                  className={formErrors.make ? "border-destructive" : ""}
-                />
-                {formErrors.make && <p className="text-xs text-destructive">{formErrors.make}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="model">Model <span className="text-destructive">*</span></Label>
-                <Input
-                  id="model"
-                  placeholder="e.g. Corolla"
-                  value={form.model}
-                  onChange={setField("model")}
-                  className={formErrors.model ? "border-destructive" : ""}
-                />
-                {formErrors.model && <p className="text-xs text-destructive">{formErrors.model}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="plate_no">Plate Number <span className="text-destructive">*</span></Label>
-                <Input
-                  id="plate_no"
-                  placeholder="e.g. CAA-1234"
-                  value={form.plate_no}
-                  onChange={setField("plate_no")}
-                  className={formErrors.plate_no ? "border-destructive" : ""}
-                />
-                {formErrors.plate_no && <p className="text-xs text-destructive">{formErrors.plate_no}</p>}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="year">Year</Label>
-                <Input
-                  id="year"
-                  type="number"
-                  placeholder="e.g. 2022"
-                  value={form.year}
-                  onChange={setField("year")}
-                  className={formErrors.year ? "border-destructive" : ""}
-                />
-                {formErrors.year && <p className="text-xs text-destructive">{formErrors.year}</p>}
-              </div>
-              <div className="space-y-2 col-span-2">
-                <Label htmlFor="color">Color</Label>
-                <Input
-                  id="color"
-                  placeholder="e.g. Silver"
-                  value={form.color}
-                  onChange={setField("color")}
-                />
-              </div>
+          {loadingLookups ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-cta" />
             </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={saving}
-                onClick={() => setDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                className="bg-cta text-cta-foreground hover:bg-cta/90"
-                disabled={saving}
-              >
-                {saving ? (
-                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{editingVehicle ? "Updating..." : "Adding..."}</>
-                ) : (
-                  editingVehicle ? "Update Vehicle" : "Add Vehicle"
-                )}
-              </Button>
-            </div>
-          </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Make <span className="text-destructive">*</span></Label>
+                  <Combobox
+                    options={makes.map((m) => ({ value: m.make_id.toString(), label: m.name }))}
+                    value={makeId}
+                    onValueChange={(v) => {
+                      setMakeId(v);
+                      if (formErrors.make_id) setFormErrors({ ...formErrors, make_id: undefined });
+                    }}
+                    placeholder="Select make"
+                    searchPlaceholder="Search makes..."
+                    emptyText="No make found."
+                    className={formErrors.make_id ? "border-destructive" : ""}
+                  />
+                  {formErrors.make_id && <p className="text-xs text-destructive">{formErrors.make_id}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Model <span className="text-destructive">*</span></Label>
+                  <Combobox
+                    options={models.map((m) => ({ value: m.model_id.toString(), label: m.name }))}
+                    value={modelId}
+                    onValueChange={handleModelChange}
+                    placeholder={!makeId ? "Select make first" : loadingModels ? "Loading..." : "Select model"}
+                    searchPlaceholder="Search models..."
+                    emptyText="No model found."
+                    disabled={!makeId || loadingModels}
+                    className={formErrors.model_id ? "border-destructive" : ""}
+                  />
+                  {formErrors.model_id && <p className="text-xs text-destructive">{formErrors.model_id}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Vehicle Type <span className="text-destructive">*</span></Label>
+                  <Combobox
+                    options={types.map((t) => ({ value: t.type_id.toString(), label: t.name }))}
+                    value={vehicleTypeId}
+                    onValueChange={(v) => {
+                      setVehicleTypeId(v);
+                      if (formErrors.vehicle_type_id) setFormErrors({ ...formErrors, vehicle_type_id: undefined });
+                    }}
+                    placeholder="Select type"
+                    searchPlaceholder="Search types..."
+                    emptyText="No type found."
+                    className={formErrors.vehicle_type_id ? "border-destructive" : ""}
+                  />
+                  {formErrors.vehicle_type_id && <p className="text-xs text-destructive">{formErrors.vehicle_type_id}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Year of Manufacture (YOM)</Label>
+                  <Combobox
+                    options={YEAR_OPTIONS}
+                    value={year}
+                    onValueChange={setYear}
+                    placeholder="Select year"
+                    searchPlaceholder="Search year..."
+                    emptyText="No year found."
+                  />
+                </div>
+
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="plate_no">Plate Number <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="plate_no"
+                    placeholder="e.g. CAA-1234"
+                    value={plateNo}
+                    onChange={(e) => {
+                      setPlateNo(e.target.value);
+                      if (formErrors.plate_no) setFormErrors({ ...formErrors, plate_no: undefined });
+                    }}
+                    className={formErrors.plate_no ? "border-destructive" : ""}
+                  />
+                  {formErrors.plate_no && <p className="text-xs text-destructive">{formErrors.plate_no}</p>}
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={saving}
+                  onClick={() => closeDialog(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  className="bg-cta text-cta-foreground hover:bg-cta/90"
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{editingVehicle ? "Updating..." : "Adding..."}</>
+                  ) : (
+                    editingVehicle ? "Update Vehicle" : "Add Vehicle"
+                  )}
+                </Button>
+              </div>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>

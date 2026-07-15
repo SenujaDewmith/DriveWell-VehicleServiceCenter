@@ -1,6 +1,7 @@
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { fmtDate } = require("../lib/format");
+const { VEHICLE_SELECT, flattenVehicleRef } = require("../lib/vehicleFlatten");
 
 const myServices = async (req, res) => {
   const { user_id } = req.user;
@@ -23,7 +24,7 @@ const myServices = async (req, res) => {
               where: dateFilter,
               include: {
                 customer_user: { select: { customer: { select: { full_name: true } } } },
-                vehicle: { select: { make: true, model: true, plate_no: true } },
+                vehicle: VEHICLE_SELECT,
                 package: { select: { name: true } },
                 feedback: { select: { rating: true, comment: true } },
               },
@@ -44,9 +45,7 @@ const myServices = async (req, res) => {
           service_date: fmtDate(r.service_date),
           status: r.status,
           customer_name: r.customer_user?.customer?.full_name ?? null,
-          make: r.vehicle?.make,
-          model: r.vehicle?.model,
-          plate_no: r.vehicle?.plate_no,
+          ...flattenVehicleRef(r.vehicle),
           package_name: r.package?.name,
           task_type: a.task_type,
           remarks: sr.remarks,

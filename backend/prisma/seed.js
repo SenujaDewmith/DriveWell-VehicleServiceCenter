@@ -1,9 +1,54 @@
+const fs = require("fs");
+const path = require("path");
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 
 const prisma = new PrismaClient();
 
+function parseCsv(filePath) {
+  const content = fs.readFileSync(filePath, "utf-8").trim();
+  const [headerLine, ...lines] = content.split(/\r?\n/);
+  const headers = headerLine.split(",").map((h) => h.trim());
+  return lines.map((line) => {
+    const cols = line.split(",");
+    const row = {};
+    headers.forEach((h, i) => { row[h] = (cols[i] ?? "").trim(); });
+    return row;
+  });
+}
+
 async function main() {
+  // Seed vehicle reference data (types → makes → models, in FK order)
+  const seedDataDir = path.join(__dirname, "seed-data");
+
+  const typeRows = parseCsv(path.join(seedDataDir, "vehicle_types.csv"));
+  await prisma.vehicleType.createMany({
+    data: typeRows.map((r) => ({ type_id: parseInt(r.id), name: r.name })),
+    skipDuplicates: true,
+  });
+  console.log(`✅ Vehicle types seeded (${typeRows.length})`);
+
+  const makeRows = parseCsv(path.join(seedDataDir, "makes.csv"));
+  await prisma.vehicleMake.createMany({
+    data: makeRows.map((r) => ({ make_id: parseInt(r.id), name: r.name })),
+    skipDuplicates: true,
+  });
+  console.log(`✅ Vehicle makes seeded (${makeRows.length})`);
+
+  const modelRows = parseCsv(path.join(seedDataDir, "models.csv"));
+  await prisma.vehicleModel.createMany({
+    data: modelRows.map((r) => ({
+      model_id: parseInt(r.id),
+      name: r.name,
+      make_id: parseInt(r.make_id),
+      start_year: r.start_year ? parseInt(r.start_year) : null,
+      end_year: r.end_year ? parseInt(r.end_year) : null,
+      vehicle_type_id: r.vehicle_type_id ? parseInt(r.vehicle_type_id) : null,
+    })),
+    skipDuplicates: true,
+  });
+  console.log(`✅ Vehicle models seeded (${modelRows.length})`);
+
   // Seed roles
   const roles = ["Service Center Manager", "Supervisor", "Cashier", "Service Staff", "Customer"];
   for (const role_name of roles) {
@@ -18,17 +63,17 @@ async function main() {
   // Seed working config (single row)
   const configCount = await prisma.workingConfig.count();
   if (configCount === 0) {
-    await prisma.workingConfig.create({ data: { daily_capacity: 10, working_days: "1,2,3,4,5" } });
+    await prisma.workingConfig.create({ data: { working_days: "1,2,3,4,5" } });
   }
   console.log("✅ Working config seeded");
 
-  // Seed time slots
+  // Seed time slots — capacity is per-slot and admin-configurable from here on
   const slotCount = await prisma.timeSlot.count();
   if (slotCount === 0) {
     const times = ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00"];
     for (const t of times) {
       // Store as full ISO string — Prisma maps the time portion to the TIME column
-      await prisma.timeSlot.create({ data: { slot_time: new Date(`1970-01-01T${t}:00.000Z`) } });
+      await prisma.timeSlot.create({ data: { slot_time: new Date(`1970-01-01T${t}:00.000Z`), capacity: 5 } });
     }
   }
   console.log("✅ Time slots seeded");

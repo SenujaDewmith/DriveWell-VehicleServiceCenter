@@ -59,17 +59,55 @@ model Staff {
   @@map("staff")
 }
 
-model Vehicle {
-  vehicle_id  Int      @id @default(autoincrement())
-  customer_id Int
-  make        String   @db.VarChar(100)
-  model       String   @db.VarChar(100)
-  year        Int?
-  plate_no    String   @unique @db.VarChar(30)
-  color       String?  @db.VarChar(50)
-  created_at  DateTime @default(now())
+model VehicleMake {
+  make_id Int    @id
+  name    String @db.VarChar(100)
 
-  customer     User          @relation("CustomerVehicles", fields: [customer_id], references: [user_id], onDelete: Cascade)
+  models   VehicleModel[]
+  vehicles Vehicle[]
+
+  @@map("vehicle_makes")
+}
+
+model VehicleModel {
+  model_id        Int     @id
+  name            String  @db.VarChar(150)
+  make_id         Int
+  start_year      Int?
+  end_year        Int?
+  vehicle_type_id Int?
+
+  make         VehicleMake  @relation(fields: [make_id], references: [make_id])
+  vehicle_type VehicleType? @relation(fields: [vehicle_type_id], references: [type_id])
+  vehicles     Vehicle[]
+
+  @@map("vehicle_models")
+}
+
+model VehicleType {
+  type_id Int    @id
+  name    String @db.VarChar(50)
+
+  models   VehicleModel[]
+  vehicles Vehicle[]
+
+  @@map("vehicle_types")
+}
+
+model Vehicle {
+  vehicle_id      Int      @id @default(autoincrement())
+  customer_id     Int
+  make_id         Int
+  model_id        Int
+  vehicle_type_id Int
+  year            Int?
+  plate_no        String   @unique @db.VarChar(30)
+  created_at      DateTime @default(now())
+
+  customer     User         @relation("CustomerVehicles", fields: [customer_id], references: [user_id], onDelete: Cascade)
+  make         VehicleMake  @relation(fields: [make_id], references: [make_id])
+  model        VehicleModel @relation(fields: [model_id], references: [model_id])
+  vehicle_type VehicleType  @relation(fields: [vehicle_type_id], references: [type_id])
   reservations Reservation[]
 
   @@map("vehicles")
@@ -91,9 +129,8 @@ model ServicePackage {
 }
 
 model WorkingConfig {
-  config_id      Int    @id @default(autoincrement())
-  daily_capacity Int    @default(10)
-  working_days   String @default("1,2,3,4,5")
+  config_id    Int    @id @default(autoincrement())
+  working_days String @default("1,2,3,4,5")
 
   @@map("working_config")
 }
@@ -101,6 +138,7 @@ model WorkingConfig {
 model TimeSlot {
   slot_id   Int      @id @default(autoincrement())
   slot_time DateTime @db.Time
+  capacity  Int      @default(5)
   is_active Boolean  @default(true)
 
   reservations Reservation[]
@@ -114,7 +152,7 @@ model Reservation {
   customer_id    Int
   vehicle_id     Int
   package_id     Int
-  slot_id        Int?
+  slot_id        Int
   service_date   DateTime @db.Date
   status         String   @default("Booked") @db.VarChar(30)
   created_at     DateTime @default(now())
@@ -122,7 +160,7 @@ model Reservation {
   customer_user  User           @relation("CustomerReservations", fields: [customer_id], references: [user_id])
   vehicle        Vehicle        @relation(fields: [vehicle_id], references: [vehicle_id])
   package        ServicePackage @relation(fields: [package_id], references: [package_id])
-  slot           TimeSlot?      @relation(fields: [slot_id], references: [slot_id])
+  slot           TimeSlot       @relation(fields: [slot_id], references: [slot_id])
   service_record ServiceRecord?
   invoice        Invoice?
   feedback       Feedback?

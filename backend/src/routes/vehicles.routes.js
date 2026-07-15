@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const { listVehicles, addVehicle, updateVehicle, deleteVehicle } = require("../controllers/vehicles.controller");
+const {
+  listVehicles, addVehicle, updateVehicle, deleteVehicle,
+  listMakes, listModels, listVehicleTypes,
+} = require("../controllers/vehicles.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
 
 const customerOnly = [verifyToken, authorizeRoles("Customer")];
@@ -37,6 +40,96 @@ const customerOnly = [verifyToken, authorizeRoles("Customer")];
  *       500: { description: Server error }
  */
 router.get("/", customerOnly, listVehicles);
+
+/**
+ * @swagger
+ * /api/vehicles/makes:
+ *   get:
+ *     summary: List all vehicle makes (for dropdown selection)
+ *     tags: [Vehicles]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: List of makes
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 makes:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       make_id: { type: integer }
+ *                       name:    { type: string }
+ *       401: { description: Not authenticated }
+ *       500: { description: Server error }
+ */
+router.get("/makes", customerOnly, listMakes);
+
+/**
+ * @swagger
+ * /api/vehicles/models:
+ *   get:
+ *     summary: List vehicle models, optionally filtered by make (for dropdown selection)
+ *     tags: [Vehicles]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: make_id
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: List of models
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 models:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       model_id:        { type: integer }
+ *                       name:            { type: string }
+ *                       make_id:         { type: integer }
+ *                       vehicle_type_id: { type: integer, nullable: true }
+ *       401: { description: Not authenticated }
+ *       500: { description: Server error }
+ */
+router.get("/models", customerOnly, listModels);
+
+/**
+ * @swagger
+ * /api/vehicles/types:
+ *   get:
+ *     summary: List all vehicle types (for dropdown selection)
+ *     tags: [Vehicles]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200:
+ *         description: List of vehicle types
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 types:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       type_id: { type: integer }
+ *                       name:    { type: string }
+ *       401: { description: Not authenticated }
+ *       500: { description: Server error }
+ */
+router.get("/types", customerOnly, listVehicleTypes);
 
 /**
  * @swagger
