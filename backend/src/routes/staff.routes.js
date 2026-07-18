@@ -49,7 +49,7 @@ const serviceStaffOnly = [verifyToken, authorizeRoles("Service Staff")];
  *                       model:            { type: string }
  *                       plate_no:         { type: string }
  *                       package_name:     { type: string }
- *                       task_type:        { type: string }
+ *                       work_note:        { type: string }
  *                       remarks:          { type: string }
  *                       rating:           { type: integer }
  *                       feedback_comment: { type: string }

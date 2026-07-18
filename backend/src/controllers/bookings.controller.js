@@ -7,6 +7,7 @@ const { VEHICLE_SELECT, flattenVehicleRef } = require("../lib/vehicleFlatten");
 const {
   timeStrToMinutes, dateColToMinutes, minutesToTimeDate, minutesToHHMM,
   getBlockedRangesForDate, generateWindows, rangesOverlap,
+  MIN_LEAD_MINUTES, getLocalNow,
 } = require("../lib/slotGenerator");
 
 const CUSTOMER_ROLE = 5;
@@ -125,6 +126,20 @@ const createBooking = async (req, res) => {
       const dayEndMin = dateColToMinutes(config.day_end_time);
       if (startMin < dayStartMin || endMin > dayEndMin) {
         const err = new Error("Selected time does not fit within business hours for this service"); err.status = 400; throw err;
+      }
+
+      const { todayKey, nowMinutes } = getLocalNow();
+      if (service_date < todayKey) {
+        const err = new Error("Cannot book a date in the past"); err.status = 400; throw err;
+      }
+      if (service_date === todayKey) {
+        const cutoffStart = dayEndMin - config.same_day_cutoff_minutes;
+        if (nowMinutes >= cutoffStart) {
+          const err = new Error(`Same-day bookings close at ${minutesToHHMM(cutoffStart)} — please choose another date`); err.status = 400; throw err;
+        }
+        if (startMin < nowMinutes + MIN_LEAD_MINUTES) {
+          const err = new Error(`Bookings require at least ${MIN_LEAD_MINUTES} minutes advance notice`); err.status = 400; throw err;
+        }
       }
 
       const blocked = await getBlockedRangesForDate(tx, service_date);
@@ -275,15 +290,35 @@ const getAvailableSlots = async (req, res) => {
     if (!workingDays.includes(dayOfWeek))
       return res.status(200).json({ available: false, reason: "Not a working day", slots: [] });
 
+    const { todayKey, nowMinutes } = getLocalNow();
+    if (date < todayKey)
+      return res.status(200).json({ available: false, reason: "This date has already passed", slots: [] });
+
+    const dayStartMin = dateColToMinutes(config.day_start_time);
+    const dayEndMin = dateColToMinutes(config.day_end_time);
+
+    if (date === todayKey) {
+      const cutoffStart = dayEndMin - config.same_day_cutoff_minutes;
+      if (nowMinutes >= cutoffStart) {
+        return res.status(200).json({
+          available: false,
+          reason: `Same-day bookings close at ${minutesToHHMM(cutoffStart)} — please choose another date`,
+          slots: [],
+        });
+      }
+    }
+
     const pkg = await prisma.servicePackage.findFirst({
       where: { package_id: parseInt(package_id), is_active: true },
     });
     if (!pkg) return res.status(404).json({ message: "Service package not found" });
 
-    const dayStartMin = dateColToMinutes(config.day_start_time);
-    const dayEndMin = dateColToMinutes(config.day_end_time);
     const blocked = await getBlockedRangesForDate(prisma, date);
-    const rawWindows = generateWindows(dayStartMin, dayEndMin, pkg.estimated_duration, blocked);
+    let rawWindows = generateWindows(dayStartMin, dayEndMin, pkg.estimated_duration, blocked);
+    if (date === todayKey) {
+      const minStart = nowMinutes + MIN_LEAD_MINUTES;
+      rawWindows = rawWindows.filter((w) => w.start >= minStart);
+    }
 
     const existing = await prisma.reservation.findMany({
       where: {
@@ -310,12 +345,21 @@ const getAvailableSlots = async (req, res) => {
     });
 
     const available = slots.some((s) => s.remaining > 0);
+    const fullDayBlock = blocked.find((b) => b.start <= dayStartMin && b.end >= dayEndMin);
 
     res.status(200).json({
       available,
       ...(available
         ? {}
-        : { reason: slots.length === 0 ? "This service does not fit in business hours on this date" : "All appointment windows are fully booked" }),
+        : {
+            reason: fullDayBlock
+              ? fullDayBlock.reason || "This date is closed"
+              : slots.length === 0
+                ? date === todayKey
+                  ? "No more appointments can be booked today"
+                  : "This service does not fit in business hours on this date"
+                : "All appointment windows are fully booked",
+          }),
       slots,
     });
   } catch (error) {
@@ -378,6 +422,7 @@ const getMonthAvailability = async (req, res) => {
       reservationsByDate[key].push({ start: dateColToMinutes(r.start_time), end: dateColToMinutes(r.end_time) });
     });
 
+    const { todayKey, nowMinutes } = getLocalNow();
     const daysInMonth = endDate.getUTCDate();
     const days = [];
 
@@ -386,13 +431,22 @@ const getMonthAvailability = async (req, res) => {
       const key = date.toISOString().split("T")[0];
       const isWorkingDay = workingDays.includes(date.getUTCDay());
 
-      if (!isWorkingDay) {
+      if (key < todayKey || !isWorkingDay) {
+        days.push({ date: key, status: "closed", remaining_capacity: 0, total_windows: 0 });
+        continue;
+      }
+
+      if (key === todayKey && nowMinutes >= dayEndMin - config.same_day_cutoff_minutes) {
         days.push({ date: key, status: "closed", remaining_capacity: 0, total_windows: 0 });
         continue;
       }
 
       const blockedForDay = [...recurringRanges, ...(oneOffByDate[key] || [])];
-      const windows = generateWindows(dayStartMin, dayEndMin, pkg.estimated_duration, blockedForDay);
+      let windows = generateWindows(dayStartMin, dayEndMin, pkg.estimated_duration, blockedForDay);
+      if (key === todayKey) {
+        const minStart = nowMinutes + MIN_LEAD_MINUTES;
+        windows = windows.filter((w) => w.start >= minStart);
+      }
 
       if (windows.length === 0) {
         days.push({ date: key, status: "closed", remaining_capacity: 0, total_windows: 0 });

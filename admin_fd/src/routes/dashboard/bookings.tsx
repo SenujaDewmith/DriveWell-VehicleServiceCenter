@@ -67,10 +67,10 @@ function BookingsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-extrabold tracking-tighter">ALL BOOKINGS</h1>
+      <h1 className="text-2xl font-bold text-foreground">All Bookings</h1>
 
       {error && (
-        <p className="text-xs font-mono text-destructive border border-destructive px-3 py-2">{error}</p>
+        <p className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md px-3 py-2">{error}</p>
       )}
 
       <div className="flex flex-wrap gap-3">
@@ -78,12 +78,12 @@ function BookingsPage() {
           placeholder="Search customer, plate, ref..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border-2 border-border bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent w-64"
+          className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring w-64"
         />
         <div className="flex gap-1 flex-wrap">
           <button
             onClick={() => setStatusFilter("All")}
-            className={`border-2 px-2 py-1.5 text-[10px] font-mono uppercase font-bold transition-colors ${
+            className={`rounded-md border px-2 py-1.5 text-sm font-medium transition-colors ${
               statusFilter === "All"
                 ? "border-accent bg-accent text-accent-foreground"
                 : "border-border text-muted-foreground"
@@ -95,7 +95,7 @@ function BookingsPage() {
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
-              className={`border-2 px-2 py-1.5 text-[10px] font-mono uppercase font-bold transition-colors ${
+              className={`rounded-md border px-2 py-1.5 text-sm font-medium transition-colors ${
                 statusFilter === s
                   ? "border-accent bg-accent text-accent-foreground"
                   : "border-border text-muted-foreground"
@@ -107,25 +107,25 @@ function BookingsPage() {
         </div>
       </div>
 
-      <div className="border-2 border-border bg-card overflow-x-auto">
+      <div className="rounded-lg border border-border bg-card overflow-x-auto">
         {loading ? (
-          <div className="p-8 text-center text-xs font-mono text-muted-foreground">Loading...</div>
+          <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
         ) : (
-          <table className="w-full text-xs font-mono">
+          <table className="w-full text-sm">
             <thead>
-              <tr className="border-b-2 border-border">
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Ref</th>
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Date</th>
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Time</th>
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Customer</th>
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Vehicle</th>
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Package</th>
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Status</th>
+              <tr className="border-b border-border">
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Ref</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Date</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Time</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Customer</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Vehicle</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Package</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Status</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((b) => (
-                <tr key={b.reservation_id} className="border-b border-border">
+                <tr key={b.reservation_id} className="border-b border-border last:border-0">
                   <td className="py-2 px-3 text-muted-foreground">
                     {b.booking_ref ?? `#${b.reservation_id}`}
                   </td>

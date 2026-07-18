@@ -15,6 +15,8 @@ import {
   LogOut,
   Menu,
   X,
+  Wrench,
+  Car,
 } from "lucide-react";
 
 interface NavItem {
@@ -26,6 +28,7 @@ interface NavItem {
 const managerNav: NavItem[] = [
   { label: "Overview", to: "/dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
   { label: "Service Packages", to: "/dashboard/packages", icon: <Package className="h-4 w-4" /> },
+  { label: "Charge Catalog", to: "/dashboard/charge-catalog", icon: <Wrench className="h-4 w-4" /> },
   { label: "Schedule Config", to: "/dashboard/schedule", icon: <Calendar className="h-4 w-4" /> },
   { label: "User Management", to: "/dashboard/users", icon: <Users className="h-4 w-4" /> },
   { label: "All Bookings", to: "/dashboard/bookings", icon: <BookOpen className="h-4 w-4" /> },
@@ -56,15 +59,16 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
             />
           )}
           <aside
-            className={`fixed lg:static z-50 h-screen w-64 border-r-2 border-border bg-card flex flex-col transition-transform lg:translate-x-0 ${
+            className={`fixed lg:static z-50 h-screen w-64 border-r border-border bg-card flex flex-col transition-transform lg:translate-x-0 ${
               sidebarOpen ? "translate-x-0" : "-translate-x-full"
             }`}
           >
-            <div className="p-4 border-b-2 border-border">
-              <h2 className="text-lg font-extrabold tracking-tighter text-foreground">
-                DRIVEWELL
-              </h2>
-              <p className="text-[10px] font-mono text-muted-foreground uppercase">
+            <div className="p-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Car className="h-6 w-6 text-accent" />
+                <h2 className="text-xl font-bold text-foreground">DriveWell</h2>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 {role} Panel
               </p>
             </div>
@@ -80,7 +84,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                     key={item.to}
                     to={item.to}
                     onClick={() => setSidebarOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2.5 text-xs font-mono uppercase transition-colors ${
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                       isActive
                         ? "bg-accent text-accent-foreground"
                         : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -93,13 +97,13 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
               })}
             </nav>
 
-            <div className="p-4 border-t-2 border-border">
+            <div className="p-4 border-t border-border">
               <button
                 onClick={async () => {
                   await logout();
                   window.location.href = "/login";
                 }}
-                className="flex items-center gap-2 text-xs font-mono uppercase text-muted-foreground hover:text-foreground transition-colors w-full"
+                className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
               >
                 <LogOut className="h-4 w-4" />
                 Logout
@@ -111,7 +115,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-h-screen">
-        <header className="h-14 border-b-2 border-border bg-card flex items-center justify-between px-4">
+        <header className="h-16 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 flex items-center justify-between px-4">
           <div className="flex items-center gap-3">
             {isManager && (
               <button
@@ -122,13 +126,16 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
               </button>
             )}
             {!isManager && (
-              <h2 className="text-sm font-extrabold tracking-tighter text-foreground uppercase">
-                DRIVEWELL // {role}
-              </h2>
+              <div className="flex items-center gap-2">
+                <Car className="h-6 w-6 text-accent" />
+                <h2 className="text-lg font-bold text-foreground">
+                  DriveWell <span className="text-muted-foreground font-normal">// {role}</span>
+                </h2>
+              </div>
             )}
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs font-mono text-muted-foreground uppercase">
+            <span className="text-sm text-muted-foreground">
               {username}
             </span>
             <ThemeToggle />
@@ -138,7 +145,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                   await logout();
                   window.location.href = "/login";
                 }}
-                className="p-2 border border-border bg-card text-foreground hover:bg-muted transition-colors"
+                className="p-2 rounded-md border border-border bg-card text-foreground hover:bg-muted transition-colors"
               >
                 <LogOut className="h-4 w-4" />
               </button>

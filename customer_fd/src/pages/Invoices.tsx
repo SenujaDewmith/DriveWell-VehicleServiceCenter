@@ -1,16 +1,18 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { mockInvoices, mockVehicles, mockPackages } from "@/data/mockData";
-import { FileText, Download, Printer, Eye, Car } from "lucide-react";
-import { toast } from "sonner";
+import { invoicesService, type Invoice } from "@/services/invoices.service";
+import { FileText, Printer, Loader2 } from "lucide-react";
 
 export default function Invoices() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!user) {
@@ -18,14 +20,14 @@ export default function Invoices() {
     }
   }, [user, navigate]);
 
-  const handleDownload = (invoiceId: string) => {
-    toast.success("Invoice downloaded successfully");
-  };
-
-  const handlePrint = (invoiceId: string) => {
-    window.print();
-    toast.success("Print dialog opened");
-  };
+  useEffect(() => {
+    if (!user) return;
+    invoicesService
+      .getInvoices()
+      .then(({ invoices }) => setInvoices(invoices))
+      .catch(() => setError("Failed to load invoices. Please try again later."))
+      .finally(() => setLoading(false));
+  }, [user]);
 
   if (!user) return null;
 
@@ -36,7 +38,21 @@ export default function Invoices() {
         <p className="text-muted-foreground">View and manage your service invoices</p>
       </div>
 
-      {mockInvoices.length === 0 ? (
+      {loading && (
+        <div className="flex justify-center items-center py-24">
+          <Loader2 className="h-8 w-8 animate-spin text-cta" />
+        </div>
+      )}
+
+      {!loading && error && (
+        <Card className="text-center py-12 border-destructive/30">
+          <CardContent>
+            <p className="text-destructive">{error}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && !error && invoices.length === 0 && (
         <Card className="text-center py-12">
           <CardContent>
             <FileText className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
@@ -44,122 +60,91 @@ export default function Invoices() {
             <p className="text-muted-foreground">Your invoices will appear here after service completion</p>
           </CardContent>
         </Card>
-      ) : (
-        <div className="space-y-4">
-          {mockInvoices.map((invoice) => {
-            const vehicle = mockVehicles.find((v) => v.id === invoice.vehicleId);
-            const pkg = mockPackages.find((p) => p.id === invoice.packageId);
-            return (
-              <Card key={invoice.id} className="hover:shadow-lg transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex flex-col lg:flex-row gap-6">
-                    <div className="flex items-start gap-4 flex-1">
-                      <div className="h-16 w-16 bg-cta/10 rounded-lg flex items-center justify-center shrink-0">
-                        <FileText className="h-8 w-8 text-cta" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <h3 className="text-xl font-semibold">Invoice #{invoice.id}</h3>
-                            <p className="text-muted-foreground">
-                              {vehicle?.make} {vehicle?.model} - {pkg?.name}
-                            </p>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={
-                              invoice.paid
-                                ? "bg-status-completed/10 text-status-completed border-status-completed/20"
-                                : "bg-status-booked/10 text-status-booked border-status-booked/20"
-                            }
-                          >
-                            {invoice.paid ? "Paid" : "Unpaid"}
-                          </Badge>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm mt-4">
-                          <div>
-                            <p className="text-muted-foreground">Date</p>
-                            <p className="font-medium">{invoice.date}</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Booking ID</p>
-                            <p className="font-medium">{invoice.bookingId}</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Total Amount</p>
-                            <p className="font-bold text-cta text-lg">LKR {invoice.total.toLocaleString()}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-2 lg:w-48">
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => navigate(`/invoices/${invoice.id}`)}
-                      >
-                        <Eye className="mr-2 h-4 w-4" />
-                        View Details
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => handleDownload(invoice.id)}
-                      >
-                        <Download className="mr-2 h-4 w-4" />
-                        Download PDF
-                      </Button>
-                      <Button variant="outline" className="w-full" onClick={() => handlePrint(invoice.id)}>
-                        <Printer className="mr-2 h-4 w-4" />
-                        Print
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
       )}
 
-      {mockInvoices.length > 0 && (
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle>Invoice Details Breakdown</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {mockInvoices.map((invoice) => {
-              const pkg = mockPackages.find((p) => p.id === invoice.packageId);
-              return (
-                <div key={invoice.id} className="border-b border-border last:border-0 py-4 first:pt-0">
-                  <h3 className="font-semibold mb-3">Invoice #{invoice.id}</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Base Package ({pkg?.name})</span>
-                      <span className="font-medium">LKR {invoice.baseAmount.toLocaleString()}</span>
+      {!loading && !error && invoices.length > 0 && (
+        <div className="space-y-4">
+          {invoices.map((invoice) => (
+            <Card key={invoice.invoice_id} className="hover:shadow-lg transition-shadow">
+              <CardContent className="p-6">
+                <div className="flex flex-col lg:flex-row gap-6">
+                  <div className="flex items-start gap-4 flex-1">
+                    <div className="h-16 w-16 bg-cta/10 rounded-lg flex items-center justify-center shrink-0">
+                      <FileText className="h-8 w-8 text-cta" />
                     </div>
-                    {invoice.additionalCharges.map((charge, idx) => (
-                      <div key={idx} className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">{charge.item}</span>
-                        <span className="font-medium">LKR {charge.amount.toLocaleString()}</span>
+                    <div className="flex-1">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <h3 className="text-xl font-semibold">
+                            Invoice {invoice.booking_ref ?? `#${invoice.invoice_id}`}
+                          </h3>
+                          <p className="text-muted-foreground">
+                            {invoice.make} {invoice.model} ({invoice.plate_no}) — {invoice.package_name}
+                          </p>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={
+                            invoice.payment_status === "Paid"
+                              ? "bg-status-completed/10 text-status-completed border-status-completed/20"
+                              : "bg-status-booked/10 text-status-booked border-status-booked/20"
+                          }
+                        >
+                          {invoice.payment_status}
+                        </Badge>
                       </div>
-                    ))}
-                    {invoice.discount > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-cta">Discount</span>
-                        <span className="font-medium text-cta">-LKR {invoice.discount.toLocaleString()}</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm mt-4">
+                        <div>
+                          <p className="text-muted-foreground">Service Date</p>
+                          <p className="font-medium">{invoice.service_date}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Payment Method</p>
+                          <p className="font-medium">{invoice.payment_method ?? "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Total Amount</p>
+                          <p className="font-bold text-cta text-lg">LKR {parseFloat(invoice.total_amount).toLocaleString()}</p>
+                        </div>
                       </div>
-                    )}
-                    <div className="flex justify-between text-base font-bold pt-2 border-t border-border">
-                      <span>Total</span>
-                      <span className="text-cta">LKR {invoice.total.toLocaleString()}</span>
+
+                      <div className="mt-4 pt-4 border-t border-border space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>{invoice.package_name}</span>
+                          <span className="font-medium">LKR {parseFloat(invoice.base_amount).toLocaleString()}</span>
+                        </div>
+                        {invoice.items.map((item) => (
+                          <div key={item.invoice_item_id} className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">
+                              {item.description}{item.quantity > 1 ? ` ×${item.quantity}` : ""}
+                            </span>
+                            <span className="font-medium">LKR {parseFloat(item.line_total).toLocaleString()}</span>
+                          </div>
+                        ))}
+                        {parseFloat(invoice.discount) > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-cta">Discount</span>
+                            <span className="font-medium text-cta">-LKR {parseFloat(invoice.discount).toLocaleString()}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-base font-bold pt-2 border-t border-border">
+                          <span>Total</span>
+                          <span className="text-cta">LKR {parseFloat(invoice.total_amount).toLocaleString()}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                  <div className="flex flex-col gap-2 lg:w-48">
+                    <Button variant="outline" className="w-full" onClick={() => window.print()}>
+                      <Printer className="mr-2 h-4 w-4" />
+                      Print
+                    </Button>
+                  </div>
                 </div>
-              );
-            })}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
     </div>
   );

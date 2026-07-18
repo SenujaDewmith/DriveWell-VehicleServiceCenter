@@ -55,9 +55,10 @@ router.get("/", verifyToken, getConfig);
  *             type: object
  *             required: [working_days, day_start_time, day_end_time]
  *             properties:
- *               working_days:   { type: string, example: "1,2,3,4,5", description: "Comma-separated: 0=Sun, 1=Mon … 6=Sat" }
- *               day_start_time: { type: string, example: "08:00", description: "HH:MM format" }
- *               day_end_time:   { type: string, example: "18:00", description: "HH:MM format; must be after day_start_time" }
+ *               working_days:            { type: string, example: "1,2,3,4,5", description: "Comma-separated: 0=Sun, 1=Mon … 6=Sat" }
+ *               day_start_time:          { type: string, example: "08:00", description: "HH:MM format" }
+ *               day_end_time:            { type: string, example: "18:00", description: "HH:MM format; must be after day_start_time" }
+ *               same_day_cutoff_minutes: { type: integer, example: 240, description: "Minutes before closing that same-day bookings stop being accepted" }
  *     responses:
  *       200: { description: Config updated }
  *       400: { description: Validation error }

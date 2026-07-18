@@ -138,9 +138,12 @@ export default function BookingDetails() {
                 )}
               </div>
               {booking.package_price && (
-                <p className="text-2xl font-bold text-cta">
-                  LKR {parseFloat(booking.package_price).toLocaleString()}
-                </p>
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-cta">
+                    LKR {parseFloat(booking.package_price).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Upwards — see invoice for final amount</p>
+                </div>
               )}
             </div>
           </CardContent>

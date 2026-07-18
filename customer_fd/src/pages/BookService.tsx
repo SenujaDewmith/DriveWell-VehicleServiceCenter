@@ -68,23 +68,23 @@ export default function BookService() {
       .finally(() => setDataLoading(false));
   }, [user, navigate, preselectedPackage]);
 
-  const handleDateChange = async (date: string) => {
-    if (!selectedPackageId) return;
-    setSelectedDate(date);
+  // Re-fetch available slots whenever the selected date OR package changes — covers
+  // both picking a new date and going back to pick a different (differently-timed) package.
+  useEffect(() => {
+    if (!selectedDate || !selectedPackageId) return;
     setSelectedStartTime(null);
     setSelectedSlotTime("");
     setSlotsLoading(true);
-    try {
-      const res = await bookingsService.getAvailableSlots(date, selectedPackageId);
-      setDateAvailable(res.available);
-      setSlots(res.slots);
-      if (!res.available) toast.error(res.reason ?? "No availability on this date");
-    } catch {
-      toast.error("Failed to check availability");
-    } finally {
-      setSlotsLoading(false);
-    }
-  };
+    bookingsService
+      .getAvailableSlots(selectedDate, selectedPackageId)
+      .then((res) => {
+        setDateAvailable(res.available);
+        setSlots(res.slots);
+        if (!res.available) toast.error(res.reason ?? "No availability on this date");
+      })
+      .catch(() => toast.error("Failed to check availability"))
+      .finally(() => setSlotsLoading(false));
+  }, [selectedDate, selectedPackageId]);
 
   const handleConfirm = async () => {
     if (!selectedVehicleId || !selectedPackageId || !selectedDate || !selectedStartTime) return;
@@ -251,6 +251,7 @@ export default function BookService() {
                           <span className="text-2xl font-bold text-cta">
                             LKR {parseFloat(p.price).toLocaleString()}
                           </span>
+                          <span className="text-muted-foreground text-xs font-medium">Upwards</span>
                           <span className="text-muted-foreground">• {fmtDuration(p.estimated_duration)}</span>
                         </div>
                       </div>
@@ -287,7 +288,7 @@ export default function BookService() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label>Date</Label>
-                <BookingCalendar packageId={selectedPackageId!} selectedDate={selectedDate} onSelectDate={handleDateChange} />
+                <BookingCalendar packageId={selectedPackageId!} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
               </div>
 
               <div className="space-y-2">
@@ -435,7 +436,7 @@ export default function BookService() {
               <div className="flex justify-between items-center p-4 bg-cta/10 rounded-lg border-2 border-cta">
                 <span className="font-semibold text-lg">Estimated Cost</span>
                 <span className="text-2xl font-bold text-cta">
-                  {pkg ? `LKR ${parseFloat(pkg.price).toLocaleString()}` : "—"}
+                  {pkg ? `LKR ${parseFloat(pkg.price).toLocaleString()} Upwards` : "—"}
                 </span>
               </div>
             </div>

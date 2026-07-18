@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { listInvoices, getInvoice, createInvoice, updatePaymentStatus } = require("../controllers/invoices.controller");
+const { listInvoices, getInvoice, getInvoiceDraft, createInvoice, updatePaymentStatus } = require("../controllers/invoices.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
 
 const cashierOrManager = [verifyToken, authorizeRoles("Cashier", "Service Center Manager")];
@@ -46,6 +46,26 @@ const cashierOrManager = [verifyToken, authorizeRoles("Cashier", "Service Center
  *       500: { description: Server error }
  */
 router.get("/", verifyToken, listInvoices);
+
+/**
+ * @swagger
+ * /api/invoices/draft/{booking_id}:
+ *   get:
+ *     summary: Get invoice-building data for a booking — package base price and the supervisor's structured additional-work notes with suggested catalog prices (Cashier / Manager only)
+ *     tags: [Invoices]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: booking_id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Invoice draft data }
+ *       404: { description: Booking not found }
+ *       500: { description: Server error }
+ */
+router.get("/draft/:booking_id", cashierOrManager, getInvoiceDraft);
 
 /**
  * @swagger

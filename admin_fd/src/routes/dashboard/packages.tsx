@@ -249,23 +249,23 @@ function PackagesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-extrabold tracking-tighter">SERVICE PACKAGES</h1>
+        <h1 className="text-2xl font-bold text-foreground">Service Packages</h1>
         <button
           onClick={openNew}
-          className="flex items-center gap-2 border-2 border-accent bg-accent px-3 py-2 text-xs font-mono uppercase font-bold text-accent-foreground hover:opacity-90"
+          className="flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors"
         >
           <Plus className="h-4 w-4" /> Add Package
         </button>
       </div>
 
       {pageError && (
-        <p className="text-xs font-mono text-destructive border border-destructive px-3 py-2">{pageError}</p>
+        <p className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md px-3 py-2">{pageError}</p>
       )}
 
       {showForm && (
-        <div className="border-2 border-border bg-card p-5 space-y-4">
+        <div className="rounded-lg border border-border bg-card p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-extrabold uppercase">{editing ? "Edit Package" : "New Package"}</h3>
+            <h3 className="text-base font-semibold text-foreground">{editing ? "Edit Package" : "New Package"}</h3>
             <button onClick={closeForm} className="text-muted-foreground hover:text-foreground">
               <X className="h-4 w-4" />
             </button>
@@ -273,9 +273,9 @@ function PackagesPage() {
 
           {/* Image */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono uppercase text-muted-foreground">Package Image</label>
+            <label className="text-sm font-medium text-muted-foreground">Package Image</label>
             <div className="flex items-start gap-4">
-              <div className="h-28 w-40 border-2 border-border bg-background flex items-center justify-center overflow-hidden shrink-0">
+              <div className="h-28 w-40 rounded-lg border border-border bg-background flex items-center justify-center overflow-hidden shrink-0">
                 {currentImageSrc ? (
                   <img src={currentImageSrc} alt="Package preview" className="h-full w-full object-cover" />
                 ) : (
@@ -288,16 +288,16 @@ function PackagesPage() {
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/gif"
                   onChange={handleImageSelect}
-                  className="text-[10px] font-mono text-muted-foreground file:mr-3 file:border-2 file:border-border file:bg-card file:px-3 file:py-1.5 file:text-[10px] file:font-mono file:uppercase file:text-foreground hover:file:border-accent"
+                  className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-card file:px-3 file:py-1.5 file:text-sm file:text-foreground hover:file:border-accent"
                 />
-                <p className="text-[10px] font-mono text-muted-foreground">JPEG, PNG, WEBP, or GIF — max 5MB</p>
-                {imageError && <p className="text-[10px] font-mono text-destructive">{imageError}</p>}
+                <p className="text-sm text-muted-foreground">JPEG, PNG, WEBP, or GIF — max 5MB</p>
+                {imageError && <p className="text-sm text-destructive">{imageError}</p>}
                 {editing?.image_url && !imageFile && (
                   <button
                     type="button"
                     onClick={removeExistingImage}
                     disabled={removingImage}
-                    className="flex items-center gap-1 border-2 border-destructive px-2 py-1 text-[10px] font-mono uppercase text-destructive hover:bg-destructive hover:text-destructive-foreground disabled:opacity-50"
+                    className="flex items-center gap-1 rounded-md border border-destructive px-2 py-1 text-sm text-destructive hover:bg-destructive hover:text-destructive-foreground transition-colors disabled:opacity-50"
                   >
                     <Trash2 className="h-3 w-3" /> {removingImage ? "Removing..." : "Remove Image"}
                   </button>
@@ -308,43 +308,43 @@ function PackagesPage() {
 
           {/* Name */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono uppercase text-muted-foreground">
+            <label className="text-sm font-medium text-muted-foreground">
               Package Name <span className="text-destructive">*</span>
             </label>
             <input
               placeholder="e.g. Full Engine Service"
               maxLength={100}
               {...field("name")}
-              className={`w-full border-2 bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent ${formErrors.name ? "border-destructive" : "border-border"}`}
+              className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${formErrors.name ? "border-destructive" : "border-border"}`}
             />
             {formErrors.name && (
-              <p className="text-[10px] font-mono text-destructive">{formErrors.name}</p>
+              <p className="text-sm text-destructive">{formErrors.name}</p>
             )}
           </div>
 
           {/* Description */}
           <div className="space-y-1">
-            <label className="text-[10px] font-mono uppercase text-muted-foreground">
+            <label className="text-sm font-medium text-muted-foreground">
               What&apos;s Included / Description <span className="text-destructive">*</span>
             </label>
-            <p className="text-[10px] font-mono text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Enter each item on a new line — these will be shown as bullet points to customers
             </p>
             <textarea
               rows={5}
               placeholder={"Oil change & filter replacement\nBrake inspection\nFluid top-up\nTyre pressure check"}
               {...field("description")}
-              className={`w-full border-2 bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent resize-y ${formErrors.description ? "border-destructive" : "border-border"}`}
+              className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y ${formErrors.description ? "border-destructive" : "border-border"}`}
             />
             {formErrors.description && (
-              <p className="text-[10px] font-mono text-destructive">{formErrors.description}</p>
+              <p className="text-sm text-destructive">{formErrors.description}</p>
             )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Duration */}
             <div className="space-y-1">
-              <label className="text-[10px] font-mono uppercase text-muted-foreground">
+              <label className="text-sm font-medium text-muted-foreground">
                 Duration (minutes) <span className="text-destructive">*</span>
               </label>
               <input
@@ -352,18 +352,18 @@ function PackagesPage() {
                 min={30}
                 placeholder="e.g. 90"
                 {...field("estimated_duration")}
-                className={`w-full border-2 bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent ${formErrors.estimated_duration ? "border-destructive" : "border-border"}`}
+                className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${formErrors.estimated_duration ? "border-destructive" : "border-border"}`}
               />
               {formErrors.estimated_duration ? (
-                <p className="text-[10px] font-mono text-destructive">{formErrors.estimated_duration}</p>
+                <p className="text-sm text-destructive">{formErrors.estimated_duration}</p>
               ) : (
-                <p className="text-[10px] font-mono text-muted-foreground">Minimum 30 minutes</p>
+                <p className="text-sm text-muted-foreground">Minimum 30 minutes</p>
               )}
             </div>
 
             {/* Price */}
             <div className="space-y-1">
-              <label className="text-[10px] font-mono uppercase text-muted-foreground">
+              <label className="text-sm font-medium text-muted-foreground">
                 Price (LKR) <span className="text-destructive">*</span>
               </label>
               <input
@@ -371,18 +371,18 @@ function PackagesPage() {
                 min={1}
                 placeholder="e.g. 7500"
                 {...field("price")}
-                className={`w-full border-2 bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent ${formErrors.price ? "border-destructive" : "border-border"}`}
+                className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${formErrors.price ? "border-destructive" : "border-border"}`}
               />
               {formErrors.price ? (
-                <p className="text-[10px] font-mono text-destructive">{formErrors.price}</p>
+                <p className="text-sm text-destructive">{formErrors.price}</p>
               ) : (
-                <p className="text-[10px] font-mono text-muted-foreground">Amount in Sri Lankan Rupees</p>
+                <p className="text-sm text-muted-foreground">Amount in Sri Lankan Rupees</p>
               )}
             </div>
 
             {/* Max Capacity */}
             <div className="space-y-1">
-              <label className="text-[10px] font-mono uppercase text-muted-foreground">
+              <label className="text-sm font-medium text-muted-foreground">
                 Max Capacity <span className="text-destructive">*</span>
               </label>
               <input
@@ -390,12 +390,12 @@ function PackagesPage() {
                 min={1}
                 placeholder="e.g. 3"
                 {...field("max_capacity")}
-                className={`w-full border-2 bg-background px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-accent ${formErrors.max_capacity ? "border-destructive" : "border-border"}`}
+                className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${formErrors.max_capacity ? "border-destructive" : "border-border"}`}
               />
               {formErrors.max_capacity ? (
-                <p className="text-[10px] font-mono text-destructive">{formErrors.max_capacity}</p>
+                <p className="text-sm text-destructive">{formErrors.max_capacity}</p>
               ) : (
-                <p className="text-[10px] font-mono text-muted-foreground">Concurrent bookings allowed</p>
+                <p className="text-sm text-muted-foreground">Concurrent bookings allowed</p>
               )}
             </div>
           </div>
@@ -404,13 +404,13 @@ function PackagesPage() {
             <button
               onClick={save}
               disabled={saving}
-              className="border-2 border-accent bg-accent px-4 py-2 text-xs font-mono uppercase font-bold text-accent-foreground hover:opacity-90 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50"
             >
               {saving ? "Saving..." : editing ? "Update Package" : "Create Package"}
             </button>
             <button
               onClick={closeForm}
-              className="border-2 border-border px-4 py-2 text-xs font-mono uppercase text-muted-foreground hover:border-muted-foreground"
+              className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground transition-colors"
             >
               Cancel
             </button>
@@ -418,27 +418,27 @@ function PackagesPage() {
         </div>
       )}
 
-      <div className="border-2 border-border bg-card overflow-x-auto">
+      <div className="rounded-lg border border-border bg-card overflow-x-auto">
         {loading ? (
-          <div className="p-8 text-center text-xs font-mono text-muted-foreground">Loading...</div>
+          <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
         ) : (
-          <table className="w-full text-xs font-mono">
+          <table className="w-full text-sm">
             <thead>
-              <tr className="border-b-2 border-border">
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Image</th>
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Name</th>
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Price (LKR)</th>
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Duration</th>
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Capacity</th>
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Status</th>
-                <th className="text-left py-3 px-3 uppercase text-muted-foreground">Actions</th>
+              <tr className="border-b border-border">
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Image</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Name</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Price (LKR)</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Duration</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Capacity</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Status</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody>
               {packages.map((pkg) => (
-                <tr key={pkg.package_id} className="border-b border-border hover:bg-muted/20">
+                <tr key={pkg.package_id} className="border-b border-border last:border-0 hover:bg-muted/20">
                   <td className="py-2 px-3">
-                    <div className="h-12 w-16 border border-border bg-background flex items-center justify-center overflow-hidden">
+                    <div className="h-12 w-16 rounded-md border border-border bg-background flex items-center justify-center overflow-hidden">
                       {pkg.image_url ? (
                         <img src={imageSrc(pkg.image_url)!} alt={pkg.name} className="h-full w-full object-cover" />
                       ) : (
@@ -447,9 +447,9 @@ function PackagesPage() {
                     </div>
                   </td>
                   <td className="py-3 px-3">
-                    <p className="text-foreground font-bold">{pkg.name}</p>
+                    <p className="text-foreground font-semibold">{pkg.name}</p>
                     {pkg.description && (
-                      <p className="text-muted-foreground text-[10px] mt-0.5 line-clamp-2 max-w-xs">
+                      <p className="text-muted-foreground text-sm mt-0.5 line-clamp-2 max-w-xs">
                         {pkg.description.split("\n").filter(Boolean).join(" · ")}
                       </p>
                     )}
@@ -460,7 +460,7 @@ function PackagesPage() {
                   <td className="py-3 px-3 text-foreground">{fmtDuration(pkg.estimated_duration)}</td>
                   <td className="py-3 px-3 text-foreground">{pkg.max_capacity}</td>
                   <td className="py-3 px-3">
-                    <span className={`text-[10px] uppercase font-bold ${pkg.is_active ? "text-accent" : "text-muted-foreground"}`}>
+                    <span className={`text-sm font-medium ${pkg.is_active ? "text-accent" : "text-muted-foreground"}`}>
                       {pkg.is_active ? "Active" : "Inactive"}
                     </span>
                   </td>

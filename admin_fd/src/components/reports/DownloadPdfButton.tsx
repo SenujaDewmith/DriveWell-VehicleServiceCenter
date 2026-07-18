@@ -29,12 +29,12 @@ export function DownloadPdfButton({ elementId, filename, title }: DownloadPdfBut
       <button
         onClick={handleDownload}
         disabled={downloading}
-        className="flex items-center gap-2 border-2 border-accent bg-accent px-3 py-2 text-xs font-mono uppercase font-bold text-accent-foreground hover:opacity-90 disabled:opacity-50"
+        className="flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50"
       >
         {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
         {downloading ? "Generating..." : "Download PDF"}
       </button>
-      {error && <span className="text-[10px] font-mono text-destructive">{error}</span>}
+      {error && <span className="text-sm text-destructive">{error}</span>}
     </div>
   );
 }

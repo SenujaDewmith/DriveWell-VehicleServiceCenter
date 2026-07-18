@@ -4,6 +4,24 @@ const { sendStatusUpdate } = require("../services/email.service");
 const { logActivity } = require("../lib/activityLogger");
 
 const NOTIFY_STATUSES = ["Completed", "Ready for Pickup"];
+const SERVICE_STAFF_ROLE = 4;
+
+// Minimal staff picklist for the assignment dropdown — Supervisor doesn't have
+// access to the full /api/users/staff (Manager-only) listing.
+const listServiceStaffOptions = async (req, res) => {
+  try {
+    const staff = await prisma.user.findMany({
+      where: { role_id: SERVICE_STAFF_ROLE, account_status: "active" },
+      select: { user_id: true, staff: { select: { full_name: true } } },
+    });
+    res.status(200).json({
+      staff: staff.map((s) => ({ user_id: s.user_id, full_name: s.staff?.full_name ?? null })),
+    });
+  } catch (error) {
+    logger.error(`listServiceStaffOptions failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
 
 const getServiceRecord = async (req, res) => {
   const { booking_id } = req.params;
@@ -15,6 +33,7 @@ const getServiceRecord = async (req, res) => {
         assignments: {
           include: { staff: { select: { staff: { select: { full_name: true } } } } },
         },
+        items: { include: { catalog_item: true }, orderBy: { created_at: "asc" } },
       },
     });
     if (!record) return res.status(404).json({ message: "Service record not found" });
@@ -23,15 +42,25 @@ const getServiceRecord = async (req, res) => {
       ...record,
       supervisor_name: record.supervisor?.staff?.full_name ?? null,
       supervisor: undefined,
+      items: record.items.map((i) => ({
+        item_id: i.item_id,
+        record_id: i.record_id,
+        catalog_item_id: i.catalog_item_id,
+        catalog_item_name: i.catalog_item?.name ?? null,
+        description: i.description,
+        quantity: i.quantity,
+      })),
     };
 
-    const assignments = record.assignments.map((a) => ({
-      assignment_id: a.assignment_id,
-      record_id: a.record_id,
-      staff_id: a.staff_id,
-      task_type: a.task_type,
-      staff_name: a.staff?.staff?.full_name ?? null,
-    }));
+    const assignments = record.assignments
+      .sort((a, b) => a.assignment_id - b.assignment_id)
+      .map((a) => ({
+        assignment_id: a.assignment_id,
+        record_id: a.record_id,
+        staff_id: a.staff_id,
+        work_note: a.work_note,
+        staff_name: a.staff?.staff?.full_name ?? null,
+      }));
 
     res.status(200).json({ record: flatRecord, assignments });
   } catch (error) {
@@ -43,7 +72,7 @@ const getServiceRecord = async (req, res) => {
 const createServiceRecord = async (req, res) => {
   const { user_id } = req.user;
   const { booking_id } = req.params;
-  const { remarks, additional_work, consumables, additional_charges } = req.body;
+  const { remarks } = req.body;
 
   try {
     const record = await prisma.$transaction(async (tx) => {
@@ -70,9 +99,6 @@ const createServiceRecord = async (req, res) => {
           reservation_id: parseInt(booking_id),
           supervisor_id: user_id,
           remarks: remarks || null,
-          additional_work: additional_work || null,
-          consumables: consumables || null,
-          additional_charges: additional_charges || 0,
           started_at: new Date(),
         },
       });
@@ -96,16 +122,13 @@ const createServiceRecord = async (req, res) => {
 
 const updateServiceRecord = async (req, res) => {
   const { booking_id } = req.params;
-  const { remarks, additional_work, consumables, additional_charges, quality_checked } = req.body;
+  const { remarks, quality_checked } = req.body;
 
   try {
     const record = await prisma.serviceRecord.update({
       where: { reservation_id: parseInt(booking_id) },
       data: {
         remarks: remarks || null,
-        additional_work: additional_work || null,
-        consumables: consumables || null,
-        additional_charges: additional_charges ?? 0,
         quality_checked: quality_checked ?? false,
       },
     });
@@ -168,12 +191,16 @@ const updateStatus = async (req, res) => {
   }
 };
 
+// A service is assumed to involve at most 3 contributing staff members —
+// matches the fixed 3-slot assignment UI on the Supervisor dashboard.
+const MAX_STAFF_PER_RECORD = 3;
+
 const assignStaff = async (req, res) => {
   const { booking_id } = req.params;
-  const { staff_id, task_type } = req.body;
+  const { staff_id, work_note } = req.body;
 
-  if (!staff_id || !task_type)
-    return res.status(400).json({ message: "staff_id and task_type are required" });
+  if (!staff_id)
+    return res.status(400).json({ message: "staff_id is required" });
 
   try {
     const record = await prisma.serviceRecord.findUnique({
@@ -182,15 +209,63 @@ const assignStaff = async (req, res) => {
     });
     if (!record) return res.status(404).json({ message: "Service record not found" });
 
+    const existingCount = await prisma.serviceStaffAssignment.count({
+      where: { record_id: record.record_id },
+    });
+    if (existingCount >= MAX_STAFF_PER_RECORD)
+      return res.status(400).json({ message: `A service can have at most ${MAX_STAFF_PER_RECORD} staff contributors` });
+
     const assignment = await prisma.serviceStaffAssignment.create({
-      data: { record_id: record.record_id, staff_id: parseInt(staff_id), task_type },
+      data: { record_id: record.record_id, staff_id: parseInt(staff_id), work_note: work_note || null },
+      include: { staff: { select: { staff: { select: { full_name: true } } } } },
     });
     logActivity(prisma, { user_id: req.user.user_id, action: "STAFF_ASSIGNED", entity_type: "service_record", entity_id: record.record_id });
-    res.status(201).json({ message: "Staff assigned", assignment });
+    res.status(201).json({
+      message: "Staff assigned",
+      assignment: {
+        assignment_id: assignment.assignment_id,
+        record_id: assignment.record_id,
+        staff_id: assignment.staff_id,
+        work_note: assignment.work_note,
+        staff_name: assignment.staff?.staff?.full_name ?? null,
+      },
+    });
   } catch (error) {
     if (error.code === "P2002")
-      return res.status(200).json({ message: "Staff already assigned", assignment: null });
+      return res.status(400).json({ message: "This staff member is already assigned to this service" });
     logger.error(`assignStaff failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const updateAssignment = async (req, res) => {
+  const { assignment_id } = req.params;
+  const { staff_id, work_note } = req.body;
+
+  try {
+    const assignment = await prisma.serviceStaffAssignment.update({
+      where: { assignment_id: parseInt(assignment_id) },
+      data: {
+        ...(staff_id !== undefined && { staff_id: parseInt(staff_id) }),
+        ...(work_note !== undefined && { work_note: work_note || null }),
+      },
+      include: { staff: { select: { staff: { select: { full_name: true } } } } },
+    });
+    res.status(200).json({
+      message: "Assignment updated",
+      assignment: {
+        assignment_id: assignment.assignment_id,
+        record_id: assignment.record_id,
+        staff_id: assignment.staff_id,
+        work_note: assignment.work_note,
+        staff_name: assignment.staff?.staff?.full_name ?? null,
+      },
+    });
+  } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Assignment not found" });
+    if (error.code === "P2002")
+      return res.status(400).json({ message: "This staff member is already assigned to this service" });
+    logger.error(`updateAssignment failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -209,7 +284,75 @@ const removeStaffAssignment = async (req, res) => {
   }
 };
 
+// Supervisor documents additional work/parts found necessary during service —
+// pick from the manager's charge catalog, or note something custom. No price:
+// pricing is the cashier's call at invoice time.
+const addServiceRecordItem = async (req, res) => {
+  const { booking_id } = req.params;
+  const { catalog_item_id, description, quantity } = req.body;
+
+  if (!catalog_item_id && !description)
+    return res.status(400).json({ message: "catalog_item_id or description is required" });
+
+  try {
+    const record = await prisma.serviceRecord.findUnique({
+      where: { reservation_id: parseInt(booking_id) },
+      select: { record_id: true },
+    });
+    if (!record) return res.status(404).json({ message: "Service record not found" });
+
+    let itemDescription = description;
+    if (catalog_item_id && !itemDescription) {
+      const catalogItem = await prisma.chargeCatalogItem.findUnique({
+        where: { catalog_item_id: parseInt(catalog_item_id) },
+        select: { name: true },
+      });
+      if (!catalogItem) return res.status(404).json({ message: "Charge catalog item not found" });
+      itemDescription = catalogItem.name;
+    }
+
+    const item = await prisma.serviceRecordItem.create({
+      data: {
+        record_id: record.record_id,
+        catalog_item_id: catalog_item_id ? parseInt(catalog_item_id) : null,
+        description: itemDescription,
+        quantity: quantity ? parseInt(quantity) : 1,
+      },
+      include: { catalog_item: true },
+    });
+    res.status(201).json({
+      message: "Service item added",
+      item: {
+        item_id: item.item_id,
+        record_id: item.record_id,
+        catalog_item_id: item.catalog_item_id,
+        catalog_item_name: item.catalog_item?.name ?? null,
+        description: item.description,
+        quantity: item.quantity,
+      },
+    });
+  } catch (error) {
+    logger.error(`addServiceRecordItem failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const removeServiceRecordItem = async (req, res) => {
+  const { item_id } = req.params;
+  try {
+    await prisma.serviceRecordItem.delete({
+      where: { item_id: parseInt(item_id) },
+    });
+    res.status(200).json({ message: "Service item removed" });
+  } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Service item not found" });
+    logger.error(`removeServiceRecordItem failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 module.exports = {
   getServiceRecord, createServiceRecord, updateServiceRecord,
-  updateStatus, assignStaff, removeStaffAssignment,
+  updateStatus, assignStaff, updateAssignment, removeStaffAssignment,
+  addServiceRecordItem, removeServiceRecordItem, listServiceStaffOptions,
 };

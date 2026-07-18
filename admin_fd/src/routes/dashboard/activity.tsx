@@ -56,7 +56,7 @@ function ActivityPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-extrabold tracking-tighter">ACTIVITY LOG</h1>
+        <h1 className="text-2xl font-bold text-foreground">Activity Log</h1>
         <DownloadPdfButton elementId="activity-report-content" filename="drivewell-activity-log.pdf" title="Activity Log" />
       </div>
 
@@ -69,15 +69,15 @@ function ActivityPage() {
       />
 
       {error && (
-        <p className="text-xs font-mono text-destructive border border-destructive px-3 py-2">{error}</p>
+        <p className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md px-3 py-2">{error}</p>
       )}
 
       {loading ? (
-        <div className="text-xs font-mono text-muted-foreground p-8">Loading...</div>
+        <div className="text-sm text-muted-foreground p-8">Loading...</div>
       ) : (
-        <div id="activity-report-content" className="border-2 border-border bg-card">
+        <div id="activity-report-content" className="rounded-lg border border-border bg-card">
           {logs.length === 0 ? (
-            <div className="p-8 text-center text-xs font-mono text-muted-foreground">
+            <div className="p-8 text-center text-sm text-muted-foreground">
               No activity logged for this period.
             </div>
           ) : (
@@ -85,25 +85,25 @@ function ActivityPage() {
               {logs.map((log) => (
                 <div key={log.log_id} className="flex items-start gap-4 p-4">
                   <div className="min-w-35">
-                    <p className="text-[10px] font-mono text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       {new Date(log.created_at).toLocaleString()}
                     </p>
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span
-                        className={`text-[10px] font-mono uppercase font-bold ${actionColors[log.action] ?? "text-muted-foreground"}`}
+                        className={`text-sm font-medium ${actionColors[log.action] ?? "text-muted-foreground"}`}
                       >
                         {log.action.replace(/_/g, " ")}
                       </span>
                       {log.email && (
-                        <span className="text-[10px] font-mono text-muted-foreground">
+                        <span className="text-sm text-muted-foreground">
                           by {log.email}
                         </span>
                       )}
                     </div>
                     {(log.entity_type ?? log.entity_id) && (
-                      <p className="text-xs font-mono text-foreground">
+                      <p className="text-sm text-foreground">
                         {log.entity_type}
                         {log.entity_id != null && ` #${log.entity_id}`}
                       </p>

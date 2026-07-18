@@ -26,6 +26,14 @@ const flattenInvoice = (i) => ({
   ...flattenVehicleRef(i.reservation?.vehicle),
   package_name: i.reservation?.package?.name,
   cashier_name: i.cashier?.staff?.full_name ?? null,
+  items: (i.items ?? []).map((it) => ({
+    invoice_item_id: it.invoice_item_id,
+    catalog_item_id: it.catalog_item_id,
+    description: it.description,
+    unit_price: it.unit_price,
+    quantity: it.quantity,
+    line_total: it.line_total,
+  })),
 });
 
 const INVOICE_INCLUDE = {
@@ -45,6 +53,7 @@ const INVOICE_INCLUDE = {
     },
   },
   cashier: { select: { staff: { select: { full_name: true } } } },
+  items: true,
 };
 
 const listInvoices = async (req, res) => {
@@ -105,16 +114,73 @@ const getInvoice = async (req, res) => {
   }
 };
 
+// Everything a cashier needs to build an itemized invoice for a booking: the package's
+// base ("upwards") price, and the supervisor's structured notes on additional work found,
+// each paired with its manager-catalog suggested price so the cashier isn't pricing blind.
+const getInvoiceDraft = async (req, res) => {
+  const { booking_id } = req.params;
+  try {
+    const booking = await prisma.reservation.findUnique({
+      where: { reservation_id: parseInt(booking_id) },
+      include: {
+        customer_user: { select: { email: true, customer: { select: { full_name: true } } } },
+        vehicle: VEHICLE_SELECT,
+        package: { select: { name: true, price: true } },
+        service_record: {
+          include: { items: { include: { catalog_item: true }, orderBy: { created_at: "asc" } } },
+        },
+      },
+    });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+
+    res.status(200).json({
+      reservation_id: booking.reservation_id,
+      booking_ref: booking.booking_ref,
+      customer_name: booking.customer_user?.customer?.full_name,
+      ...flattenVehicleRef(booking.vehicle),
+      package_name: booking.package?.name,
+      package_price: booking.package?.price,
+      remarks: booking.service_record?.remarks ?? null,
+      suggested_items: (booking.service_record?.items ?? []).map((it) => ({
+        catalog_item_id: it.catalog_item_id,
+        description: it.description,
+        quantity: it.quantity,
+        suggested_price: it.catalog_item?.default_price ?? null,
+      })),
+    });
+  } catch (error) {
+    logger.error(`getInvoiceDraft failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 const createInvoice = async (req, res) => {
   const { user_id } = req.user;
-  const { reservation_id, base_amount, additional_charges, discount, payment_method, notes } = req.body;
+  const { reservation_id, base_amount, items, discount, payment_method, notes } = req.body;
 
   if (!reservation_id || base_amount === undefined)
     return res.status(400).json({ message: "reservation_id and base_amount are required" });
 
-  const add = parseFloat(additional_charges) || 0;
+  const lineItems = Array.isArray(items) ? items : [];
+  for (const it of lineItems) {
+    if (!it.description || it.unit_price === undefined)
+      return res.status(400).json({ message: "Each item requires a description and unit_price" });
+  }
+
   const dis = parseFloat(discount) || 0;
-  const total = parseFloat(base_amount) + add - dis;
+  const computedItems = lineItems.map((it) => {
+    const qty = parseInt(it.quantity) || 1;
+    const unitPrice = parseFloat(it.unit_price);
+    return {
+      catalog_item_id: it.catalog_item_id ? parseInt(it.catalog_item_id) : null,
+      description: it.description,
+      unit_price: unitPrice,
+      quantity: qty,
+      line_total: unitPrice * qty,
+    };
+  });
+  const additionalCharges = computedItems.reduce((sum, it) => sum + it.line_total, 0);
+  const total = parseFloat(base_amount) + additionalCharges - dis;
 
   try {
     const booking = await prisma.reservation.findUnique({
@@ -125,17 +191,22 @@ const createInvoice = async (req, res) => {
     if (!["Completed", "Ready for Pickup"].includes(booking.status))
       return res.status(400).json({ message: "Can only generate invoice for Completed or Ready for Pickup bookings" });
 
-    const invoice = await prisma.invoice.create({
-      data: {
-        reservation_id: parseInt(reservation_id),
-        cashier_id: user_id,
-        base_amount,
-        additional_charges: add,
-        discount: dis,
-        total_amount: total,
-        payment_method: payment_method || null,
-        notes: notes || null,
-      },
+    const invoice = await prisma.$transaction(async (tx) => {
+      const created = await tx.invoice.create({
+        data: {
+          reservation_id: parseInt(reservation_id),
+          cashier_id: user_id,
+          base_amount,
+          additional_charges: additionalCharges,
+          discount: dis,
+          total_amount: total,
+          payment_method: payment_method || null,
+          notes: notes || null,
+          items: { create: computedItems },
+        },
+        include: { items: true },
+      });
+      return created;
     });
 
     logger.info(`Invoice created — invoice_id: ${invoice.invoice_id}, reservation_id: ${reservation_id}`);
@@ -173,4 +244,4 @@ const updatePaymentStatus = async (req, res) => {
   }
 };
 
-module.exports = { listInvoices, getInvoice, createInvoice, updatePaymentStatus };
+module.exports = { listInvoices, getInvoice, getInvoiceDraft, createInvoice, updatePaymentStatus };

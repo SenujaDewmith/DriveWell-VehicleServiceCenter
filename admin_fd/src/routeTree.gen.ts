@@ -19,6 +19,7 @@ import { Route as DashboardScheduleRouteImport } from './routes/dashboard/schedu
 import { Route as DashboardRevenueRouteImport } from './routes/dashboard/revenue'
 import { Route as DashboardPerformanceRouteImport } from './routes/dashboard/performance'
 import { Route as DashboardPackagesRouteImport } from './routes/dashboard/packages'
+import { Route as DashboardChargeCatalogRouteImport } from './routes/dashboard/charge-catalog'
 import { Route as DashboardBookingsRouteImport } from './routes/dashboard/bookings'
 import { Route as DashboardActivityRouteImport } from './routes/dashboard/activity'
 
@@ -72,6 +73,11 @@ const DashboardPackagesRoute = DashboardPackagesRouteImport.update({
   path: '/packages',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardChargeCatalogRoute = DashboardChargeCatalogRouteImport.update({
+  id: '/charge-catalog',
+  path: '/charge-catalog',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardBookingsRoute = DashboardBookingsRouteImport.update({
   id: '/bookings',
   path: '/bookings',
@@ -89,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/dashboard/activity': typeof DashboardActivityRoute
   '/dashboard/bookings': typeof DashboardBookingsRoute
+  '/dashboard/charge-catalog': typeof DashboardChargeCatalogRoute
   '/dashboard/packages': typeof DashboardPackagesRoute
   '/dashboard/performance': typeof DashboardPerformanceRoute
   '/dashboard/revenue': typeof DashboardRevenueRoute
@@ -102,6 +109,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/dashboard/activity': typeof DashboardActivityRoute
   '/dashboard/bookings': typeof DashboardBookingsRoute
+  '/dashboard/charge-catalog': typeof DashboardChargeCatalogRoute
   '/dashboard/packages': typeof DashboardPackagesRoute
   '/dashboard/performance': typeof DashboardPerformanceRoute
   '/dashboard/revenue': typeof DashboardRevenueRoute
@@ -117,6 +125,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/dashboard/activity': typeof DashboardActivityRoute
   '/dashboard/bookings': typeof DashboardBookingsRoute
+  '/dashboard/charge-catalog': typeof DashboardChargeCatalogRoute
   '/dashboard/packages': typeof DashboardPackagesRoute
   '/dashboard/performance': typeof DashboardPerformanceRoute
   '/dashboard/revenue': typeof DashboardRevenueRoute
@@ -133,6 +142,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/dashboard/activity'
     | '/dashboard/bookings'
+    | '/dashboard/charge-catalog'
     | '/dashboard/packages'
     | '/dashboard/performance'
     | '/dashboard/revenue'
@@ -146,6 +156,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/dashboard/activity'
     | '/dashboard/bookings'
+    | '/dashboard/charge-catalog'
     | '/dashboard/packages'
     | '/dashboard/performance'
     | '/dashboard/revenue'
@@ -160,6 +171,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/dashboard/activity'
     | '/dashboard/bookings'
+    | '/dashboard/charge-catalog'
     | '/dashboard/packages'
     | '/dashboard/performance'
     | '/dashboard/revenue'
@@ -247,6 +259,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardPackagesRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/charge-catalog': {
+      id: '/dashboard/charge-catalog'
+      path: '/charge-catalog'
+      fullPath: '/dashboard/charge-catalog'
+      preLoaderRoute: typeof DashboardChargeCatalogRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/bookings': {
       id: '/dashboard/bookings'
       path: '/bookings'
@@ -267,6 +286,7 @@ declare module '@tanstack/react-router' {
 interface DashboardRouteChildren {
   DashboardActivityRoute: typeof DashboardActivityRoute
   DashboardBookingsRoute: typeof DashboardBookingsRoute
+  DashboardChargeCatalogRoute: typeof DashboardChargeCatalogRoute
   DashboardPackagesRoute: typeof DashboardPackagesRoute
   DashboardPerformanceRoute: typeof DashboardPerformanceRoute
   DashboardRevenueRoute: typeof DashboardRevenueRoute
@@ -279,6 +299,7 @@ interface DashboardRouteChildren {
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardActivityRoute: DashboardActivityRoute,
   DashboardBookingsRoute: DashboardBookingsRoute,
+  DashboardChargeCatalogRoute: DashboardChargeCatalogRoute,
   DashboardPackagesRoute: DashboardPackagesRoute,
   DashboardPerformanceRoute: DashboardPerformanceRoute,
   DashboardRevenueRoute: DashboardRevenueRoute,

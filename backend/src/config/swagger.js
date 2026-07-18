@@ -139,6 +139,18 @@ const options = {
             start_time:   { type: "string",  example: "08:00", description: "HH:MM — must match one of the package's generated appointment windows for that date" },
           },
         },
+        // ── Charge Catalog ──────────────────────────────────────
+        ChargeCatalogItem: {
+          type: "object",
+          properties: {
+            catalog_item_id: { type: "integer", example: 1 },
+            name:            { type: "string",  example: "Brake Pad Replacement (Front)" },
+            description:     { type: "string",  example: "Includes pads and labor" },
+            default_price:   { type: "number",  example: 3500.00 },
+            category:        { type: "string",  example: "Parts" },
+            is_active:       { type: "boolean", example: true },
+          },
+        },
         // ── Service Records ─────────────────────────────────────
         ServiceRecord: {
           type: "object",
@@ -147,12 +159,22 @@ const options = {
             reservation_id:     { type: "integer", example: 1 },
             supervisor_id:      { type: "integer", example: 3 },
             remarks:            { type: "string",  example: "Oil changed, filters replaced" },
-            additional_work:    { type: "string",  example: "Replaced brake pads" },
-            consumables:        { type: "string",  example: "5W-30 engine oil, air filter" },
-            additional_charges: { type: "number",  example: 1500.00 },
             quality_checked:    { type: "boolean", example: false },
             started_at:         { type: "string",  format: "date-time" },
             completed_at:       { type: "string",  format: "date-time" },
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  item_id:            { type: "integer", example: 1 },
+                  catalog_item_id:    { type: "integer", example: 1 },
+                  catalog_item_name:  { type: "string",  example: "Brake Pad Replacement (Front)" },
+                  description:        { type: "string",  example: "Rear brake pads worn — needs replacement" },
+                  quantity:           { type: "integer", example: 1 },
+                },
+              },
+            },
           },
         },
         // ── Invoices ────────────────────────────────────────────
@@ -170,18 +192,44 @@ const options = {
             payment_method:     { type: "string",  example: "Cash" },
             notes:              { type: "string",  example: "Loyalty discount applied" },
             generated_at:       { type: "string",  format: "date-time" },
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  invoice_item_id: { type: "integer", example: 1 },
+                  catalog_item_id: { type: "integer", example: 1 },
+                  description:     { type: "string",  example: "Brake Pad Replacement (Front)" },
+                  unit_price:      { type: "number",  example: 3500.00 },
+                  quantity:        { type: "integer", example: 1 },
+                  line_total:      { type: "number",  example: 3500.00 },
+                },
+              },
+            },
           },
         },
         InvoiceInput: {
           type: "object",
           required: ["reservation_id", "base_amount"],
           properties: {
-            reservation_id:     { type: "integer", example: 1 },
-            base_amount:        { type: "number",  example: 4500.00 },
-            additional_charges: { type: "number",  example: 1500.00 },
-            discount:           { type: "number",  example: 200.00 },
-            payment_method:     { type: "string",  example: "Cash" },
-            notes:              { type: "string",  example: "" },
+            reservation_id: { type: "integer", example: 1 },
+            base_amount:    { type: "number",  example: 4500.00 },
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                required: ["description", "unit_price"],
+                properties: {
+                  catalog_item_id: { type: "integer", example: 1 },
+                  description:     { type: "string",  example: "Brake Pad Replacement (Front)" },
+                  unit_price:      { type: "number",  example: 3500.00 },
+                  quantity:        { type: "integer", example: 1 },
+                },
+              },
+            },
+            discount:       { type: "number",  example: 200.00 },
+            payment_method: { type: "string",  example: "Cash" },
+            notes:          { type: "string",  example: "" },
           },
         },
         // ── Feedback ────────────────────────────────────────────

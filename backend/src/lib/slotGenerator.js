@@ -27,7 +27,7 @@ const getBlockedRangesForDate = async (client, dateStr) => {
     where: { OR: [{ date: null }, { date: new Date(dateStr) }] },
   });
   return rows
-    .map((r) => ({ start: dateColToMinutes(r.start_time), end: dateColToMinutes(r.end_time) }))
+    .map((r) => ({ start: dateColToMinutes(r.start_time), end: dateColToMinutes(r.end_time), reason: r.reason }))
     .sort((a, b) => a.start - b.start);
 };
 
@@ -52,7 +52,20 @@ const generateWindows = (dayStartMin, dayEndMin, durationMin, blockedRanges) => 
 // True if two [start,end) minute ranges overlap
 const rangesOverlap = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && aEnd > bStart;
 
+// Minimum notice required before an appointment's start time — no last-minute or already-passed bookings
+const MIN_LEAD_MINUTES = 60;
+
+// Server's current local date key ("YYYY-MM-DD") and minutes-since-midnight, for filtering
+// out past/too-soon windows on today's date. Assumes server clock matches the business's timezone.
+const getLocalNow = () => {
+  const now = new Date();
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  return { todayKey, nowMinutes };
+};
+
 module.exports = {
   timeStrToMinutes, dateColToMinutes, minutesToTimeDate, minutesToHHMM,
   getBlockedRangesForDate, generateWindows, rangesOverlap,
+  MIN_LEAD_MINUTES, getLocalNow,
 };

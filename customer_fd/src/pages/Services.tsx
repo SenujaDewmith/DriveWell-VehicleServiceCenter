@@ -40,8 +40,8 @@ export default function Services() {
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold mb-4">Our Service Packages</h1>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Professional vehicle care tailored to your needs. All prices are base rates and may vary
-          based on vehicle condition.
+          Professional vehicle care tailored to your needs. Prices shown are starting rates and may
+          increase based on your vehicle's type and condition.
         </p>
       </div>
 
@@ -87,6 +87,7 @@ export default function Services() {
                     <span className="text-3xl font-bold text-cta">
                       LKR {parseFloat(pkg.price).toLocaleString()}
                     </span>
+                    <span className="text-sm font-medium text-muted-foreground">Upwards</span>
                   </div>
                   <div className="flex items-center gap-2 text-muted-foreground mt-1">
                     <Clock className="h-4 w-4 shrink-0" />

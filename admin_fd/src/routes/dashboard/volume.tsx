@@ -74,7 +74,7 @@ function VolumePage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-2xl font-extrabold tracking-tighter">SERVICE VOLUME</h1>
+        <h1 className="text-2xl font-bold text-foreground">Service Volume</h1>
         <DownloadPdfButton elementId="volume-report-content" filename="drivewell-volume-report.pdf" title="Service Volume Report" />
       </div>
 
@@ -87,31 +87,31 @@ function VolumePage() {
       />
 
       {error && (
-        <p className="text-xs font-mono text-destructive border border-destructive px-3 py-2">{error}</p>
+        <p className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md px-3 py-2">{error}</p>
       )}
 
       {loading ? (
-        <div className="text-xs font-mono text-muted-foreground p-8">Loading...</div>
+        <div className="text-sm text-muted-foreground p-8">Loading...</div>
       ) : (
         <div id="volume-report-content" className="space-y-6 bg-background p-1">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="border-2 border-border bg-card p-4">
-              <p className="text-[10px] font-mono uppercase text-muted-foreground">Total Services</p>
-              <p className="text-2xl font-extrabold text-foreground mt-1">
+            <div className="rounded-lg border border-border bg-card p-4">
+              <p className="text-sm text-muted-foreground">Total Services</p>
+              <p className="text-2xl font-bold text-foreground mt-1">
                 {totalServices.toLocaleString()}
               </p>
             </div>
-            <div className="border-2 border-border bg-card p-4">
-              <p className="text-[10px] font-mono uppercase text-muted-foreground">Most Popular</p>
-              <p className="text-2xl font-extrabold text-foreground mt-1">{mostPopular}</p>
+            <div className="rounded-lg border border-border bg-card p-4">
+              <p className="text-sm text-muted-foreground">Most Popular</p>
+              <p className="text-2xl font-bold text-foreground mt-1">{mostPopular}</p>
             </div>
           </div>
 
           {byPackage.length > 0 ? (
             <>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="border-2 border-border bg-card p-4">
-                  <h3 className="text-xs font-mono uppercase text-muted-foreground mb-4">
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <h3 className="text-sm font-semibold text-foreground mb-4">
                     Volume by Package
                   </h3>
                   <ResponsiveContainer width="100%" height={300}>
@@ -119,31 +119,31 @@ function VolumePage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                       <XAxis
                         type="number"
-                        tick={{ fontSize: 10, fontFamily: "DM Mono" }}
+                        tick={{ fontSize: 12 }}
                         stroke="var(--color-muted-foreground)"
                       />
                       <YAxis
                         dataKey="name"
                         type="category"
                         width={140}
-                        tick={{ fontSize: 9, fontFamily: "DM Mono" }}
+                        tick={{ fontSize: 11 }}
                         stroke="var(--color-muted-foreground)"
                       />
                       <Tooltip
                         contentStyle={{
                           background: "var(--color-card)",
-                          border: "2px solid var(--color-border)",
-                          fontFamily: "DM Mono",
-                          fontSize: 11,
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 8,
+                          fontSize: 12,
                         }}
                       />
-                      <Bar dataKey="count" fill="#A7D129" />
+                      <Bar dataKey="count" fill="#A7D129" radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
 
-                <div className="border-2 border-border bg-card p-4">
-                  <h3 className="text-xs font-mono uppercase text-muted-foreground mb-4">
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <h3 className="text-sm font-semibold text-foreground mb-4">
                     Distribution
                   </h3>
                   <ResponsiveContainer width="100%" height={300}>
@@ -159,9 +159,9 @@ function VolumePage() {
                       <Tooltip
                         contentStyle={{
                           background: "var(--color-card)",
-                          border: "2px solid var(--color-border)",
-                          fontFamily: "DM Mono",
-                          fontSize: 11,
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 8,
+                          fontSize: 12,
                         }}
                       />
                     </PieChart>
@@ -170,8 +170,8 @@ function VolumePage() {
               </div>
 
               {monthlyData.length > 0 && (
-                <div className="border-2 border-border bg-card p-4">
-                  <h3 className="text-xs font-mono uppercase text-muted-foreground mb-4">
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <h3 className="text-sm font-semibold text-foreground mb-4">
                     Monthly Service Count
                   </h3>
                   <ResponsiveContainer width="100%" height={300}>
@@ -179,38 +179,38 @@ function VolumePage() {
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                       <XAxis
                         dataKey="month"
-                        tick={{ fontSize: 10, fontFamily: "DM Mono" }}
+                        tick={{ fontSize: 12 }}
                         stroke="var(--color-muted-foreground)"
                       />
                       <YAxis
-                        tick={{ fontSize: 10, fontFamily: "DM Mono" }}
+                        tick={{ fontSize: 12 }}
                         stroke="var(--color-muted-foreground)"
                       />
                       <Tooltip
                         contentStyle={{
                           background: "var(--color-card)",
-                          border: "2px solid var(--color-border)",
-                          fontFamily: "DM Mono",
-                          fontSize: 11,
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 8,
+                          fontSize: 12,
                         }}
                       />
-                      <Bar dataKey="services" fill="#3E432E" />
+                      <Bar dataKey="services" fill="#3E432E" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               )}
 
-              <div className="border-2 border-border bg-card overflow-x-auto">
-                <table className="w-full text-xs font-mono">
+              <div className="rounded-lg border border-border bg-card overflow-x-auto">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b-2 border-border">
-                      <th className="text-left py-3 px-3 uppercase text-muted-foreground">Status</th>
-                      <th className="text-left py-3 px-3 uppercase text-muted-foreground">Count</th>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-3 px-3 font-medium text-muted-foreground">Status</th>
+                      <th className="text-left py-3 px-3 font-medium text-muted-foreground">Count</th>
                     </tr>
                   </thead>
                   <tbody>
                     {byStatus.map((s) => (
-                      <tr key={s.status} className="border-b border-border">
+                      <tr key={s.status} className="border-b border-border last:border-0">
                         <td className="py-2 px-3 text-foreground">{s.status}</td>
                         <td className="py-2 px-3 text-foreground">{s.count}</td>
                       </tr>
@@ -220,7 +220,7 @@ function VolumePage() {
               </div>
             </>
           ) : (
-            <div className="border-2 border-border bg-card p-8 text-center text-xs font-mono text-muted-foreground">
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
               No service volume data available for this period.
             </div>
           )}

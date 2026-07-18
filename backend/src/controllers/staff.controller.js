@@ -16,12 +16,14 @@ const myServices = async (req, res) => {
     }
 
     const rows = await prisma.serviceStaffAssignment.findMany({
-      where: { staff_id: user_id },
+      where: {
+        staff_id: user_id,
+        ...(Object.keys(dateFilter).length > 0 && { record: { reservation: dateFilter } }),
+      },
       include: {
         record: {
           include: {
             reservation: {
-              where: dateFilter,
               include: {
                 customer_user: { select: { customer: { select: { full_name: true } } } },
                 vehicle: VEHICLE_SELECT,
@@ -47,9 +49,8 @@ const myServices = async (req, res) => {
           customer_name: r.customer_user?.customer?.full_name ?? null,
           ...flattenVehicleRef(r.vehicle),
           package_name: r.package?.name,
-          task_type: a.task_type,
+          work_note: a.work_note,
           remarks: sr.remarks,
-          additional_work: sr.additional_work,
           rating: r.feedback?.rating ?? null,
           feedback_comment: r.feedback?.comment ?? null,
         };
@@ -75,12 +76,14 @@ const myPerformance = async (req, res) => {
     }
 
     const assignments = await prisma.serviceStaffAssignment.findMany({
-      where: { staff_id: user_id },
+      where: {
+        staff_id: user_id,
+        ...(Object.keys(dateFilter).length > 0 && { record: { reservation: dateFilter } }),
+      },
       include: {
         record: {
           include: {
             reservation: {
-              where: dateFilter,
               include: { feedback: { select: { rating: true, feedback_id: true } } },
             },
           },

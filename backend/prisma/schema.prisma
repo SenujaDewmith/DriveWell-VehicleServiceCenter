@@ -130,10 +130,13 @@ model ServicePackage {
 }
 
 model WorkingConfig {
-  config_id      Int      @id @default(autoincrement())
-  working_days   String   @default("1,2,3,4,5")
-  day_start_time DateTime @db.Time
-  day_end_time   DateTime @db.Time
+  config_id               Int      @id @default(autoincrement())
+  working_days            String   @default("1,2,3,4,5")
+  day_start_time          DateTime @db.Time
+  day_end_time            DateTime @db.Time
+  // Same-day bookings stop being accepted this many minutes before closing —
+  // e.g. 240 (4h) with an 18:00 close means no new same-day bookings after 14:00.
+  same_day_cutoff_minutes Int      @default(240)
 
   @@map("working_config")
 }
@@ -172,20 +175,18 @@ model Reservation {
 }
 
 model ServiceRecord {
-  record_id          Int       @id @default(autoincrement())
-  reservation_id     Int       @unique
-  supervisor_id      Int?
-  remarks            String?
-  additional_work    String?
-  consumables        String?
-  additional_charges Decimal   @default(0) @db.Decimal(10, 2)
-  quality_checked    Boolean   @default(false)
-  started_at         DateTime?
-  completed_at       DateTime?
+  record_id       Int       @id @default(autoincrement())
+  reservation_id  Int       @unique
+  supervisor_id   Int?
+  remarks         String?
+  quality_checked Boolean   @default(false)
+  started_at      DateTime?
+  completed_at    DateTime?
 
   reservation Reservation @relation(fields: [reservation_id], references: [reservation_id], onDelete: Cascade)
-  supervisor  User?                   @relation("SupervisorRecords", fields: [supervisor_id], references: [user_id])
+  supervisor  User?                     @relation("SupervisorRecords", fields: [supervisor_id], references: [user_id])
   assignments ServiceStaffAssignment[]
+  items       ServiceRecordItem[]
 
   @@map("service_records")
 }
@@ -194,13 +195,46 @@ model ServiceStaffAssignment {
   assignment_id Int     @id @default(autoincrement())
   record_id     Int
   staff_id      Int
-  task_type     String? @db.VarChar(100)
+  work_note     String? @db.VarChar(255)
 
   record ServiceRecord @relation(fields: [record_id], references: [record_id], onDelete: Cascade)
   staff  User          @relation(fields: [staff_id], references: [user_id])
 
-  @@unique([record_id, staff_id, task_type])
+  @@unique([record_id, staff_id])
   @@map("service_staff_assignments")
+}
+
+// Manager-curated catalog of common additional repair/part charges — the
+// reference price list the cashier draws from when itemizing an invoice.
+model ChargeCatalogItem {
+  catalog_item_id Int      @id @default(autoincrement())
+  name            String   @db.VarChar(150)
+  description     String?
+  default_price   Decimal  @db.Decimal(10, 2)
+  category        String?  @db.VarChar(50)
+  is_active       Boolean  @default(true)
+  created_at      DateTime @default(now())
+
+  service_record_items ServiceRecordItem[]
+  invoice_items         InvoiceItem[]
+
+  @@map("charge_catalog_items")
+}
+
+// Structured note of additional work/parts a supervisor found necessary during
+// a service — documentation only, no price. The cashier prices these at invoice time.
+model ServiceRecordItem {
+  item_id         Int      @id @default(autoincrement())
+  record_id       Int
+  catalog_item_id Int?
+  description     String   @db.VarChar(255)
+  quantity        Int      @default(1)
+  created_at      DateTime @default(now())
+
+  record       ServiceRecord      @relation(fields: [record_id], references: [record_id], onDelete: Cascade)
+  catalog_item ChargeCatalogItem? @relation(fields: [catalog_item_id], references: [catalog_item_id])
+
+  @@map("service_record_items")
 }
 
 model Invoice {
@@ -216,10 +250,28 @@ model Invoice {
   notes              String?
   generated_at       DateTime @default(now())
 
-  reservation Reservation @relation(fields: [reservation_id], references: [reservation_id])
-  cashier     User?       @relation("CashierInvoices", fields: [cashier_id], references: [user_id])
+  reservation Reservation   @relation(fields: [reservation_id], references: [reservation_id])
+  cashier     User?         @relation("CashierInvoices", fields: [cashier_id], references: [user_id])
+  items       InvoiceItem[]
 
   @@map("invoices")
+}
+
+// Itemized invoice line — one per additional repair/part charge the cashier applies,
+// priced with the manager's charge catalog as reference (editable per case).
+model InvoiceItem {
+  invoice_item_id Int      @id @default(autoincrement())
+  invoice_id      Int
+  catalog_item_id Int?
+  description     String   @db.VarChar(255)
+  unit_price      Decimal  @db.Decimal(10, 2)
+  quantity        Int      @default(1)
+  line_total      Decimal  @db.Decimal(10, 2)
+
+  invoice      Invoice            @relation(fields: [invoice_id], references: [invoice_id], onDelete: Cascade)
+  catalog_item ChargeCatalogItem? @relation(fields: [catalog_item_id], references: [catalog_item_id])
+
+  @@map("invoice_items")
 }
 
 model Feedback {
