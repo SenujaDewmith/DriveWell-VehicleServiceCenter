@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -41,23 +42,30 @@ function fmtTime(t: string) {
 export default function Bookings() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("upcoming");
 
   useEffect(() => {
-    if (!user) { navigate("/login"); return; }
-    bookingsService.getBookings()
-      .then(({ bookings }) => setBookings(bookings))
-      .catch(() => toast.error("Failed to load bookings"))
-      .finally(() => setLoading(false));
+    if (!user) navigate("/login");
   }, [user, navigate]);
+
+  const bookingsQuery = useQuery({
+    queryKey: ["bookings"],
+    queryFn: () => bookingsService.getBookings().then((r) => r.bookings),
+    enabled: !!user,
+  });
+  const bookings = bookingsQuery.data ?? [];
+  const loading = bookingsQuery.isPending;
+
+  useEffect(() => {
+    if (bookingsQuery.isError) toast.error("Failed to load bookings");
+  }, [bookingsQuery.isError]);
 
   const handleCancel = async (id: number) => {
     try {
       await bookingsService.cancelBooking(id);
-      setBookings((prev) =>
-        prev.map((b) => (b.reservation_id === id ? { ...b, status: "Cancelled" as const } : b))
+      queryClient.setQueryData<Booking[]>(["bookings"], (prev) =>
+        (prev ?? []).map((b) => (b.reservation_id === id ? { ...b, status: "Cancelled" as const } : b))
       );
       toast.success("Booking cancelled");
     } catch (error) {

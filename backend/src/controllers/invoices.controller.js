@@ -6,7 +6,11 @@ const { VEHICLE_SELECT, flattenVehicleRef } = require("../lib/vehicleFlatten");
 
 const CUSTOMER_ROLE = 5;
 
-const flattenInvoice = (i) => ({
+// `includeSupervisorNotes` gates the supervisor's remarks/work items out of the
+// response entirely for customers — this is the same endpoint the customer app
+// calls, so internal staff notes must never reach that payload, not just be
+// hidden by that app's UI.
+const flattenInvoice = (i, { includeSupervisorNotes = false } = {}) => ({
   invoice_id: i.invoice_id,
   reservation_id: i.reservation_id,
   cashier_id: i.cashier_id,
@@ -34,6 +38,13 @@ const flattenInvoice = (i) => ({
     quantity: it.quantity,
     line_total: it.line_total,
   })),
+  ...(includeSupervisorNotes && {
+    supervisor_remarks: i.reservation?.service_record?.remarks ?? null,
+    supervisor_items: (i.reservation?.service_record?.items ?? []).map((it) => ({
+      description: it.description,
+      quantity: it.quantity,
+    })),
+  }),
 });
 
 const INVOICE_INCLUDE = {
@@ -50,6 +61,12 @@ const INVOICE_INCLUDE = {
       },
       vehicle: VEHICLE_SELECT,
       package: { select: { name: true } },
+      service_record: {
+        select: {
+          remarks: true,
+          items: { select: { description: true, quantity: true } },
+        },
+      },
     },
   },
   cashier: { select: { staff: { select: { full_name: true } } } },
@@ -58,7 +75,7 @@ const INVOICE_INCLUDE = {
 
 const listInvoices = async (req, res) => {
   const { user_id, role_id } = req.user;
-  const { from, to, payment_status } = req.query;
+  const { from, to, payment_status, q } = req.query;
 
   try {
     const where = {};
@@ -75,6 +92,16 @@ const listInvoices = async (req, res) => {
         },
       };
     }
+    if (q && q.trim()) {
+      const term = q.trim();
+      where.reservation = {
+        ...(where.reservation || {}),
+        OR: [
+          { booking_ref: { contains: term, mode: "insensitive" } },
+          { customer_user: { customer: { full_name: { contains: term, mode: "insensitive" } } } },
+        ],
+      };
+    }
 
     const rows = await prisma.invoice.findMany({
       where,
@@ -82,7 +109,8 @@ const listInvoices = async (req, res) => {
       orderBy: { generated_at: "desc" },
     });
 
-    res.status(200).json({ invoices: rows.map(flattenInvoice) });
+    const includeSupervisorNotes = role_id !== CUSTOMER_ROLE;
+    res.status(200).json({ invoices: rows.map((r) => flattenInvoice(r, { includeSupervisorNotes })) });
   } catch (error) {
     logger.error(`listInvoices failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -107,7 +135,7 @@ const getInvoice = async (req, res) => {
         return res.status(403).json({ message: "Access denied" });
     }
 
-    res.status(200).json({ invoice: flattenInvoice(row) });
+    res.status(200).json({ invoice: flattenInvoice(row, { includeSupervisorNotes: role_id !== CUSTOMER_ROLE }) });
   } catch (error) {
     logger.error(`getInvoice failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });

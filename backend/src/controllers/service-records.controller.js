@@ -3,8 +3,47 @@ const logger = require("../utils/logger");
 const { sendStatusUpdate } = require("../services/email.service");
 const { logActivity } = require("../lib/activityLogger");
 
-const NOTIFY_STATUSES = ["Completed", "Ready for Pickup"];
+const NOTIFY_STATUSES = ["Completed"];
 const SERVICE_STAFF_ROLE = 4;
+
+// A service record is finalized once the booking reaches Completed — remarks,
+// items and staff notes are locked from that point on.
+const LOCKED_STATUSES = ["Completed"];
+
+const assertBookingEditable = async (bookingId) => {
+  const reservation = await prisma.reservation.findUnique({
+    where: { reservation_id: bookingId },
+    select: { status: true },
+  });
+  if (!reservation) {
+    const err = new Error("Booking not found"); err.status = 404; throw err;
+  }
+  if (LOCKED_STATUSES.includes(reservation.status)) {
+    const err = new Error("This service record is finalized and can no longer be edited"); err.status = 409; throw err;
+  }
+};
+
+const assertRecordEditableByItemId = async (itemId) => {
+  const item = await prisma.serviceRecordItem.findUnique({
+    where: { item_id: itemId },
+    select: { record: { select: { reservation_id: true } } },
+  });
+  if (!item) {
+    const err = new Error("Service item not found"); err.status = 404; throw err;
+  }
+  await assertBookingEditable(item.record.reservation_id);
+};
+
+const assertRecordEditableByAssignmentId = async (assignmentId) => {
+  const assignment = await prisma.serviceStaffAssignment.findUnique({
+    where: { assignment_id: assignmentId },
+    select: { record: { select: { reservation_id: true } } },
+  });
+  if (!assignment) {
+    const err = new Error("Assignment not found"); err.status = 404; throw err;
+  }
+  await assertBookingEditable(assignment.record.reservation_id);
+};
 
 // Minimal staff picklist for the assignment dropdown — Supervisor doesn't have
 // access to the full /api/users/staff (Manager-only) listing.
@@ -125,6 +164,8 @@ const updateServiceRecord = async (req, res) => {
   const { remarks, quality_checked } = req.body;
 
   try {
+    await assertBookingEditable(parseInt(booking_id));
+
     const record = await prisma.serviceRecord.update({
       where: { reservation_id: parseInt(booking_id) },
       data: {
@@ -137,6 +178,7 @@ const updateServiceRecord = async (req, res) => {
     }
     res.status(200).json({ message: "Service record updated", record });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
     if (error.code === "P2025") return res.status(404).json({ message: "Service record not found" });
     logger.error(`updateServiceRecord failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -146,7 +188,7 @@ const updateServiceRecord = async (req, res) => {
 const updateStatus = async (req, res) => {
   const { booking_id } = req.params;
   const { status } = req.body;
-  const valid = ["Started", "In Progress", "Completed", "Ready for Pickup"];
+  const valid = ["Started", "In Progress", "Completed"];
 
   if (!status || !valid.includes(status))
     return res.status(400).json({ message: `status must be one of: ${valid.join(", ")}` });
@@ -154,8 +196,18 @@ const updateStatus = async (req, res) => {
   try {
     const booking = await prisma.$transaction(async (tx) => {
       if (status === "Completed") {
-        await tx.serviceRecord.updateMany({
+        const record = await tx.serviceRecord.findUnique({
           where: { reservation_id: parseInt(booking_id) },
+          select: { record_id: true, quality_checked: true },
+        });
+        if (!record) {
+          const err = new Error("Service record not found"); err.status = 404; throw err;
+        }
+        if (!record.quality_checked) {
+          const err = new Error("Quality check must be completed before marking the service as Completed"); err.status = 400; throw err;
+        }
+        await tx.serviceRecord.update({
+          where: { record_id: record.record_id },
           data: { completed_at: new Date() },
         });
       }
@@ -185,6 +237,7 @@ const updateStatus = async (req, res) => {
     logActivity(prisma, { user_id: req.user.user_id, action: "STATUS_CHANGED", entity_type: "reservation", entity_id: parseInt(booking_id) });
     res.status(200).json({ message: "Status updated", status });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
     if (error.code === "P2025") return res.status(404).json({ message: "Booking not found" });
     logger.error(`updateStatus failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -203,6 +256,8 @@ const assignStaff = async (req, res) => {
     return res.status(400).json({ message: "staff_id is required" });
 
   try {
+    await assertBookingEditable(parseInt(booking_id));
+
     const record = await prisma.serviceRecord.findUnique({
       where: { reservation_id: parseInt(booking_id) },
       select: { record_id: true },
@@ -231,6 +286,7 @@ const assignStaff = async (req, res) => {
       },
     });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
     if (error.code === "P2002")
       return res.status(400).json({ message: "This staff member is already assigned to this service" });
     logger.error(`assignStaff failed — ${error.message}`);
@@ -243,6 +299,8 @@ const updateAssignment = async (req, res) => {
   const { staff_id, work_note } = req.body;
 
   try {
+    await assertRecordEditableByAssignmentId(parseInt(assignment_id));
+
     const assignment = await prisma.serviceStaffAssignment.update({
       where: { assignment_id: parseInt(assignment_id) },
       data: {
@@ -262,6 +320,7 @@ const updateAssignment = async (req, res) => {
       },
     });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
     if (error.code === "P2025") return res.status(404).json({ message: "Assignment not found" });
     if (error.code === "P2002")
       return res.status(400).json({ message: "This staff member is already assigned to this service" });
@@ -273,11 +332,14 @@ const updateAssignment = async (req, res) => {
 const removeStaffAssignment = async (req, res) => {
   const { assignment_id } = req.params;
   try {
+    await assertRecordEditableByAssignmentId(parseInt(assignment_id));
+
     await prisma.serviceStaffAssignment.delete({
       where: { assignment_id: parseInt(assignment_id) },
     });
     res.status(200).json({ message: "Staff assignment removed" });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
     if (error.code === "P2025") return res.status(404).json({ message: "Assignment not found" });
     logger.error(`removeStaffAssignment failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -295,6 +357,8 @@ const addServiceRecordItem = async (req, res) => {
     return res.status(400).json({ message: "catalog_item_id or description is required" });
 
   try {
+    await assertBookingEditable(parseInt(booking_id));
+
     const record = await prisma.serviceRecord.findUnique({
       where: { reservation_id: parseInt(booking_id) },
       select: { record_id: true },
@@ -332,6 +396,7 @@ const addServiceRecordItem = async (req, res) => {
       },
     });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
     logger.error(`addServiceRecordItem failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -340,11 +405,14 @@ const addServiceRecordItem = async (req, res) => {
 const removeServiceRecordItem = async (req, res) => {
   const { item_id } = req.params;
   try {
+    await assertRecordEditableByItemId(parseInt(item_id));
+
     await prisma.serviceRecordItem.delete({
       where: { item_id: parseInt(item_id) },
     });
     res.status(200).json({ message: "Service item removed" });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
     if (error.code === "P2025") return res.status(404).json({ message: "Service item not found" });
     logger.error(`removeServiceRecordItem failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });

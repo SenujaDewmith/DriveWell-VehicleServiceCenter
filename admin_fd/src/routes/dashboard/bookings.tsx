@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { StatusBadge } from "@/components/manager/ManagerOverview";
+import { InvoiceViewModal, type InvoiceViewData } from "@/components/invoices/InvoiceView";
+import { Eye } from "lucide-react";
 
 type BookingStatus =
   | "Booked"
@@ -44,12 +46,26 @@ function BookingsPage() {
   const [statusFilter, setStatusFilter] = useState<BookingStatus | "All">("All");
   const [search, setSearch] = useState("");
 
+  // Keyed by reservation_id so each row can look up its own invoice (if any)
+  // without a separate fetch per row.
+  const [invoicesByReservation, setInvoicesByReservation] = useState<Record<number, InvoiceViewData>>({});
+  const [viewInvoice, setViewInvoice] = useState<InvoiceViewData | null>(null);
+
   useEffect(() => {
     api
       .get<{ bookings: ApiBooking[] }>("/api/bookings")
       .then((d) => setBookings(d.bookings))
       .catch(() => setError("Failed to load bookings"))
       .finally(() => setLoading(false));
+
+    api
+      .get<{ invoices: (InvoiceViewData & { reservation_id: number })[] }>("/api/invoices")
+      .then((d) => {
+        const map: Record<number, InvoiceViewData> = {};
+        d.invoices.forEach((inv) => { map[inv.reservation_id] = inv; });
+        setInvoicesByReservation(map);
+      })
+      .catch(() => {});
   }, []);
 
   const filtered = bookings.filter((b) => {
@@ -121,29 +137,45 @@ function BookingsPage() {
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Vehicle</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Package</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Status</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Invoice</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((b) => (
-                <tr key={b.reservation_id} className="border-b border-border last:border-0">
-                  <td className="py-2 px-3 text-muted-foreground">
-                    {b.booking_ref ?? `#${b.reservation_id}`}
-                  </td>
-                  <td className="py-2 px-3 text-foreground">{b.service_date}</td>
-                  <td className="py-2 px-3 text-foreground">
-                    {b.slot_time ? b.slot_time.slice(0, 5) : "—"}
-                  </td>
-                  <td className="py-2 px-3 text-foreground">{b.customer_name}</td>
-                  <td className="py-2 px-3 text-foreground">{b.plate_no}</td>
-                  <td className="py-2 px-3 text-foreground">{b.package_name}</td>
-                  <td className="py-2 px-3">
-                    <StatusBadge status={b.status} />
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((b) => {
+                const invoice = invoicesByReservation[b.reservation_id];
+                return (
+                  <tr key={b.reservation_id} className="border-b border-border last:border-0">
+                    <td className="py-2 px-3 text-muted-foreground">
+                      {b.booking_ref ?? `#${b.reservation_id}`}
+                    </td>
+                    <td className="py-2 px-3 text-foreground">{b.service_date}</td>
+                    <td className="py-2 px-3 text-foreground">
+                      {b.slot_time ? b.slot_time.slice(0, 5) : "—"}
+                    </td>
+                    <td className="py-2 px-3 text-foreground">{b.customer_name}</td>
+                    <td className="py-2 px-3 text-foreground">{b.plate_no}</td>
+                    <td className="py-2 px-3 text-foreground">{b.package_name}</td>
+                    <td className="py-2 px-3">
+                      <StatusBadge status={b.status} />
+                    </td>
+                    <td className="py-2 px-3">
+                      {invoice ? (
+                        <button
+                          onClick={() => setViewInvoice(invoice)}
+                          className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                        >
+                          <Eye className="h-3 w-3" /> View
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="py-8 text-center text-muted-foreground">
                     No bookings match filter
                   </td>
                 </tr>
@@ -152,6 +184,10 @@ function BookingsPage() {
           </table>
         )}
       </div>
+
+      {viewInvoice && (
+        <InvoiceViewModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} />
+      )}
     </div>
   );
 }

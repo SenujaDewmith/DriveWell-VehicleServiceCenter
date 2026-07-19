@@ -30,6 +30,10 @@ const cashierOrManager = [verifyToken, authorizeRoles("Cashier", "Service Center
  *       - in: query
  *         name: payment_status
  *         schema: { type: string, enum: [Paid, Unpaid] }
+ *       - in: query
+ *         name: q
+ *         description: Case-insensitive search against booking ref or customer name
+ *         schema: { type: string }
  *     responses:
  *       200:
  *         description: List of invoices

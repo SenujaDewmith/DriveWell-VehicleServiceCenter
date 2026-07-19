@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { bookingsService, type Booking } from "@/services/bookings.service";
-import { vehiclesService, type Vehicle } from "@/services/vehicles.service";
+import { vehiclesService } from "@/services/vehicles.service";
 import { Car, Calendar, FileText, Clock, ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -34,21 +35,33 @@ function fmtDateTime(d: string) {
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) { navigate("/login"); return; }
-    Promise.all([
-      bookingsService.getBookings().then(({ bookings }) => setBookings(bookings)),
-      vehiclesService.getVehicles().then(({ vehicles }) => setVehicles(vehicles)),
-    ])
-      .catch(() => toast.error("Failed to load dashboard data"))
-      .finally(() => setLoading(false));
+    if (!user) navigate("/login");
   }, [user, navigate]);
 
+  const bookingsQuery = useQuery({
+    queryKey: ["bookings"],
+    queryFn: () => bookingsService.getBookings().then((r) => r.bookings),
+    enabled: !!user,
+  });
+  const vehiclesQuery = useQuery({
+    queryKey: ["vehicles"],
+    queryFn: () => vehiclesService.getVehicles().then((r) => r.vehicles),
+    enabled: !!user,
+  });
+
+  useEffect(() => {
+    if (bookingsQuery.isError || vehiclesQuery.isError) toast.error("Failed to load dashboard data");
+  }, [bookingsQuery.isError, vehiclesQuery.isError]);
+
   if (!user) return null;
+
+  const bookings: Booking[] = bookingsQuery.data ?? [];
+  const vehicles = vehiclesQuery.data ?? [];
+  // isPending (not isLoading) only shows a full-page spinner on a genuinely first fetch —
+  // once cached, revisiting this page shows the previous data immediately instead of blanking out.
+  const loading = bookingsQuery.isPending || vehiclesQuery.isPending;
 
   const upcomingBookings = bookings
     .filter((b) => UPCOMING.includes(b.status))

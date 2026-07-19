@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,12 +37,10 @@ export default function BookService() {
   const [searchParams] = useSearchParams();
   const preselectedPackage = searchParams.get("package");
 
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [packages, setPackages] = useState<ServicePackage[]>([]);
   const [slots, setSlots] = useState<AvailableSlot[]>([]);
   const [dateAvailable, setDateAvailable] = useState<boolean | null>(null);
-  const [dataLoading, setDataLoading] = useState(true);
   const [slotsLoading, setSlotsLoading] = useState(false);
 
   const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
@@ -53,20 +52,34 @@ export default function BookService() {
   const [addVehicleOpen, setAddVehicleOpen] = useState(false);
 
   useEffect(() => {
-    if (!user) { navigate("/login"); return; }
-    Promise.all([
-      vehiclesService.getVehicles().then(({ vehicles }) => setVehicles(vehicles)),
-      servicesService.getPackages().then(({ packages }) => {
-        setPackages(packages);
-        if (preselectedPackage) {
-          const match = packages.find((p) => p.package_id.toString() === preselectedPackage);
-          if (match) setSelectedPackageId(match.package_id);
-        }
-      }),
-    ])
-      .catch((err) => toast.error(err instanceof Error ? err.message : "Failed to load data"))
-      .finally(() => setDataLoading(false));
-  }, [user, navigate, preselectedPackage]);
+    if (!user) navigate("/login");
+  }, [user, navigate]);
+
+  const vehiclesQuery = useQuery({
+    queryKey: ["vehicles"],
+    queryFn: () => vehiclesService.getVehicles().then((r) => r.vehicles),
+    enabled: !!user,
+  });
+  const packagesQuery = useQuery({
+    queryKey: ["packages"],
+    queryFn: () => servicesService.getPackages().then((r) => r.packages),
+    enabled: !!user,
+  });
+  const vehicles = vehiclesQuery.data ?? [];
+  const packages = packagesQuery.data ?? [];
+  const dataLoading = vehiclesQuery.isPending || packagesQuery.isPending;
+
+  useEffect(() => {
+    if (vehiclesQuery.isError || packagesQuery.isError) toast.error("Failed to load data");
+  }, [vehiclesQuery.isError, packagesQuery.isError]);
+
+  // Pre-select the package passed via ?package= once its data has loaded (runs once — bails
+  // out as soon as a package is selected, whether by this effect or by the user).
+  useEffect(() => {
+    if (!preselectedPackage || selectedPackageId || packages.length === 0) return;
+    const match = packages.find((p) => p.package_id.toString() === preselectedPackage);
+    if (match) setSelectedPackageId(match.package_id);
+  }, [preselectedPackage, packages, selectedPackageId]);
 
   // Re-fetch available slots whenever the selected date OR package changes — covers
   // both picking a new date and going back to pick a different (differently-timed) package.
@@ -106,7 +119,7 @@ export default function BookService() {
   };
 
   const handleVehicleAdded = (vehicle: Vehicle) => {
-    setVehicles((prev) => [vehicle, ...prev]);
+    queryClient.setQueryData<Vehicle[]>(["vehicles"], (prev) => [vehicle, ...(prev ?? [])]);
     setSelectedVehicleId(vehicle.vehicle_id);
   };
 

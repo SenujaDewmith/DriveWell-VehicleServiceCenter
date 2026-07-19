@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,8 +48,14 @@ function validateForm(data: {
 export default function Vehicles() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const vehiclesQuery = useQuery({
+    queryKey: ["vehicles"],
+    queryFn: () => vehiclesService.getVehicles().then((r) => r.vehicles),
+    enabled: !!user,
+  });
+  const vehicles = vehiclesQuery.data ?? [];
+  const loading = vehiclesQuery.isPending;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -70,9 +77,12 @@ export default function Vehicles() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!user) { navigate("/login"); return; }
-    loadVehicles();
+    if (!user) navigate("/login");
   }, [user, navigate]);
+
+  useEffect(() => {
+    if (vehiclesQuery.isError) toast.error("Failed to load vehicles");
+  }, [vehiclesQuery.isError]);
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -107,15 +117,6 @@ export default function Vehicles() {
       .catch(() => toast.error("Failed to load models"))
       .finally(() => setLoadingModels(false));
   }, [makeId]);
-
-  const loadVehicles = () => {
-    setLoading(true);
-    vehiclesService
-      .getVehicles()
-      .then(({ vehicles }) => setVehicles(vehicles))
-      .catch(() => toast.error("Failed to load vehicles"))
-      .finally(() => setLoading(false));
-  };
 
   const resetForm = () => {
     setMakeId("");
@@ -164,7 +165,9 @@ export default function Vehicles() {
     setDeletingId(vehicle.vehicle_id);
     try {
       await vehiclesService.deleteVehicle(vehicle.vehicle_id);
-      setVehicles((prev) => prev.filter((v) => v.vehicle_id !== vehicle.vehicle_id));
+      queryClient.setQueryData<Vehicle[]>(["vehicles"], (prev) =>
+        (prev ?? []).filter((v) => v.vehicle_id !== vehicle.vehicle_id)
+      );
       toast.success("Vehicle removed");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete vehicle");
@@ -191,13 +194,13 @@ export default function Vehicles() {
     try {
       if (editingVehicle) {
         const { vehicle } = await vehiclesService.updateVehicle(editingVehicle.vehicle_id, payload);
-        setVehicles((prev) =>
-          prev.map((v) => (v.vehicle_id === editingVehicle.vehicle_id ? vehicle : v))
+        queryClient.setQueryData<Vehicle[]>(["vehicles"], (prev) =>
+          (prev ?? []).map((v) => (v.vehicle_id === editingVehicle.vehicle_id ? vehicle : v))
         );
         toast.success("Vehicle updated");
       } else {
         const { vehicle } = await vehiclesService.createVehicle(payload);
-        setVehicles((prev) => [vehicle, ...prev]);
+        queryClient.setQueryData<Vehicle[]>(["vehicles"], (prev) => [vehicle, ...(prev ?? [])]);
         toast.success("Vehicle added");
       }
       setDialogOpen(false);

@@ -1,8 +1,33 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import { StatusBadge } from "@/components/manager/ManagerOverview";
 import { Combobox } from "@/components/ui/combobox";
-import { CheckCircle, ChevronLeft, ChevronRight, Play, Plus, Trash2, X } from "lucide-react";
+import { Check, CheckCircle, ChevronLeft, ChevronRight, Loader2, Play, Trash2, X } from "lucide-react";
+
+const AUTOSAVE_DELAY_MS = 800;
+
+type SaveStatus = "idle" | "saving" | "saved" | "error";
+
+function SaveStatusLabel({ status }: { status: SaveStatus }) {
+  if (status === "saving") {
+    return (
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" /> Saving...
+      </span>
+    );
+  }
+  if (status === "saved") {
+    return (
+      <span className="flex items-center gap-1 text-xs text-chart-1">
+        <Check className="h-3 w-3" /> Saved
+      </span>
+    );
+  }
+  if (status === "error") {
+    return <span className="text-xs text-destructive">Failed to save</span>;
+  }
+  return null;
+}
 
 type BookingStatus = "Booked" | "Started" | "In Progress" | "Completed" | "Ready for Pickup" | "Cancelled" | "No-show";
 
@@ -54,9 +79,57 @@ interface CatalogItem {
   is_active: boolean;
 }
 
-const statusFlow: BookingStatus[] = ["Booked", "Started", "In Progress", "Completed", "Ready for Pickup"];
-const ACTIVE_STATUSES: BookingStatus[] = ["Booked", "Started", "In Progress", "Completed", "Ready for Pickup"];
+const ACTIVE_STATUSES: BookingStatus[] = ["Booked", "Started", "In Progress", "Completed"];
 const STAFF_SLOT_COUNT = 3;
+
+// The Supervisor-facing flow has exactly 3 states — Started/In Progress collapse
+// into one step, both on the step bar and on the advance button, so a booking
+// only ever needs two clicks (Booked → Started, Started → Completed) to finish.
+const DISPLAY_STEPS = ["Booked", "Started / In Progress", "Completed"] as const;
+const STEP_TARGET_STATUS: BookingStatus[] = ["Booked", "Started", "Completed"];
+
+function stepIndexForStatus(status: BookingStatus): number {
+  if (status === "Booked") return 0;
+  if (status === "Completed") return 2;
+  return 1; // Started or In Progress
+}
+
+function StatusStepBar({ status }: { status: BookingStatus }) {
+  const currentStep = stepIndexForStatus(status);
+  const isFinished = currentStep === DISPLAY_STEPS.length - 1;
+  return (
+    <div className="flex items-start">
+      {DISPLAY_STEPS.map((label, idx) => {
+        // Once the flow reaches its last step, that step is done too — not just "current".
+        const isDone = idx < currentStep || (isFinished && idx === currentStep);
+        const isCurrent = idx === currentStep && !isFinished;
+        return (
+          <div key={label} className={`flex items-center ${idx < DISPLAY_STEPS.length - 1 ? "flex-1" : ""}`}>
+            <div className="flex flex-col items-center gap-1 shrink-0">
+              <div
+                className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-semibold border-2 ${
+                  isDone
+                    ? "bg-chart-1 border-chart-1 text-white"
+                    : isCurrent
+                      ? "border-accent text-accent bg-accent/10"
+                      : "border-border text-muted-foreground"
+                }`}
+              >
+                {isDone ? <Check className="h-3.5 w-3.5" /> : idx + 1}
+              </div>
+              <span className={`text-[11px] text-center leading-tight w-16 ${isCurrent ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                {label}
+              </span>
+            </div>
+            {idx < DISPLAY_STEPS.length - 1 && (
+              <div className={`h-0.5 flex-1 mx-1 mt-3 ${isDone ? "bg-chart-1" : "bg-border"}`} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function dateKeyOf(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -92,12 +165,25 @@ export function SupervisorDashboard() {
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([]);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [newItemCatalogId, setNewItemCatalogId] = useState("");
-  const [newItemDescription, setNewItemDescription] = useState("");
-  const [newItemQty, setNewItemQty] = useState(1);
   const [noteDrafts, setNoteDrafts] = useState<Record<number, string>>({});
   const [error, setError] = useState("");
+  const [remarksStatus, setRemarksStatus] = useState<SaveStatus>("idle");
+  const [noteStatus, setNoteStatus] = useState<Record<number, SaveStatus>>({});
+  const [editMode, setEditMode] = useState(false);
+
+  const remarksTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remarksSavingValueRef = useRef<string | null>(null);
+  const noteTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const noteSavingValueRef = useRef<Record<number, string>>({});
 
   const selected = bookings.find((b) => b.reservation_id === selectedId);
+  const currentStepIdx = selected ? stepIndexForStatus(selected.status) : -1;
+  const nextStatus = currentStepIdx >= 0 && currentStepIdx < STEP_TARGET_STATUS.length - 1 ? STEP_TARGET_STATUS[currentStepIdx + 1] : null;
+  // Completing a service is the sign-off point — quality check must happen first.
+  const advanceBlocked = nextStatus === "Completed" && !(record?.quality_checked ?? false);
+  // Once Completed (the last step), the record is finalized and read-only for good.
+  const isLocked = currentStepIdx >= DISPLAY_STEPS.length - 1;
+  const viewMode = isLocked || ((record?.quality_checked ?? false) && !editMode);
 
   const loadBookings = () => {
     setLoading(true);
@@ -146,11 +232,24 @@ export function SupervisorDashboard() {
     // booking's remarks/items/staff under another booking's header — but this
     // effect only fires on booking switches, not on in-place refreshes after a
     // mutation, so those refreshes keep the existing content visible (no flash).
+    // Drop any pending debounced save — it belongs to whichever booking was
+    // open before this switch, and its onBlur already flushed it synchronously.
+    if (remarksTimerRef.current) {
+      clearTimeout(remarksTimerRef.current);
+      remarksTimerRef.current = null;
+    }
+    Object.values(noteTimersRef.current).forEach(clearTimeout);
+    noteTimersRef.current = {};
+
+    setEditMode(false);
+
     if (selectedId != null) {
       setRecord(null);
       setAssignments([]);
       setRemarksDraft("");
       setNoteDrafts({});
+      setRemarksStatus("idle");
+      setNoteStatus({});
       loadRecord(selectedId);
     } else {
       setRecord(null);
@@ -175,14 +274,11 @@ export function SupervisorDashboard() {
   };
 
   const advanceStatus = async () => {
-    if (!selectedId || !selected) return;
-    const idx = statusFlow.indexOf(selected.status);
-    if (idx < 0 || idx >= statusFlow.length - 1) return;
-    const next = statusFlow[idx + 1];
+    if (!selectedId || !nextStatus || advanceBlocked) return;
     setError("");
     setAdvancing(true);
     try {
-      await api.patch(`/api/service-records/${selectedId}/status`, { status: next });
+      await api.patch(`/api/service-records/${selectedId}/status`, { status: nextStatus });
       loadBookings();
       loadRecord(selectedId);
     } catch (err) {
@@ -192,41 +288,63 @@ export function SupervisorDashboard() {
     }
   };
 
-  const saveRemarks = async () => {
+  const saveRemarks = async (value: string) => {
     if (!selectedId || !record) return;
+    // Skip no-op saves and duplicate calls for a value already in flight
+    // (debounce timer firing right as onBlur also flushes the same edit).
+    if (value === (record.remarks ?? "") || value === remarksSavingValueRef.current) return;
+    remarksSavingValueRef.current = value;
+    setRemarksStatus("saving");
     try {
-      await api.put(`/api/service-records/${selectedId}`, { remarks: remarksDraft, quality_checked: record.quality_checked });
-      setRecord({ ...record, remarks: remarksDraft });
+      await api.put(`/api/service-records/${selectedId}`, { remarks: value, quality_checked: record.quality_checked });
+      setRecord((prev) => (prev ? { ...prev, remarks: value } : prev));
+      setRemarksStatus("saved");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save remarks");
+      setRemarksStatus("error");
+    } finally {
+      if (remarksSavingValueRef.current === value) remarksSavingValueRef.current = null;
     }
   };
 
+  const handleRemarksChange = (value: string) => {
+    setRemarksDraft(value);
+    setRemarksStatus("idle");
+    if (remarksTimerRef.current) clearTimeout(remarksTimerRef.current);
+    remarksTimerRef.current = setTimeout(() => saveRemarks(value), AUTOSAVE_DELAY_MS);
+  };
+
+  const flushRemarks = () => {
+    if (remarksTimerRef.current) {
+      clearTimeout(remarksTimerRef.current);
+      remarksTimerRef.current = null;
+    }
+    saveRemarks(remarksDraft);
+  };
+
   const toggleQuality = async () => {
-    if (!selectedId || !record) return;
+    if (!selectedId || !record || isLocked) return;
     const next = !record.quality_checked;
     try {
       await api.put(`/api/service-records/${selectedId}`, { remarks: record.remarks ?? "", quality_checked: next });
       setRecord({ ...record, quality_checked: next });
+      // Checking QC switches the fields above into the read-only summary view.
+      if (next) setEditMode(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update quality check");
     }
   };
 
-  const addItem = async () => {
-    if (!selectedId) return;
-    if (!newItemCatalogId && !newItemDescription.trim()) return;
+  const addItem = async (catalogItemId: string) => {
+    if (!selectedId || !catalogItemId) return;
+    setNewItemCatalogId(catalogItemId);
     try {
-      const payload: Record<string, unknown> = { quantity: newItemQty };
-      if (newItemCatalogId) payload.catalog_item_id = Number(newItemCatalogId);
-      if (newItemDescription.trim()) payload.description = newItemDescription.trim();
-      await api.post(`/api/service-records/${selectedId}/items`, payload);
-      setNewItemCatalogId("");
-      setNewItemDescription("");
-      setNewItemQty(1);
+      await api.post(`/api/service-records/${selectedId}/items`, { catalog_item_id: Number(catalogItemId) });
       loadRecord(selectedId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add item");
+    } finally {
+      setNewItemCatalogId("");
     }
   };
 
@@ -262,14 +380,38 @@ export function SupervisorDashboard() {
     }
   };
 
-  const saveSlotNote = async (assignmentId: number) => {
+  const saveSlotNote = async (assignmentId: number, value: string) => {
+    const current = assignments.find((a) => a.assignment_id === assignmentId);
+    if (!current) return;
+    if (value === (current.work_note ?? "") || value === noteSavingValueRef.current[assignmentId]) return;
+    noteSavingValueRef.current[assignmentId] = value;
+    setNoteStatus((prev) => ({ ...prev, [assignmentId]: "saving" }));
     setError("");
     try {
-      await api.put(`/api/service-records/assignments/${assignmentId}`, { work_note: noteDrafts[assignmentId] ?? "" });
-      setAssignments((prev) => prev.map((a) => (a.assignment_id === assignmentId ? { ...a, work_note: noteDrafts[assignmentId] ?? "" } : a)));
+      await api.put(`/api/service-records/assignments/${assignmentId}`, { work_note: value });
+      setAssignments((prev) => prev.map((a) => (a.assignment_id === assignmentId ? { ...a, work_note: value } : a)));
+      setNoteStatus((prev) => ({ ...prev, [assignmentId]: "saved" }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save work note");
+      setNoteStatus((prev) => ({ ...prev, [assignmentId]: "error" }));
+    } finally {
+      if (noteSavingValueRef.current[assignmentId] === value) delete noteSavingValueRef.current[assignmentId];
     }
+  };
+
+  const handleNoteChange = (assignmentId: number, value: string) => {
+    setNoteDrafts((prev) => ({ ...prev, [assignmentId]: value }));
+    setNoteStatus((prev) => ({ ...prev, [assignmentId]: "idle" }));
+    if (noteTimersRef.current[assignmentId]) clearTimeout(noteTimersRef.current[assignmentId]);
+    noteTimersRef.current[assignmentId] = setTimeout(() => saveSlotNote(assignmentId, value), AUTOSAVE_DELAY_MS);
+  };
+
+  const flushSlotNote = (assignmentId: number) => {
+    if (noteTimersRef.current[assignmentId]) {
+      clearTimeout(noteTimersRef.current[assignmentId]);
+      delete noteTimersRef.current[assignmentId];
+    }
+    saveSlotNote(assignmentId, noteDrafts[assignmentId] ?? "");
   };
 
   const removeAssignment = async (assignmentId: number) => {
@@ -328,43 +470,48 @@ export function SupervisorDashboard() {
         <p className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md px-3 py-2">{error}</p>
       )}
 
-      <div className="flex gap-6 flex-col lg:flex-row">
-        {/* Cards list */}
-        <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {loading && bookings.length === 0 && (
-            <p className="text-sm text-muted-foreground col-span-2 py-8 text-center">Loading...</p>
-          )}
-          {!loading && bookings.length === 0 && (
-            <p className="text-sm text-muted-foreground col-span-2 py-8 text-center">No reservations scheduled for this date</p>
-          )}
-          {bookings.map((b) => (
-            <button
-              key={b.reservation_id}
-              onClick={() => setSelectedId(b.reservation_id)}
-              className={`text-left rounded-lg border p-4 transition-colors ${
-                selectedId === b.reservation_id
-                  ? "border-accent bg-accent/10"
-                  : "border-border bg-card hover:border-muted-foreground"
-              }`}
-            >
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-sm text-muted-foreground">
-                  {b.booking_ref ?? `#${b.reservation_id}`} · {b.slot_time?.slice(0, 5) ?? "—"}
-                </span>
-                <StatusBadge status={b.status} />
-              </div>
-              <p className="text-sm font-semibold text-foreground">{b.customer_name}</p>
-              <p className="text-sm text-muted-foreground">
-                {b.plate_no} — {b.make} {b.model} ({b.vehicle_type})
-              </p>
-              <p className="text-sm text-accent mt-1">{b.package_name}</p>
-            </button>
-          ))}
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {loading && bookings.length === 0 && (
+          <p className="text-sm text-muted-foreground col-span-2 py-8 text-center">Loading...</p>
+        )}
+        {!loading && bookings.length === 0 && (
+          <p className="text-sm text-muted-foreground col-span-2 py-8 text-center">No reservations scheduled for this date</p>
+        )}
+        {bookings.map((b) => (
+          <button
+            key={b.reservation_id}
+            onClick={() => setSelectedId(b.reservation_id)}
+            className={`text-left rounded-lg border p-4 transition-colors ${
+              selectedId === b.reservation_id
+                ? "border-accent bg-accent/10"
+                : "border-border bg-card hover:border-muted-foreground"
+            }`}
+          >
+            <div className="flex justify-between items-start mb-2">
+              <span className="text-sm text-muted-foreground">
+                {b.booking_ref ?? `#${b.reservation_id}`} · {b.slot_time?.slice(0, 5) ?? "—"}
+              </span>
+              <StatusBadge status={b.status} />
+            </div>
+            <p className="text-sm font-semibold text-foreground">{b.customer_name}</p>
+            <p className="text-sm text-muted-foreground">
+              {b.plate_no} — {b.make} {b.model} ({b.vehicle_type})
+            </p>
+            <p className="text-sm text-accent mt-1">{b.package_name}</p>
+          </button>
+        ))}
+      </div>
 
-        {/* Detail panel */}
-        {selected && (
-          <div className="w-full lg:w-96 rounded-lg border border-border bg-card p-4 space-y-4 h-fit">
+      {/* Detail popup */}
+      {selected && (
+        <div
+          className="fixed inset-0 bg-background/80 z-50 flex items-center justify-center p-4"
+          onClick={() => setSelectedId(null)}
+        >
+          <div
+            className="w-full max-w-xl max-h-[85vh] overflow-y-auto rounded-lg border border-border bg-card p-4 space-y-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between items-center">
               <h3 className="text-sm font-semibold text-foreground">{selected.booking_ref ?? `#${selected.reservation_id}`} — Detail</h3>
               <button onClick={() => setSelectedId(null)} className="text-muted-foreground hover:text-foreground">
@@ -376,8 +523,9 @@ export function SupervisorDashboard() {
               <p><span className="text-muted-foreground">Customer:</span> {selected.customer_name}</p>
               <p><span className="text-muted-foreground">Vehicle:</span> {selected.plate_no} — {selected.make} {selected.model} ({selected.vehicle_type})</p>
               <p><span className="text-muted-foreground">Package:</span> {selected.package_name}</p>
-              <p><span className="text-muted-foreground">Status:</span> <StatusBadge status={selected.status} /></p>
             </div>
+
+            <StatusStepBar status={selected.status} />
 
             {recordLoading && !record && (
               <p className="text-sm text-muted-foreground">Loading service record...</p>
@@ -404,137 +552,189 @@ export function SupervisorDashboard() {
 
             {record && (
               <>
-                {statusFlow.indexOf(selected.status) >= 0 && statusFlow.indexOf(selected.status) < statusFlow.length - 1 && (
-                  <button
-                    onClick={advanceStatus}
-                    disabled={advancing}
-                    className="w-full flex items-center justify-center gap-2 rounded-md bg-accent py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50"
-                  >
-                    {advancing ? "Updating..." : `Advance to ${statusFlow[statusFlow.indexOf(selected.status) + 1]}`}
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
+                {nextStatus && (
+                  <div>
+                    <button
+                      onClick={advanceStatus}
+                      disabled={advancing || advanceBlocked}
+                      className="w-full flex items-center justify-center gap-2 rounded-md bg-accent py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {advancing ? "Updating..." : `Advance to ${nextStatus}`}
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                    {advanceBlocked && (
+                      <p className="text-xs text-muted-foreground mt-1 text-center">
+                        Complete the quality check before marking this service as Completed.
+                      </p>
+                    )}
+                  </div>
                 )}
 
-                {/* Remarks */}
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Remarks</label>
-                  <textarea
-                    value={remarksDraft}
-                    onChange={(e) => setRemarksDraft(e.target.value)}
-                    onBlur={saveRemarks}
-                    placeholder="General condition notes from inspection..."
-                    className="w-full mt-1 border border-border rounded-md bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none h-16"
-                  />
-                </div>
-
-                {/* Additional work / parts notes */}
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Additional Work / Parts Needed</label>
-                  <div className="space-y-1 mt-1">
-                    {record.items.length === 0 && (
-                      <p className="text-sm text-muted-foreground">None noted</p>
-                    )}
-                    {record.items.map((it) => (
-                      <div key={it.item_id} className="flex items-center justify-between rounded-md border border-border px-2 py-1">
-                        <span className="text-sm text-foreground">
-                          {it.description} {it.quantity > 1 ? `×${it.quantity}` : ""}
-                        </span>
-                        <button onClick={() => removeItem(it.item_id)} className="text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-3 w-3" />
+                {viewMode ? (
+                  <div className="space-y-3 text-sm rounded-md border border-border p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-muted-foreground">Service Details</span>
+                      {!isLocked && (
+                        <button onClick={() => setEditMode(true)} className="text-xs font-medium text-accent hover:underline">
+                          Edit
                         </button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex flex-col gap-1 mt-2">
-                    <select
-                      value={newItemCatalogId}
-                      onChange={(e) => setNewItemCatalogId(e.target.value)}
-                      className="border border-border rounded-md bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="">— Custom note (type below) —</option>
-                      {catalog.map((c) => (
-                        <option key={c.catalog_item_id} value={c.catalog_item_id}>{c.name}</option>
-                      ))}
-                    </select>
-                    {!newItemCatalogId && (
-                      <input
-                        value={newItemDescription}
-                        onChange={(e) => setNewItemDescription(e.target.value)}
-                        placeholder="e.g. Rear brake pads worn"
-                        className="border border-border rounded-md bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                      />
-                    )}
-                    <div className="flex gap-1">
-                      <input
-                        type="number"
-                        min={1}
-                        value={newItemQty}
-                        onChange={(e) => setNewItemQty(Number(e.target.value) || 1)}
-                        className="w-16 border border-border rounded-md bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                      />
-                      <button
-                        onClick={addItem}
-                        className="flex-1 flex items-center justify-center gap-1 rounded-md border border-accent px-2 py-1 text-sm font-medium text-accent hover:bg-accent hover:text-accent-foreground transition-colors"
-                      >
-                        <Plus className="h-3 w-3" /> Add Note
-                      </button>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Remarks</p>
+                      <p className="text-foreground whitespace-pre-wrap">{record.remarks?.trim() ? record.remarks : "—"}</p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Additional Work / Parts Needed</p>
+                      {record.items.length === 0 ? (
+                        <p className="text-muted-foreground">None noted</p>
+                      ) : (
+                        <ul className="list-disc list-inside text-foreground">
+                          {record.items.map((it) => (
+                            <li key={it.item_id}>
+                              {it.description} {it.quantity > 1 ? `×${it.quantity}` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">Staff Contributions</p>
+                      {assignments.length === 0 ? (
+                        <p className="text-muted-foreground">None assigned</p>
+                      ) : (
+                        <ul className="space-y-1 text-foreground">
+                          {assignments.map((a) => (
+                            <li key={a.assignment_id}>
+                              <span className="font-medium">{a.staff_name ?? `Staff #${a.staff_id}`}</span>
+                              {a.work_note ? ` — ${a.work_note}` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <>
+                    {record.quality_checked && !isLocked && (
+                      <div className="flex justify-end">
+                        <button onClick={() => setEditMode(false)} className="text-xs font-medium text-accent hover:underline">
+                          Done editing — back to summary
+                        </button>
+                      </div>
+                    )}
 
-                {/* Staff contributions — up to 3 staff members, each with a note on what they did */}
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">
-                    Staff Contributions ({assignments.length}/{STAFF_SLOT_COUNT})
-                  </label>
-                  <div className="space-y-2 mt-1">
-                    {Array.from({ length: STAFF_SLOT_COUNT }).map((_, idx) => {
-                      const assignment = assignments[idx];
-                      const takenIds = new Set(assignments.filter((a) => a !== assignment).map((a) => a.staff_id));
-                      const options = staffOptions
-                        .filter((s) => !takenIds.has(s.user_id))
-                        .map((s) => ({ value: String(s.user_id), label: s.full_name ?? `Staff #${s.user_id}` }));
+                    {/* Remarks */}
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium text-muted-foreground">Remarks</label>
+                        <SaveStatusLabel status={remarksStatus} />
+                      </div>
+                      <textarea
+                        value={remarksDraft}
+                        onChange={(e) => handleRemarksChange(e.target.value)}
+                        onBlur={flushRemarks}
+                        placeholder="General condition notes from inspection..."
+                        className="w-full mt-1 border border-border rounded-md bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none h-16"
+                      />
+                    </div>
 
-                      return (
-                        <div key={assignment?.assignment_id ?? `empty-${idx}`} className="rounded-md border border-border p-2 space-y-1.5">
-                          <div className="flex items-center gap-1">
-                            <div className="flex-1">
-                              <Combobox
-                                options={options}
-                                value={assignment ? String(assignment.staff_id) : ""}
-                                onValueChange={(v) =>
-                                  assignment ? changeSlotStaff(assignment.assignment_id, v) : assignStaffToSlot(v)
-                                }
-                                placeholder={`Slot ${idx + 1} — select staff`}
-                                searchPlaceholder="Search staff..."
-                                className="text-sm h-8"
-                              />
-                            </div>
-                            {assignment && (
-                              <button onClick={() => removeAssignment(assignment.assignment_id)} className="text-muted-foreground hover:text-destructive shrink-0">
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            )}
+                    {/* Additional work / parts notes */}
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Additional Work / Parts Needed</label>
+                      <div className="space-y-1 mt-1">
+                        {record.items.length === 0 && (
+                          <p className="text-sm text-muted-foreground">None noted</p>
+                        )}
+                        {record.items.map((it) => (
+                          <div key={it.item_id} className="flex items-center justify-between rounded-md border border-border px-2 py-1">
+                            <span className="text-sm text-foreground">
+                              {it.description} {it.quantity > 1 ? `×${it.quantity}` : ""}
+                            </span>
+                            <button onClick={() => removeItem(it.item_id)} className="text-muted-foreground hover:text-destructive">
+                              <Trash2 className="h-3 w-3" />
+                            </button>
                           </div>
-                          {assignment && (
-                            <input
-                              value={noteDrafts[assignment.assignment_id] ?? ""}
-                              onChange={(e) => setNoteDrafts((prev) => ({ ...prev, [assignment.assignment_id]: e.target.value }))}
-                              onBlur={() => saveSlotNote(assignment.assignment_id)}
-                              placeholder="What did they work on? e.g. Interior vacuum & dashboard cleaning"
-                              className="w-full border border-border rounded-md bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                            />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                        ))}
+                      </div>
+                      <div className="mt-2">
+                        <Combobox
+                          options={catalog.map((c) => ({
+                            value: String(c.catalog_item_id),
+                            label: c.name,
+                            disabled: record.items.some((it) => it.catalog_item_id === c.catalog_item_id),
+                          }))}
+                          value={newItemCatalogId}
+                          onValueChange={addItem}
+                          placeholder="Search parts / work items to add..."
+                          searchPlaceholder="Search..."
+                          className="text-sm h-9"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Staff contributions — up to 3 staff members, each with a note on what they did */}
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">
+                        Staff Contributions ({assignments.length}/{STAFF_SLOT_COUNT})
+                      </label>
+                      <div className="space-y-2 mt-1">
+                        {Array.from({ length: STAFF_SLOT_COUNT }).map((_, idx) => {
+                          const assignment = assignments[idx];
+                          const takenIds = new Set(assignments.filter((a) => a !== assignment).map((a) => a.staff_id));
+                          const options = staffOptions
+                            .filter((s) => !takenIds.has(s.user_id))
+                            .map((s) => ({ value: String(s.user_id), label: s.full_name ?? `Staff #${s.user_id}` }));
+
+                          return (
+                            <div key={assignment?.assignment_id ?? `empty-${idx}`} className="rounded-md border border-border p-2 space-y-1.5">
+                              <div className="flex items-center gap-1">
+                                <div className="flex-1">
+                                  <Combobox
+                                    options={options}
+                                    value={assignment ? String(assignment.staff_id) : ""}
+                                    onValueChange={(v) =>
+                                      assignment ? changeSlotStaff(assignment.assignment_id, v) : assignStaffToSlot(v)
+                                    }
+                                    placeholder={`Slot ${idx + 1} — select staff`}
+                                    searchPlaceholder="Search staff..."
+                                    className="text-sm h-8"
+                                  />
+                                </div>
+                                {assignment && (
+                                  <button onClick={() => removeAssignment(assignment.assignment_id)} className="text-muted-foreground hover:text-destructive shrink-0">
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                              {assignment && (
+                                <>
+                                  <input
+                                    value={noteDrafts[assignment.assignment_id] ?? ""}
+                                    onChange={(e) => handleNoteChange(assignment.assignment_id, e.target.value)}
+                                    onBlur={() => flushSlotNote(assignment.assignment_id)}
+                                    placeholder="What did they work on? e.g. Interior vacuum & dashboard cleaning"
+                                    className="w-full border border-border rounded-md bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                  />
+                                  <SaveStatusLabel status={noteStatus[assignment.assignment_id] ?? "idle"} />
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 {/* Quality check */}
                 <button
                   onClick={toggleQuality}
-                  className={`w-full flex items-center justify-center gap-2 rounded-md border py-2 text-sm font-semibold transition-colors ${
+                  disabled={isLocked}
+                  className={`w-full flex items-center justify-center gap-2 rounded-md border py-2 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     record.quality_checked
                       ? "border-chart-1 bg-chart-1/10 text-chart-1"
                       : "border-border text-muted-foreground hover:border-muted-foreground"
@@ -546,8 +746,8 @@ export function SupervisorDashboard() {
               </>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

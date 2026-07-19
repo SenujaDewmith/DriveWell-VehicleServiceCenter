@@ -1,33 +1,29 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { invoicesService, type Invoice } from "@/services/invoices.service";
+import { invoicesService } from "@/services/invoices.service";
 import { FileText, Printer, Loader2 } from "lucide-react";
 
 export default function Invoices() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!user) {
-      navigate("/login");
-    }
+    if (!user) navigate("/login");
   }, [user, navigate]);
 
-  useEffect(() => {
-    if (!user) return;
-    invoicesService
-      .getInvoices()
-      .then(({ invoices }) => setInvoices(invoices))
-      .catch(() => setError("Failed to load invoices. Please try again later."))
-      .finally(() => setLoading(false));
-  }, [user]);
+  const invoicesQuery = useQuery({
+    queryKey: ["invoices"],
+    queryFn: () => invoicesService.getInvoices().then((r) => r.invoices),
+    enabled: !!user,
+  });
+  const invoices = invoicesQuery.data ?? [];
+  const loading = invoicesQuery.isPending;
+  const error = invoicesQuery.isError ? "Failed to load invoices. Please try again later." : "";
 
   if (!user) return null;
 

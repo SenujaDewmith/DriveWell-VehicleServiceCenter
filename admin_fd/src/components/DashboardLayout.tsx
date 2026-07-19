@@ -42,12 +42,20 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const { username, role, logout } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const isManager = role === "manager";
   const navItems = isManager ? managerNav : [];
 
+  const confirmLogout = async () => {
+    setLoggingOut(true);
+    await logout();
+    window.location.href = "/login";
+  };
+
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="h-screen flex bg-background overflow-hidden">
       {/* Sidebar - only for manager */}
       {isManager && (
         <>
@@ -96,26 +104,13 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 );
               })}
             </nav>
-
-            <div className="p-4 border-t border-border">
-              <button
-                onClick={async () => {
-                  await logout();
-                  window.location.href = "/login";
-                }}
-                className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
-              >
-                <LogOut className="h-4 w-4" />
-                Logout
-              </button>
-            </div>
           </aside>
         </>
       )}
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-h-screen">
-        <header className="h-16 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 flex items-center justify-between px-4">
+      <div className="flex-1 flex flex-col min-h-0">
+        <header className="h-16 shrink-0 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 flex items-center justify-between px-4">
           <div className="flex items-center gap-3">
             {isManager && (
               <button
@@ -139,24 +134,51 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
               {username}
             </span>
             <ThemeToggle />
-            {!isManager && (
-              <button
-                onClick={async () => {
-                  await logout();
-                  window.location.href = "/login";
-                }}
-                className="p-2 rounded-md border border-border bg-card text-foreground hover:bg-muted transition-colors"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
-            )}
+            <button
+              onClick={() => setShowLogoutConfirm(true)}
+              className="p-2 rounded-md border border-border bg-card text-foreground hover:bg-muted transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-6 overflow-auto">
+        <main className="flex-1 min-h-0 p-4 lg:p-6 overflow-auto">
           {children}
         </main>
       </div>
+
+      {showLogoutConfirm && (
+        <div
+          className="fixed inset-0 bg-background/80 z-50 flex items-center justify-center p-4"
+          onClick={() => !loggingOut && setShowLogoutConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-border bg-card p-4 space-y-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-sm font-semibold text-foreground">Log out?</h3>
+            <p className="text-sm text-muted-foreground">Are you sure you want to log out?</p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                disabled={loggingOut}
+                className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmLogout}
+                disabled={loggingOut}
+                className="flex items-center gap-2 rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-50"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                {loggingOut ? "Logging out..." : "Log Out"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

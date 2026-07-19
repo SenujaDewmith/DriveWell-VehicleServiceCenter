@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 export interface ComboboxOption {
   value: string;
   label: string;
+  disabled?: boolean;
 }
 
 interface ComboboxProps {
@@ -67,7 +68,9 @@ export function Combobox({
                 <CommandItem
                   key={option.value}
                   value={option.label}
+                  disabled={option.disabled}
                   onSelect={() => {
+                    if (option.disabled) return;
                     onValueChange(option.value === value ? "" : option.value);
                     setOpen(false);
                   }}
@@ -76,6 +79,7 @@ export function Combobox({
                     className={cn("mr-2 h-4 w-4", value === option.value ? "opacity-100" : "opacity-0")}
                   />
                   {option.label}
+                  {option.disabled && <span className="ml-auto text-xs text-muted-foreground">Added</span>}
                 </CommandItem>
               ))}
             </CommandGroup>

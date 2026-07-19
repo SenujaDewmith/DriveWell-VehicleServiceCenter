@@ -1,7 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import { StatusBadge } from "@/components/manager/ManagerOverview";
-import { Printer, Plus, Trash2, X } from "lucide-react";
+import { InvoiceDocument, InvoiceViewModal, SupervisorServiceDetails, type InvoiceViewData } from "@/components/invoices/InvoiceView";
+import { Eye, Printer, Plus, Search, Trash2, X } from "lucide-react";
+
+const SEARCH_DEBOUNCE_MS = 500;
 
 interface ApiBooking {
   reservation_id: number;
@@ -63,6 +66,10 @@ interface UnpaidInvoice {
   payment_method: string | null;
 }
 
+interface HistoryInvoice extends InvoiceViewData {
+  service_date: string | null;
+}
+
 export function CashierDashboard() {
   const [bookings, setBookings] = useState<ApiBooking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,6 +100,43 @@ export function CashierDashboard() {
   };
 
   useEffect(loadUnpaidInvoices, []);
+
+  const [historyFrom, setHistoryFrom] = useState("");
+  const [historyTo, setHistoryTo] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyInvoices, setHistoryInvoices] = useState<HistoryInvoice[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const historySearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadInvoiceHistory = (search: string) => {
+    setHistoryLoading(true);
+    const params = new URLSearchParams();
+    if (historyFrom) params.set("from", historyFrom);
+    if (historyTo) params.set("to", historyTo);
+    if (search.trim()) params.set("q", search.trim());
+    api
+      .get<{ invoices: HistoryInvoice[] }>(`/api/invoices?${params.toString()}`)
+      .then((d) => setHistoryInvoices(d.invoices))
+      .catch(() => setError("Failed to load invoice history"))
+      .finally(() => setHistoryLoading(false));
+  };
+
+  // Date changes refetch immediately; typing in the search box debounces so we
+  // don't fire a request on every keystroke.
+  useEffect(() => {
+    loadInvoiceHistory(historySearch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyFrom, historyTo]);
+
+  const handleHistorySearchChange = (value: string) => {
+    setHistorySearch(value);
+    if (historySearchTimerRef.current) clearTimeout(historySearchTimerRef.current);
+    historySearchTimerRef.current = setTimeout(() => loadInvoiceHistory(value), SEARCH_DEBOUNCE_MS);
+  };
+
+  // The list response already carries full item breakdowns, so viewing a past
+  // invoice just opens a modal against the row we already have — no refetch.
+  const [viewInvoice, setViewInvoice] = useState<HistoryInvoice | null>(null);
 
   const markInvoicePaid = async (invoiceId: number, method: "Cash" | "Card") => {
     setMarkingPaidId(invoiceId);
@@ -212,9 +256,8 @@ export function CashierDashboard() {
         <p className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md px-3 py-2">{error}</p>
       )}
 
-      <div className="flex gap-6 flex-col lg:flex-row">
-        {/* Ready for billing table */}
-        <div className="flex-1 rounded-lg border border-border bg-card p-4">
+      {/* Ready for billing table */}
+      <div className="rounded-lg border border-border bg-card p-4">
           <h3 className="text-sm font-semibold text-foreground mb-4">Ready for Billing</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -303,11 +346,94 @@ export function CashierDashboard() {
               </tbody>
             </table>
           </div>
+
+          {/* Invoice history — searchable by date range and ref/customer name */}
+          <h3 className="text-sm font-semibold text-foreground mb-4 mt-6">Invoice History</h3>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <input
+              type="date"
+              value={historyFrom}
+              onChange={(e) => setHistoryFrom(e.target.value)}
+              className="border border-border rounded-md bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <span className="text-sm text-muted-foreground">to</span>
+            <input
+              type="date"
+              value={historyTo}
+              onChange={(e) => setHistoryTo(e.target.value)}
+              className="border border-border rounded-md bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <div className="relative flex-1 min-w-45">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                value={historySearch}
+                onChange={(e) => handleHistorySearchChange(e.target.value)}
+                placeholder="Search by ref or customer name..."
+                className="w-full border border-border rounded-md bg-background pl-7 pr-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-2 px-2 font-medium text-muted-foreground">Ref</th>
+                  <th className="text-left py-2 px-2 font-medium text-muted-foreground">Date</th>
+                  <th className="text-left py-2 px-2 font-medium text-muted-foreground">Customer</th>
+                  <th className="text-left py-2 px-2 font-medium text-muted-foreground">Vehicle</th>
+                  <th className="text-left py-2 px-2 font-medium text-muted-foreground">Total (LKR)</th>
+                  <th className="text-left py-2 px-2 font-medium text-muted-foreground">Status</th>
+                  <th className="text-left py-2 px-2 font-medium text-muted-foreground">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historyLoading && (
+                  <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">Loading...</td></tr>
+                )}
+                {!historyLoading && historyInvoices.map((inv) => (
+                  <tr key={inv.invoice_id} className="border-b border-border last:border-0">
+                    <td className="py-2 px-2 text-muted-foreground">{inv.booking_ref ?? `#${inv.invoice_id}`}</td>
+                    <td className="py-2 px-2 text-foreground">{inv.service_date ?? "—"}</td>
+                    <td className="py-2 px-2 text-foreground">{inv.customer_name}</td>
+                    <td className="py-2 px-2 text-foreground">{inv.plate_no}</td>
+                    <td className="py-2 px-2 text-foreground">{parseFloat(inv.total_amount).toLocaleString()}</td>
+                    <td className="py-2 px-2">
+                      <span className={inv.payment_status === "Paid" ? "text-chart-1" : "text-muted-foreground"}>
+                        {inv.payment_status}
+                      </span>
+                    </td>
+                    <td className="py-2 px-2">
+                      <button
+                        onClick={() => setViewInvoice(inv)}
+                        className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                      >
+                        <Eye className="h-3 w-3" /> View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!historyLoading && historyInvoices.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                      No invoices match this search
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        {/* Invoice builder */}
-        {selectedId && !showInvoice && (
-          <div className="w-full lg:w-104 rounded-lg border border-border bg-card p-4 space-y-4 h-fit">
+      {/* Invoice builder */}
+      {selectedId && !showInvoice && (
+        <div
+          className="fixed inset-0 bg-background/80 z-50 flex items-center justify-center p-4"
+          onClick={() => setSelectedId(null)}
+        >
+          <div
+            className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-lg border border-border bg-card p-4 space-y-4 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between items-center">
               <h3 className="text-sm font-semibold text-foreground">Invoice Builder</h3>
               <button onClick={() => setSelectedId(null)} className="text-muted-foreground hover:text-foreground">
@@ -323,8 +449,9 @@ export function CashierDashboard() {
                   <p><span className="text-muted-foreground">Customer:</span> {draft.customer_name}</p>
                   <p><span className="text-muted-foreground">Vehicle:</span> {draft.plate_no} — {draft.make} {draft.model} ({draft.vehicle_type})</p>
                   <p><span className="text-muted-foreground">Package:</span> {draft.package_name}</p>
-                  {draft.remarks && <p><span className="text-muted-foreground">Supervisor Remarks:</span> {draft.remarks}</p>}
                 </div>
+
+                <SupervisorServiceDetails remarks={draft.remarks} items={draft.suggested_items} />
 
                 <div className="border-t border-border pt-3 space-y-2">
                   <div className="flex justify-between items-center text-sm">
@@ -433,14 +560,14 @@ export function CashierDashboard() {
               </>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Print-ready invoice */}
       {showInvoice && createdInvoice && draft && (
         <div className="fixed inset-0 bg-background/95 z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-card border border-border rounded-xl shadow-lg">
-            <div className="flex justify-between items-center p-4 border-b border-border no-print">
+          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-card border border-border rounded-xl shadow-lg">
+            <div className="flex justify-between items-center p-3 border-b border-border no-print">
               <span className="text-sm font-medium text-muted-foreground">Invoice Preview</span>
               <div className="flex gap-2">
                 <button onClick={handlePrint} className="rounded-md border border-accent px-3 py-1 text-sm text-accent hover:bg-accent hover:text-accent-foreground transition-colors">
@@ -451,59 +578,20 @@ export function CashierDashboard() {
                 </button>
               </div>
             </div>
-            <div className="p-6 print:p-4" id="invoice-print">
-              <div className="text-center mb-6">
-                <h2 className="text-xl font-bold text-foreground">DriveWell</h2>
-                <p className="text-sm text-muted-foreground">Service Center — Invoice</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {new Date().toLocaleDateString()} // {draft.booking_ref ?? `#${draft.reservation_id}`}
-                </p>
-              </div>
-
-              <div className="space-y-1 text-sm mb-4">
-                <p>Customer: {draft.customer_name}</p>
-                <p>Vehicle: {draft.plate_no} — {draft.make} {draft.model} ({draft.vehicle_type})</p>
-              </div>
-
-              <table className="w-full text-sm mb-4">
-                <thead>
-                  <tr className="border-b-2 border-foreground">
-                    <th className="text-left py-1">Item</th>
-                    <th className="text-right py-1">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b border-border">
-                    <td className="py-1">{draft.package_name}</td>
-                    <td className="text-right py-1">LKR {parseFloat(createdInvoice.base_amount).toLocaleString()}</td>
-                  </tr>
-                  {createdInvoice.items.map((it, idx) => (
-                    <tr key={idx} className="border-b border-border">
-                      <td className="py-1">{it.description} {it.quantity > 1 ? `×${it.quantity}` : ""}</td>
-                      <td className="text-right py-1">LKR {parseFloat(it.line_total).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                  {parseFloat(createdInvoice.discount) > 0 && (
-                    <tr className="border-b border-border">
-                      <td className="py-1">Discount</td>
-                      <td className="text-right py-1">-LKR {parseFloat(createdInvoice.discount).toLocaleString()}</td>
-                    </tr>
-                  )}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-foreground font-bold">
-                    <td className="py-2">Total</td>
-                    <td className="text-right py-2">LKR {parseFloat(createdInvoice.total_amount).toLocaleString()}</td>
-                  </tr>
-                </tfoot>
-              </table>
-
-              <div className="text-sm text-muted-foreground">
-                <p>Payment: {paymentMethod}</p>
-                <p className="mt-4 text-center text-sm">Thank you for choosing DriveWell!</p>
-              </div>
-            </div>
-            <div className="p-4 border-t border-border no-print">
+            <SupervisorServiceDetails remarks={draft.remarks} items={draft.suggested_items} className="mx-3 mt-3" />
+            <InvoiceDocument
+              bookingRef={draft.booking_ref}
+              dateLabel={new Date().toLocaleDateString()}
+              customerName={draft.customer_name}
+              vehicleLine={`${draft.plate_no} — ${draft.make} ${draft.model} (${draft.vehicle_type})`}
+              packageName={draft.package_name}
+              baseAmount={parseFloat(createdInvoice.base_amount)}
+              items={createdInvoice.items.map((it) => ({ description: it.description, quantity: it.quantity, lineTotal: parseFloat(it.line_total) }))}
+              discount={parseFloat(createdInvoice.discount)}
+              totalAmount={parseFloat(createdInvoice.total_amount)}
+              paymentMethod={paymentMethod}
+            />
+            <div className="p-3 border-t border-border no-print">
               <button
                 onClick={async () => {
                   await markInvoicePaid(createdInvoice.invoice_id, paymentMethod);
@@ -518,6 +606,11 @@ export function CashierDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Read-only view of a past invoice, opened from Invoice History */}
+      {viewInvoice && (
+        <InvoiceViewModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} />
       )}
     </div>
   );
