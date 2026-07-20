@@ -68,13 +68,13 @@ export default function Services() {
       )}
 
       {!loading && !error && packages.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {packages.map((pkg) => {
             const bullets = getBullets(pkg.description);
             const src = imageSrc(pkg.image_url);
             return (
               <Card key={pkg.package_id} className="flex flex-col hover:shadow-xl transition-all overflow-hidden pt-0">
-                <div className="h-44 w-full bg-muted flex items-center justify-center overflow-hidden relative">
+                <div className="aspect-video w-full bg-muted flex items-center justify-center overflow-hidden relative">
                   {pkg.package_code && (
                     <span className="absolute top-2 left-2 z-10 rounded-md bg-background/90 px-2 py-0.5 text-xs font-mono font-medium text-foreground shadow-sm">
                       {pkg.package_code}
@@ -83,36 +83,37 @@ export default function Services() {
                   {src ? (
                     <img src={src} alt={pkg.name} className="h-full w-full object-cover" />
                   ) : (
-                    <Car className="h-12 w-12 text-muted-foreground" />
+                    <Car className="h-10 w-10 text-muted-foreground" />
                   )}
                 </div>
-                <CardHeader>
-                  <CardTitle className="text-2xl">{pkg.name}</CardTitle>
-                  <div className="flex items-baseline gap-2 mt-2">
-                    <span className="text-3xl font-bold text-cta">
+                <CardHeader className="p-4">
+                  <CardTitle className="text-lg">{pkg.name}</CardTitle>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-xl font-bold text-cta">
                       LKR {parseFloat(pkg.price).toLocaleString()}
                     </span>
-                    <span className="text-sm font-medium text-muted-foreground">Upwards</span>
+                    <span className="text-xs font-medium text-muted-foreground">Upwards</span>
                   </div>
                   <div className="flex items-center gap-2 text-muted-foreground mt-1">
-                    <Clock className="h-4 w-4 shrink-0" />
-                    <span className="text-sm">{fmtDuration(pkg.estimated_duration)}</span>
+                    <Clock className="h-3.5 w-3.5 shrink-0" />
+                    <span className="text-xs">{fmtDuration(pkg.estimated_duration)}</span>
                   </div>
                 </CardHeader>
-                <CardContent className="flex-1 flex flex-col">
+                <CardContent className="flex-1 flex flex-col p-4 pt-0">
                   {bullets.length > 0 ? (
-                    <ul className="space-y-2 flex-1 mb-6">
+                    <ul className="space-y-1.5 flex-1 mb-4">
                       {bullets.map((item, i) => (
                         <li key={i} className="flex items-start gap-2">
-                          <CheckCircle className="h-5 w-5 text-cta shrink-0 mt-0.5" />
-                          <span className="text-sm">{item}</span>
+                          <CheckCircle className="h-4 w-4 text-cta shrink-0 mt-0.5" />
+                          <span className="text-xs">{item}</span>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <div className="flex-1 mb-6" />
+                    <div className="flex-1 mb-4" />
                   )}
                   <Button
+                    size="sm"
                     className="w-full bg-cta text-cta-foreground hover:bg-cta/90"
                     onClick={() => navigate(`/book?package=${pkg.package_id}`)}
                   >

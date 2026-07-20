@@ -31,6 +31,13 @@ function fmtDuration(mins: number) {
   return m ? `${h}h ${m}min` : `${h}h`;
 }
 
+const STEPS = [
+  { number: 1, label: "Vehicle" },
+  { number: 2, label: "Package" },
+  { number: 3, label: "Date & Time" },
+  { number: 4, label: "Confirm" },
+] as const;
+
 export default function BookService() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -133,22 +140,39 @@ export default function BookService() {
       <h1 className="text-4xl font-bold mb-8 text-center">Book a Service</h1>
 
       {/* Step indicator */}
-      <div className="mb-8">
-        <div className="flex justify-between items-center mb-2">
-          {[1, 2, 3, 4].map((s) => (
-            <div key={s} className="flex items-center flex-1">
-              <div className={`h-10 w-10 rounded-full flex items-center justify-center font-semibold ${step >= s ? "bg-cta text-cta-foreground" : "bg-muted text-muted-foreground"}`}>
-                {s}
+      <div className="mb-6 rounded-lg border bg-card shadow-sm p-6">
+        <div className="flex items-start">
+          {STEPS.map((s, idx) => {
+            const isComplete = step > s.number;
+            const isCurrent = step === s.number;
+            return (
+              <div key={s.number} className="flex items-center flex-1 last:flex-none">
+                <div className="flex flex-col items-center gap-2">
+                  <div
+                    className={`h-10 w-10 shrink-0 rounded-full flex items-center justify-center font-semibold transition-colors ${
+                      isComplete
+                        ? "bg-cta text-cta-foreground"
+                        : isCurrent
+                          ? "bg-cta text-cta-foreground ring-4 ring-cta/20"
+                          : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {isComplete ? <CheckCircle className="h-5 w-5" /> : s.number}
+                  </div>
+                  <span
+                    className={`text-xs text-center whitespace-nowrap ${
+                      isCurrent ? "font-semibold text-foreground" : "text-muted-foreground"
+                    }`}
+                  >
+                    {s.label}
+                  </span>
+                </div>
+                {idx < STEPS.length - 1 && (
+                  <div className={`flex-1 h-0.5 mx-2 mb-5 rounded-full ${step > s.number ? "bg-cta" : "bg-muted"}`} />
+                )}
               </div>
-              {s < 4 && <div className={`flex-1 h-1 mx-2 ${step > s ? "bg-cta" : "bg-muted"}`} />}
-            </div>
-          ))}
-        </div>
-        <div className="flex justify-between text-sm text-muted-foreground">
-          <span>Vehicle</span>
-          <span>Package</span>
-          <span>Date & Time</span>
-          <span>Confirm</span>
+            );
+          })}
         </div>
       </div>
 
@@ -234,49 +258,48 @@ export default function BookService() {
             <CardDescription>Choose the service package that fits your needs</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4">
-              {packages.map((p) => (
-                <Card
-                  key={p.package_id}
-                  className={`cursor-pointer transition-all ${selectedPackageId === p.package_id ? "border-cta border-2 bg-cta/5" : "hover:border-cta/50"}`}
-                  onClick={() => setSelectedPackageId(p.package_id)}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-4">
-                      <div className="h-16 w-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden shrink-0">
-                        {imageSrc(p.image_url) ? (
-                          <img src={imageSrc(p.image_url)!} alt={p.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <Car className="h-6 w-6 text-muted-foreground" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {packages.map((p) => {
+                const isSelected = selectedPackageId === p.package_id;
+                return (
+                  <Card
+                    key={p.package_id}
+                    className={`cursor-pointer transition-all overflow-hidden flex flex-col ${isSelected ? "border-cta border-2 bg-cta/5" : "hover:border-cta/50"}`}
+                    onClick={() => setSelectedPackageId(p.package_id)}
+                  >
+                    <div className="relative h-20 w-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                      {imageSrc(p.image_url) ? (
+                        <img src={imageSrc(p.image_url)!} alt={p.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <Car className="h-7 w-7 text-muted-foreground" />
+                      )}
+                      {isSelected && (
+                        <div className="absolute top-1.5 right-1.5 h-5 w-5 rounded-full bg-cta text-cta-foreground flex items-center justify-center shadow">
+                          <CheckCircle className="h-3.5 w-3.5" />
+                        </div>
+                      )}
+                    </div>
+                    <CardContent className="p-3 flex flex-col flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-sm">{p.name}</h3>
+                        {p.package_code && (
+                          <span className="text-[10px] font-mono text-muted-foreground">{p.package_code}</span>
                         )}
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-semibold text-lg">{p.name}</h3>
-                              {p.package_code && (
-                                <span className="text-xs font-mono text-muted-foreground">{p.package_code}</span>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground">{p.description}</p>
-                          </div>
-                          {selectedPackageId === p.package_id && (
-                            <CheckCircle className="h-6 w-6 text-cta shrink-0" />
-                          )}
-                        </div>
-                        <div className="flex items-center gap-4 text-sm">
-                          <span className="text-2xl font-bold text-cta">
+                      <p className="text-xs text-muted-foreground line-clamp-2 flex-1">{p.description}</p>
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t">
+                        <div>
+                          <span className="text-base font-bold text-cta">
                             LKR {parseFloat(p.price).toLocaleString()}
                           </span>
-                          <span className="text-muted-foreground text-xs font-medium">Upwards</span>
-                          <span className="text-muted-foreground">• {fmtDuration(p.estimated_duration)}</span>
+                          <span className="text-muted-foreground text-[10px] font-medium ml-1">Upwards</span>
                         </div>
+                        <span className="text-[10px] text-muted-foreground">{fmtDuration(p.estimated_duration)}</span>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
             <div className="flex gap-3">
               <Button variant="outline" onClick={() => setStep(1)} className="flex-1">Back</Button>

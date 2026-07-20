@@ -19,7 +19,7 @@ const listPackages = async (req, res) => {
     const isManager = req.user?.role_id === 1;
     const packages = await prisma.servicePackage.findMany({
       where: isManager ? {} : { is_active: true },
-      orderBy: isManager ? { created_at: "desc" } : { name: "asc" },
+      orderBy: isManager ? { created_at: "desc" } : [{ package_code: "asc" }, { name: "asc" }],
     });
     res.status(200).json({ packages });
   } catch (error) {

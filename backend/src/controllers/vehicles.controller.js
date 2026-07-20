@@ -60,9 +60,14 @@ const listModels = async (req, res) => {
   }
 };
 
+const HIDDEN_VEHICLE_TYPES = ["Motorcycle", "Three-Wheeler"];
+
 const listVehicleTypes = async (req, res) => {
   try {
-    const types = await prisma.vehicleType.findMany({ orderBy: { name: "asc" } });
+    const types = await prisma.vehicleType.findMany({
+      where: { name: { notIn: HIDDEN_VEHICLE_TYPES } },
+      orderBy: { name: "asc" },
+    });
     res.status(200).json({ types });
   } catch (error) {
     logger.error(`listVehicleTypes failed — ${error.message}`);

@@ -103,6 +103,9 @@ function PackagesPage() {
   const [imageError, setImageError] = useState("");
   const [removingImage, setRemovingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLDivElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const [focusToken, setFocusToken] = useState(0);
 
   const load = () => {
     setLoading(true);
@@ -121,6 +124,15 @@ function PackagesPage() {
     };
   }, [imagePreview]);
 
+  // Runs after the form has (re)opened — scroll it into view and move focus to
+  // the first field, since the panel renders above the table and a click on a
+  // row further down would otherwise open it off-screen.
+  useEffect(() => {
+    if (focusToken === 0) return;
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    nameInputRef.current?.focus();
+  }, [focusToken]);
+
   const resetImageState = () => {
     if (imagePreview) URL.revokeObjectURL(imagePreview);
     setImageFile(null);
@@ -136,6 +148,7 @@ function PackagesPage() {
     resetImageState();
     setShowForm(true);
     setPageError("");
+    setFocusToken((t) => t + 1);
   };
 
   const openEdit = (pkg: ApiPackage) => {
@@ -154,6 +167,7 @@ function PackagesPage() {
     setEditing(pkg);
     setShowForm(true);
     setPageError("");
+    setFocusToken((t) => t + 1);
   };
 
   const closeForm = () => {
@@ -278,7 +292,7 @@ function PackagesPage() {
       )}
 
       {showForm && (
-        <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+        <div ref={formRef} className="rounded-lg border border-border bg-card p-5 space-y-4 scroll-mt-4">
           <div className="flex items-center justify-between">
             <h3 className="text-base font-semibold text-foreground">{editing ? "Edit Package" : "New Package"}</h3>
             <button onClick={closeForm} className="text-muted-foreground hover:text-foreground">
@@ -327,6 +341,7 @@ function PackagesPage() {
               Package Name <span className="text-destructive">*</span>
             </label>
             <input
+              ref={nameInputRef}
               placeholder="e.g. Full Engine Service"
               maxLength={100}
               {...field("name")}
