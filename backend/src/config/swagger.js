@@ -75,6 +75,7 @@ const options = {
           properties: {
             package_id:         { type: "integer", example: 1 },
             name:               { type: "string",  example: "Full Service" },
+            package_code:       { type: "string",  example: "DWP-001", description: "Manually assigned reference code, always prefixed DWP-" },
             description:        { type: "string",  example: "Complete vehicle service including oil change, filter replacement, and inspection." },
             estimated_duration: { type: "integer", example: 120, description: "Duration in minutes" },
             price:              { type: "number",  example: 4500.00 },
@@ -84,9 +85,10 @@ const options = {
         },
         ServicePackageInput: {
           type: "object",
-          required: ["name", "estimated_duration", "price"],
+          required: ["name", "package_code", "estimated_duration", "price"],
           properties: {
             name:               { type: "string",  example: "Full Service" },
+            package_code:       { type: "string",  example: "DWP-001", description: "Must start with DWP- followed by 1-16 letters/numbers/hyphens" },
             description:        { type: "string",  example: "Complete vehicle service" },
             estimated_duration: { type: "integer", example: 120 },
             price:              { type: "number",  example: 4500.00 },

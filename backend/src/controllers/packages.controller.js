@@ -42,31 +42,33 @@ const getPackage = async (req, res) => {
 };
 
 const createPackage = async (req, res) => {
-  const { name, description, estimated_duration, price, max_capacity } = req.body;
+  const { name, package_code, description, estimated_duration, price, max_capacity } = req.body;
   try {
     const pkg = await prisma.servicePackage.create({
-      data: { name, description, estimated_duration, price, max_capacity },
+      data: { name, package_code, description, estimated_duration, price, max_capacity },
     });
     logger.info(`Package created — package_id: ${pkg.package_id}`);
     logActivity(prisma, { user_id: req.user.user_id, action: "PACKAGE_UPDATED", entity_type: "service_package", entity_id: pkg.package_id });
     res.status(201).json({ message: "Package created", package: pkg });
   } catch (error) {
+    if (error.code === "P2002") return res.status(400).json({ message: "This package code is already in use" });
     logger.error(`createPackage failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
 };
 
 const updatePackage = async (req, res) => {
-  const { name, description, estimated_duration, price, max_capacity } = req.body;
+  const { name, package_code, description, estimated_duration, price, max_capacity } = req.body;
   try {
     const pkg = await prisma.servicePackage.update({
       where: { package_id: parseInt(req.params.id) },
-      data: { name, description, estimated_duration, price, max_capacity },
+      data: { name, package_code, description, estimated_duration, price, max_capacity },
     });
     logActivity(prisma, { user_id: req.user.user_id, action: "PACKAGE_UPDATED", entity_type: "service_package", entity_id: pkg.package_id });
     res.status(200).json({ message: "Package updated", package: pkg });
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ message: "Package not found" });
+    if (error.code === "P2002") return res.status(400).json({ message: "This package code is already in use" });
     logger.error(`updatePackage failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }

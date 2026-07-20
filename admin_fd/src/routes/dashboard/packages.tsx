@@ -10,6 +10,7 @@ export const Route = createFileRoute("/dashboard/packages")({
 interface ApiPackage {
   package_id: number;
   name: string;
+  package_code: string | null;
   description: string | null;
   estimated_duration: number;
   price: string;
@@ -21,6 +22,9 @@ interface ApiPackage {
 
 interface PackageForm {
   name: string;
+  // Holds only the part after "DWP-" — the prefix is locked in the UI and
+  // reattached on save, so every code is consistently formatted.
+  code_suffix: string;
   description: string;
   estimated_duration: number | "";
   price: number | "";
@@ -29,13 +33,15 @@ interface PackageForm {
 
 interface FormErrors {
   name?: string;
+  code_suffix?: string;
   description?: string;
   estimated_duration?: string;
   price?: string;
   max_capacity?: string;
 }
 
-const EMPTY_FORM: PackageForm = { name: "", description: "", estimated_duration: "", price: "", max_capacity: 3 };
+const PACKAGE_CODE_PREFIX = "DWP-";
+const EMPTY_FORM: PackageForm = { name: "", code_suffix: "", description: "", estimated_duration: "", price: "", max_capacity: 3 };
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
@@ -45,6 +51,11 @@ function imageSrc(image_url: string | null) {
 
 function validate(form: PackageForm): FormErrors {
   const errors: FormErrors = {};
+  if (!form.code_suffix.trim()) {
+    errors.code_suffix = "Package code is required";
+  } else if (!/^[A-Z0-9-]{1,16}$/.test(form.code_suffix.trim())) {
+    errors.code_suffix = "Only letters, numbers, and hyphens — max 16 characters";
+  }
   if (!form.name.trim()) {
     errors.name = "Name is required";
   } else if (form.name.trim().length > 100) {
@@ -130,6 +141,9 @@ function PackagesPage() {
   const openEdit = (pkg: ApiPackage) => {
     setForm({
       name: pkg.name,
+      code_suffix: pkg.package_code?.startsWith(PACKAGE_CODE_PREFIX)
+        ? pkg.package_code.slice(PACKAGE_CODE_PREFIX.length)
+        : pkg.package_code ?? "",
       description: pkg.description ?? "",
       estimated_duration: pkg.estimated_duration,
       price: parseFloat(pkg.price),
@@ -177,6 +191,7 @@ function PackagesPage() {
     try {
       const payload = {
         name: form.name.trim(),
+        package_code: `${PACKAGE_CODE_PREFIX}${form.code_suffix.trim().toUpperCase()}`,
         description: form.description.trim(),
         estimated_duration: Number(form.estimated_duration),
         price: Number(form.price),
@@ -322,6 +337,33 @@ function PackagesPage() {
             )}
           </div>
 
+          {/* Package Code */}
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-muted-foreground">
+              Package Code <span className="text-destructive">*</span>
+            </label>
+            <div className="flex max-w-xs">
+              <span className="inline-flex items-center rounded-l-md border border-r-0 border-border bg-muted px-3 text-sm font-mono text-muted-foreground">
+                {PACKAGE_CODE_PREFIX}
+              </span>
+              <input
+                placeholder="e.g. 001"
+                maxLength={16}
+                value={form.code_suffix}
+                onChange={(e) => {
+                  setForm({ ...form, code_suffix: e.target.value.toUpperCase() });
+                  if (formErrors.code_suffix) setFormErrors({ ...formErrors, code_suffix: undefined });
+                }}
+                className={`flex-1 min-w-0 border rounded-r-md bg-background px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${formErrors.code_suffix ? "border-destructive" : "border-border"}`}
+              />
+            </div>
+            {formErrors.code_suffix ? (
+              <p className="text-sm text-destructive">{formErrors.code_suffix}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">A short reference code shown to customers, e.g. {PACKAGE_CODE_PREFIX}001</p>
+            )}
+          </div>
+
           {/* Description */}
           <div className="space-y-1">
             <label className="text-sm font-medium text-muted-foreground">
@@ -445,6 +487,9 @@ function PackagesPage() {
                         <ImagePlus className="h-4 w-4 text-muted-foreground" />
                       )}
                     </div>
+                    {pkg.package_code && (
+                      <p className="mt-1 w-16 text-center text-[11px] font-mono text-muted-foreground">{pkg.package_code}</p>
+                    )}
                   </td>
                   <td className="py-3 px-3">
                     <p className="text-foreground font-semibold">{pkg.name}</p>

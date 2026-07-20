@@ -39,6 +39,21 @@ const verifyToken = (req, res, next) => {
     return res.status(403).json({ message: "Invalid token." });
   }
 };
+// Like verifyToken, but never blocks the request — attaches req.user when a
+// valid session cookie is present, otherwise just continues as a guest. For
+// routes that must stay public but still serve extra data to logged-in staff
+// (e.g. package listing: guests see active packages, managers see all).
+const identifyUser = (req, res, next) => {
+  const token = req.cookies?.token;
+  if (!token) return next();
+  try {
+    req.user = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (error) {
+    // Invalid/expired token on an optional-auth route — just treat as a guest.
+  }
+  next();
+};
+
 const authorizeRoles = (...allowedRoles) => {
   return (req, res, next) => {
     const userRoleId = req.user?.role_id;
@@ -56,4 +71,4 @@ const authorizeRoles = (...allowedRoles) => {
   };
 };
 
-module.exports = { verifyToken, authorizeRoles };
+module.exports = { verifyToken, authorizeRoles, identifyUser };

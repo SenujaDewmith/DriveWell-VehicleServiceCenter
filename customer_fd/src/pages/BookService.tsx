@@ -253,7 +253,12 @@ export default function BookService() {
                       <div className="flex-1">
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <h3 className="font-semibold text-lg">{p.name}</h3>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold text-lg">{p.name}</h3>
+                              {p.package_code && (
+                                <span className="text-xs font-mono text-muted-foreground">{p.package_code}</span>
+                              )}
+                            </div>
                             <p className="text-sm text-muted-foreground">{p.description}</p>
                           </div>
                           {selectedPackageId === p.package_id && (

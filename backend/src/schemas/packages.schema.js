@@ -6,6 +6,9 @@ const packageSchema = z.object({
     .min(1, "Name is required")
     .max(100, "Name must be 100 characters or less")
     .trim(),
+  package_code: z
+    .string({ required_error: "Package code is required" })
+    .regex(/^DWP-[A-Z0-9-]{1,16}$/, "Package code must look like DWP- followed by letters/numbers"),
   description: z
     .string({ required_error: "Description is required" })
     .min(1, "Description is required")

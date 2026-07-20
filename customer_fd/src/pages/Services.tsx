@@ -74,7 +74,12 @@ export default function Services() {
             const src = imageSrc(pkg.image_url);
             return (
               <Card key={pkg.package_id} className="flex flex-col hover:shadow-xl transition-all overflow-hidden pt-0">
-                <div className="h-44 w-full bg-muted flex items-center justify-center overflow-hidden">
+                <div className="h-44 w-full bg-muted flex items-center justify-center overflow-hidden relative">
+                  {pkg.package_code && (
+                    <span className="absolute top-2 left-2 z-10 rounded-md bg-background/90 px-2 py-0.5 text-xs font-mono font-medium text-foreground shadow-sm">
+                      {pkg.package_code}
+                    </span>
+                  )}
                   {src ? (
                     <img src={src} alt={pkg.name} className="h-full w-full object-cover" />
                   ) : (

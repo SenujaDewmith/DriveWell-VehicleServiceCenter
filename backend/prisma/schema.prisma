@@ -116,6 +116,7 @@ model Vehicle {
 model ServicePackage {
   package_id         Int      @id @default(autoincrement())
   name               String   @db.VarChar(150)
+  package_code       String?  @unique @db.VarChar(20)
   description        String?
   estimated_duration Int      @default(60)
   price              Decimal  @db.Decimal(10, 2)

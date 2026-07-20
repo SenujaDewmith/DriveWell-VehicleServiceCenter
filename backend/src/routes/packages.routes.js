@@ -13,6 +13,7 @@ const {
 const {
   verifyToken,
   authorizeRoles,
+  identifyUser,
 } = require("../middlewares/auth.middleware");
 const validate = require("../middlewares/validate.middleware");
 const { packageSchema } = require("../schemas/packages.schema");
@@ -51,7 +52,7 @@ const managerOnly = [verifyToken, authorizeRoles("Service Center Manager")];
  *                     $ref: '#/components/schemas/ServicePackage'
  *       500: { description: Server error }
  */
-router.get("/", listPackages);
+router.get("/", identifyUser, listPackages);
 
 /**
  * @swagger

@@ -3,6 +3,7 @@ import { apiClient } from "@/lib/apiClient";
 export interface ServicePackage {
   package_id: number;
   name: string;
+  package_code: string | null;
   description: string | null;
   estimated_duration: number;
   price: string;
