@@ -6,6 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { bookingsService, type Booking } from "@/services/bookings.service";
 import { Calendar, Car, Clock, Eye, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -24,6 +35,18 @@ const STATUS_COLORS: Record<BookingStatus, string> = {
 
 const UPCOMING: BookingStatus[] = ["Booked", "Started", "In Progress", "Ready for Pickup"];
 const PAST: BookingStatus[] = ["Completed", "Cancelled", "No-show"];
+
+// Must match CANCELLATION_CUTOFF_MINUTES in backend/src/controllers/bookings.controller.js —
+// this only drives the UI's disabled state; the backend independently enforces the real rule.
+const CANCELLATION_CUTOFF_HOURS = 24;
+
+// slot_time is "HH:MM:SS"; combined with service_date ("YYYY-MM-DD") this parses as local time,
+// matching how the rest of the app treats booking dates/times as local wall-clock values.
+function hoursUntilAppointment(booking: Booking): number | null {
+  if (!booking.slot_time) return null;
+  const scheduledAt = new Date(`${booking.service_date}T${booking.slot_time}`);
+  return (scheduledAt.getTime() - Date.now()) / (1000 * 60 * 60);
+}
 
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString("en-LK", {
@@ -124,15 +147,46 @@ export default function Bookings() {
               <Eye className="mr-2 h-4 w-4" />
               View Details
             </Button>
-            {showCancel && booking.status === "Booked" && (
-              <Button
-                variant="outline"
-                className="w-full text-destructive hover:text-destructive"
-                onClick={() => handleCancel(booking.reservation_id)}
-              >
-                Cancel Booking
-              </Button>
-            )}
+            {showCancel && booking.status === "Booked" && (() => {
+              const hoursUntil = hoursUntilAppointment(booking);
+              const withinCutoff = hoursUntil !== null && hoursUntil < CANCELLATION_CUTOFF_HOURS;
+              return withinCutoff ? (
+                <div className="space-y-1">
+                  <Button variant="outline" className="w-full" disabled>
+                    Cancel Booking
+                  </Button>
+                  <p className="text-xs text-muted-foreground text-center">
+                    Cancellations must be made at least {CANCELLATION_CUTOFF_HOURS}h ahead — please call us for urgent changes.
+                  </p>
+                </div>
+              ) : (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" className="w-full text-destructive hover:text-destructive">
+                      Cancel Booking
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will cancel your {booking.package_name} appointment on {fmtDate(booking.service_date)}
+                        {booking.slot_time ? ` at ${fmtTime(booking.slot_time)}` : ""}. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Keep Booking</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        onClick={() => handleCancel(booking.reservation_id)}
+                      >
+                        Yes, Cancel Booking
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              );
+            })()}
           </div>
         </div>
       </CardContent>

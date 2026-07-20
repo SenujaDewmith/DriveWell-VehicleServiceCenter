@@ -13,6 +13,10 @@ const {
 const CUSTOMER_ROLE = 5;
 const MANAGER_ROLE = 1;
 
+// Customers may self-cancel only up to this many minutes before the appointment
+// (staff/manager cancellations are exempt — this is a self-service guardrail, not a hard business rule)
+const CANCELLATION_CUTOFF_MINUTES = 24 * 60;
+
 const flattenBooking = (r) => ({
   reservation_id: r.reservation_id,
   booking_ref: r.booking_ref,
@@ -231,6 +235,17 @@ const cancelBooking = async (req, res) => {
       return res.status(403).json({ message: "Access denied" });
     if (booking.status !== "Booked")
       return res.status(400).json({ message: `Cannot cancel a booking with status: ${booking.status}` });
+
+    if (role_id === CUSTOMER_ROLE) {
+      const { todayKey, nowMinutes } = getLocalNow();
+      const daysUntil = Math.round((new Date(fmtDate(booking.service_date)) - new Date(todayKey)) / 86400000);
+      const minutesUntil = daysUntil * 1440 + (dateColToMinutes(booking.start_time) - nowMinutes);
+      if (minutesUntil < CANCELLATION_CUTOFF_MINUTES) {
+        return res.status(400).json({
+          message: "Cancellations must be made at least 24 hours before the scheduled appointment. Please contact us directly for urgent changes.",
+        });
+      }
+    }
 
     await prisma.reservation.update({
       where: { reservation_id: parseInt(id) },
