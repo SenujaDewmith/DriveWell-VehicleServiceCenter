@@ -1,11 +1,15 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as DatePickerCalendar } from "@/components/ui/calendar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,7 +22,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { bookingsService, type Booking } from "@/services/bookings.service";
+import { toDateKey } from "@/components/BookingCalendar";
+import { CANCELLATION_CUTOFF_HOURS, hoursUntilAppointment, UPCOMING_STATUSES, PAST_STATUSES } from "@/lib/bookingRules";
 import { Calendar, Car, Clock, Eye, Loader2 } from "lucide-react";
+import { format } from "date-fns";
 import { toast } from "sonner";
 
 type BookingStatus = Booking["status"];
@@ -33,19 +40,14 @@ const STATUS_COLORS: Record<BookingStatus, string> = {
   "No-show": "bg-status-cancelled/10 text-status-cancelled border-status-cancelled/20",
 };
 
-const UPCOMING: BookingStatus[] = ["Booked", "Started", "In Progress", "Ready for Pickup"];
-const PAST: BookingStatus[] = ["Completed", "Cancelled", "No-show"];
+const UPCOMING = UPCOMING_STATUSES;
+const PAST = PAST_STATUSES;
 
-// Must match CANCELLATION_CUTOFF_MINUTES in backend/src/controllers/bookings.controller.js —
-// this only drives the UI's disabled state; the backend independently enforces the real rule.
-const CANCELLATION_CUTOFF_HOURS = 24;
-
-// slot_time is "HH:MM:SS"; combined with service_date ("YYYY-MM-DD") this parses as local time,
-// matching how the rest of the app treats booking dates/times as local wall-clock values.
-function hoursUntilAppointment(booking: Booking): number | null {
-  if (!booking.slot_time) return null;
-  const scheduledAt = new Date(`${booking.service_date}T${booking.slot_time}`);
-  return (scheduledAt.getTime() - Date.now()) / (1000 * 60 * 60);
+// Inverse of toDateKey — builds a local-midnight Date from a "YYYY-MM-DD" key so it
+// round-trips safely regardless of the browser's timezone offset.
+function parseDateKey(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
 }
 
 function fmtDate(d: string) {
@@ -66,7 +68,19 @@ export default function Bookings() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState("upcoming");
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Tab lives in the URL (not just component state) so "Back to Bookings" from a
+  // booking's detail page can land on the tab that booking actually belongs to,
+  // and so the tab survives a refresh or a shared link.
+  const activeTab = searchParams.get("tab") === "past" ? "past" : "upcoming";
+  const setActiveTab = (tab: string) => {
+    setSearchParams(tab === "past" ? { tab: "past" } : {}, { replace: true });
+  };
+  const [packageFilter, setPackageFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [fromPickerOpen, setFromPickerOpen] = useState(false);
+  const [toPickerOpen, setToPickerOpen] = useState(false);
 
   useEffect(() => {
     if (!user) navigate("/login");
@@ -100,6 +114,25 @@ export default function Bookings() {
 
   const upcomingBookings = bookings.filter((b) => UPCOMING.includes(b.status));
   const pastBookings = bookings.filter((b) => PAST.includes(b.status));
+
+  const pastPackageOptions = Array.from(
+    new Set(pastBookings.map((b) => b.package_name).filter((name): name is string => !!name))
+  ).sort();
+
+  const filtersActive = packageFilter !== "all" || !!dateFrom || !!dateTo;
+
+  const filteredPastBookings = pastBookings.filter((b) => {
+    if (packageFilter !== "all" && b.package_name !== packageFilter) return false;
+    if (dateFrom && b.service_date < dateFrom) return false;
+    if (dateTo && b.service_date > dateTo) return false;
+    return true;
+  });
+
+  const clearFilters = () => {
+    setPackageFilter("all");
+    setDateFrom("");
+    setDateTo("");
+  };
 
   const BookingCard = ({ booking, showCancel }: { booking: Booking; showCancel?: boolean }) => (
     <Card className="hover:shadow-lg transition-shadow">
@@ -249,9 +282,102 @@ export default function Bookings() {
               </Card>
             ) : (
               <div className="space-y-4">
-                {pastBookings.map((b) => (
-                  <BookingCard key={b.reservation_id} booking={b} />
-                ))}
+                <Card>
+                  <CardContent className="p-4 flex flex-col sm:flex-row sm:items-end gap-4">
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Package</Label>
+                      <Select value={packageFilter} onValueChange={setPackageFilter}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Packages</SelectItem>
+                          {pastPackageOptions.map((name) => (
+                            <SelectItem key={name} value={name}>
+                              {name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">From</Label>
+                      <Popover open={fromPickerOpen} onOpenChange={setFromPickerOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={`w-full justify-start text-left font-normal ${!dateFrom ? "text-muted-foreground" : ""}`}
+                          >
+                            <Calendar className="mr-2 h-4 w-4" />
+                            {dateFrom ? format(parseDateKey(dateFrom), "PP") : "Any date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <DatePickerCalendar
+                            mode="single"
+                            selected={dateFrom ? parseDateKey(dateFrom) : undefined}
+                            onSelect={(date) => {
+                              setDateFrom(date ? toDateKey(date) : "");
+                              setFromPickerOpen(false);
+                            }}
+                            disabled={dateTo ? { after: parseDateKey(dateTo) } : undefined}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">To</Label>
+                      <Popover open={toPickerOpen} onOpenChange={setToPickerOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={`w-full justify-start text-left font-normal ${!dateTo ? "text-muted-foreground" : ""}`}
+                          >
+                            <Calendar className="mr-2 h-4 w-4" />
+                            {dateTo ? format(parseDateKey(dateTo), "PP") : "Any date"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <DatePickerCalendar
+                            mode="single"
+                            selected={dateTo ? parseDateKey(dateTo) : undefined}
+                            onSelect={(date) => {
+                              setDateTo(date ? toDateKey(date) : "");
+                              setToPickerOpen(false);
+                            }}
+                            disabled={dateFrom ? { before: parseDateKey(dateFrom) } : undefined}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    {filtersActive && (
+                      <Button variant="ghost" onClick={clearFilters} className="text-muted-foreground">
+                        Clear Filters
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {filteredPastBookings.length === 0 ? (
+                  <Card className="text-center py-12">
+                    <CardContent>
+                      <Clock className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-xl font-semibold mb-2">No bookings match your filters</h3>
+                      <p className="text-muted-foreground mb-4">Try adjusting the package or date range</p>
+                      <Button variant="outline" onClick={clearFilters}>
+                        Clear Filters
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredPastBookings.map((b) => (
+                      <BookingCard key={b.reservation_id} booking={b} />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </TabsContent>

@@ -1,5 +1,35 @@
 import { apiClient } from "@/lib/apiClient";
 
+// Populated only on the single-booking detail response (getBooking), not on list rows —
+// the itemized "additional work found" list stays server-side, hidden from customers.
+export interface BookingServiceRecord {
+  remarks: string | null;
+  quality_checked: boolean;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface BookingInvoiceItem {
+  invoice_item_id: number;
+  description: string;
+  unit_price: string;
+  quantity: number;
+  line_total: string;
+}
+
+export interface BookingInvoice {
+  invoice_id: number;
+  base_amount: string;
+  additional_charges: string;
+  discount: string;
+  total_amount: string;
+  payment_status: "Paid" | "Unpaid";
+  payment_method: string | null;
+  notes: string | null;
+  generated_at: string;
+  items: BookingInvoiceItem[];
+}
+
 export interface Booking {
   reservation_id: number;
   booking_ref: string;
@@ -17,6 +47,8 @@ export interface Booking {
   estimated_duration?: number;
   slot_time?: string | null;
   slot_end_time?: string | null;
+  service_record?: BookingServiceRecord | null;
+  invoice?: BookingInvoice | null;
 }
 
 export interface CreateBookingPayload {

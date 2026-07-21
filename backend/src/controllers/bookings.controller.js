@@ -47,6 +47,60 @@ const BOOKING_INCLUDE = {
   package: { select: { name: true, price: true, estimated_duration: true } },
 };
 
+// Richer include used only for the single-booking detail view — the list view stays
+// lean since it doesn't need service-record/invoice data for every row.
+const BOOKING_DETAIL_INCLUDE = {
+  ...BOOKING_INCLUDE,
+  service_record: {
+    select: {
+      remarks: true,
+      quality_checked: true,
+      started_at: true,
+      completed_at: true,
+      items: { select: { description: true, quantity: true } },
+    },
+  },
+  invoice: { include: { items: true } },
+};
+
+// `includeServiceItems` gates the supervisor's itemized "additional work found" notes out
+// of the customer payload — same policy as invoices.controller.js's includeSupervisorNotes:
+// remarks are customer-facing, but the structured item list stays internal/staff-only.
+const flattenBookingDetail = (r, { includeServiceItems = false } = {}) => ({
+  ...flattenBooking(r),
+  service_record: r.service_record
+    ? {
+        remarks: r.service_record.remarks,
+        quality_checked: r.service_record.quality_checked,
+        started_at: r.service_record.started_at,
+        completed_at: r.service_record.completed_at,
+        ...(includeServiceItems && {
+          items: r.service_record.items.map((i) => ({ description: i.description, quantity: i.quantity })),
+        }),
+      }
+    : null,
+  invoice: r.invoice
+    ? {
+        invoice_id: r.invoice.invoice_id,
+        base_amount: r.invoice.base_amount,
+        additional_charges: r.invoice.additional_charges,
+        discount: r.invoice.discount,
+        total_amount: r.invoice.total_amount,
+        payment_status: r.invoice.payment_status,
+        payment_method: r.invoice.payment_method,
+        notes: r.invoice.notes,
+        generated_at: r.invoice.generated_at,
+        items: r.invoice.items.map((it) => ({
+          invoice_item_id: it.invoice_item_id,
+          description: it.description,
+          unit_price: it.unit_price,
+          quantity: it.quantity,
+          line_total: it.line_total,
+        })),
+      }
+    : null,
+});
+
 const listBookings = async (req, res) => {
   const { user_id, role_id } = req.user;
   const { status, from, to, customer_id, package_id } = req.query;
@@ -81,13 +135,15 @@ const getBooking = async (req, res) => {
   try {
     const row = await prisma.reservation.findUnique({
       where: { reservation_id: parseInt(req.params.id) },
-      include: BOOKING_INCLUDE,
+      include: BOOKING_DETAIL_INCLUDE,
     });
     if (!row) return res.status(404).json({ message: "Booking not found" });
     if (role_id === CUSTOMER_ROLE && row.customer_id !== user_id)
       return res.status(403).json({ message: "Access denied" });
 
-    res.status(200).json({ booking: flattenBooking(row) });
+    res.status(200).json({
+      booking: flattenBookingDetail(row, { includeServiceItems: role_id !== CUSTOMER_ROLE }),
+    });
   } catch (error) {
     logger.error(`getBooking failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });

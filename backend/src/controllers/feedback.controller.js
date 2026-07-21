@@ -1,5 +1,7 @@
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
+const { fmtDate } = require("../lib/format");
+const { VEHICLE_SELECT, flattenVehicleRef } = require("../lib/vehicleFlatten");
 
 const CUSTOMER_ROLE = 5;
 
@@ -23,6 +25,7 @@ const listFeedback = async (req, res) => {
           select: {
             booking_ref: true,
             service_date: true,
+            vehicle: VEHICLE_SELECT,
             package: { select: { name: true } },
           },
         },
@@ -41,7 +44,8 @@ const listFeedback = async (req, res) => {
       comment: f.comment,
       submitted_at: f.submitted_at,
       booking_ref: f.reservation.booking_ref,
-      service_date: f.reservation.service_date,
+      service_date: fmtDate(f.reservation.service_date),
+      ...flattenVehicleRef(f.reservation.vehicle),
       package_name: f.reservation.package.name,
       customer_name: f.customer.customer?.full_name,
     }));
