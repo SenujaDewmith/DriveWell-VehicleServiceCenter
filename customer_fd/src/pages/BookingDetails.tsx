@@ -19,7 +19,7 @@ import {
 import { bookingsService, type Booking } from "@/services/bookings.service";
 import { feedbackService } from "@/services/feedback.service";
 import { CANCELLATION_CUTOFF_HOURS, canSelfCancel, bookingListTab } from "@/lib/bookingRules";
-import { ArrowLeft, Car, Calendar, Clock, CheckCircle, Loader2, Wrench, FileText, Printer } from "lucide-react";
+import { ArrowLeft, Car, Calendar, Clock, CheckCircle, Loader2, Wrench, FileText, Printer, Gauge } from "lucide-react";
 import { toast } from "sonner";
 
 function fmtDate(d: string) {
@@ -302,6 +302,19 @@ export default function BookingDetails() {
             </CardHeader>
             <CardContent>
               <p className="text-sm">{serviceRecord.remarks}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {serviceRecord?.has_oil_change && (
+          <Card className="border-2 border-cta/20 bg-cta/5">
+            <CardContent className="flex items-center gap-3 py-4">
+              <Gauge className="h-5 w-5 text-cta shrink-0" />
+              <p className="text-sm">
+                Odometer at this service: <span className="font-medium">{serviceRecord.current_odometer?.toLocaleString() ?? "—"} km</span>
+                {" — "}Next service due at{" "}
+                <span className="font-semibold text-cta">{serviceRecord.next_service_odometer?.toLocaleString() ?? "—"} km</span>
+              </p>
             </CardContent>
           </Card>
         )}

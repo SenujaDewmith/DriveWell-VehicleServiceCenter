@@ -10,6 +10,7 @@ export interface ServicePackage {
   image_url: string | null;
   max_capacity: number;
   is_active: boolean;
+  is_featured: boolean;
   created_at: string;
 }
 

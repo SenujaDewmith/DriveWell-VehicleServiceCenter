@@ -5,6 +5,9 @@ import { apiClient } from "@/lib/apiClient";
 export interface BookingServiceRecord {
   remarks: string | null;
   quality_checked: boolean;
+  has_oil_change: boolean;
+  current_odometer: number | null;
+  next_service_odometer: number | null;
   started_at: string | null;
   completed_at: string | null;
 }

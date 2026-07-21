@@ -123,6 +123,10 @@ model ServicePackage {
   image_url          String?  @db.VarChar(500)
   max_capacity       Int      @default(3)
   is_active          Boolean  @default(true)
+  // Manager-curated pick for the "Popular Service Packages" section on the public landing
+  // page — deliberately not derived from booking counts (see project notes: a manually
+  // curated highlight avoids just crowning whichever package is cheapest/highest-volume).
+  is_featured        Boolean  @default(false)
   created_at         DateTime @default(now())
 
   reservations Reservation[]
@@ -176,13 +180,19 @@ model Reservation {
 }
 
 model ServiceRecord {
-  record_id       Int       @id @default(autoincrement())
-  reservation_id  Int       @unique
-  supervisor_id   Int?
-  remarks         String?
-  quality_checked Boolean   @default(false)
-  started_at      DateTime?
-  completed_at    DateTime?
+  record_id             Int       @id @default(autoincrement())
+  reservation_id        Int       @unique
+  supervisor_id         Int?
+  remarks               String?
+  quality_checked       Boolean   @default(false)
+  // Odometer reading is only collected when this service involved an oil
+  // change (engine or gear oil) — supervisor self-declares via has_oil_change
+  // rather than it being inferred from the package/catalog.
+  has_oil_change        Boolean   @default(false)
+  current_odometer      Int?
+  next_service_odometer Int?
+  started_at            DateTime?
+  completed_at          DateTime?
 
   reservation Reservation @relation(fields: [reservation_id], references: [reservation_id], onDelete: Cascade)
   supervisor  User?                     @relation("SupervisorRecords", fields: [supervisor_id], references: [user_id])

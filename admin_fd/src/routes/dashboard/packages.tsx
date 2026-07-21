@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
-import { Plus, Pencil, ToggleLeft, ToggleRight, X, ImagePlus, Trash2, Car } from "lucide-react";
+import { Plus, Pencil, ToggleLeft, ToggleRight, Star, X, ImagePlus, Trash2, Car } from "lucide-react";
 import { api, BASE } from "@/lib/api";
 
 export const Route = createFileRoute("/dashboard/packages")({
@@ -17,6 +17,7 @@ interface ApiPackage {
   image_url: string | null;
   max_capacity: number;
   is_active: boolean;
+  is_featured: boolean;
   created_at: string;
 }
 
@@ -44,6 +45,10 @@ const PACKAGE_CODE_PREFIX = "DWP-";
 const EMPTY_FORM: PackageForm = { name: "", code_suffix: "", description: "", estimated_duration: "", price: "", max_capacity: 3 };
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+// Matches the landing page's "Popular Service Packages" section, which only ever
+// displays the first 3 featured packages — capped here so the admin can't select
+// more than what's actually shown.
+const MAX_FEATURED_PACKAGES = 3;
 
 function imageSrc(image_url: string | null) {
   return image_url ? `${BASE}${image_url}` : null;
@@ -251,6 +256,11 @@ function PackagesPage() {
     }
   };
 
+  // Toggles update the affected row in place instead of calling load() — a full
+  // refetch drops the table behind a "Loading..." placeholder for a moment, which
+  // collapses the page's height and jumps the scroll position on a long list.
+  // We already know the exact result of a successful toggle, so there's nothing
+  // a reload would tell us that we can't just apply locally.
   const toggleActive = async (pkg: ApiPackage) => {
     setPageError("");
     try {
@@ -259,7 +269,33 @@ function PackagesPage() {
       } else {
         await api.patch(`/api/packages/${pkg.package_id}/activate`);
       }
-      load();
+      setPackages((prev) =>
+        prev.map((p) => (p.package_id === pkg.package_id ? { ...p, is_active: !p.is_active } : p))
+      );
+    } catch (err) {
+      setPageError(err instanceof Error ? err.message : "Toggle failed");
+    }
+  };
+
+  const featuredCount = packages.filter((p) => p.is_featured).length;
+
+  const toggleFeatured = async (pkg: ApiPackage) => {
+    if (!pkg.is_featured && featuredCount >= MAX_FEATURED_PACKAGES) {
+      setPageError(
+        `You've already selected ${MAX_FEATURED_PACKAGES} popular packages. Unfeature one before adding another.`
+      );
+      return;
+    }
+    setPageError("");
+    try {
+      if (pkg.is_featured) {
+        await api.patch(`/api/packages/${pkg.package_id}/unfeature`);
+      } else {
+        await api.patch(`/api/packages/${pkg.package_id}/feature`);
+      }
+      setPackages((prev) =>
+        prev.map((p) => (p.package_id === pkg.package_id ? { ...p, is_featured: !p.is_featured } : p))
+      );
     } catch (err) {
       setPageError(err instanceof Error ? err.message : "Toggle failed");
     }
@@ -507,7 +543,17 @@ function PackagesPage() {
                     )}
                   </td>
                   <td className="py-3 px-3">
-                    <p className="text-foreground font-semibold">{pkg.name}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-foreground font-semibold">{pkg.name}</p>
+                      {pkg.is_featured && (
+                        <span
+                          title="Featured on landing page"
+                          className="flex items-center gap-0.5 rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent"
+                        >
+                          <Star className="h-2.5 w-2.5 fill-accent" /> Featured
+                        </span>
+                      )}
+                    </div>
                     {pkg.description && (
                       <p className="text-muted-foreground text-sm mt-0.5 line-clamp-2 max-w-xs">
                         {pkg.description.split("\n").filter(Boolean).join(" · ")}
@@ -543,6 +589,22 @@ function PackagesPage() {
                         ) : (
                           <ToggleLeft className="h-3 w-3" />
                         )}
+                      </button>
+                      <button
+                        onClick={() => toggleFeatured(pkg)}
+                        disabled={!pkg.is_featured && featuredCount >= MAX_FEATURED_PACKAGES}
+                        title={
+                          pkg.is_featured
+                            ? "Remove from Popular Packages"
+                            : featuredCount >= MAX_FEATURED_PACKAGES
+                              ? `Already have ${MAX_FEATURED_PACKAGES} popular packages selected`
+                              : "Feature on landing page"
+                        }
+                        className={`p-1 text-muted-foreground hover:text-foreground ${
+                          !pkg.is_featured && featuredCount >= MAX_FEATURED_PACKAGES ? "opacity-30 cursor-not-allowed hover:text-muted-foreground" : ""
+                        }`}
+                      >
+                        <Star className={`h-3 w-3 ${pkg.is_featured ? "fill-accent text-accent" : ""}`} />
                       </button>
                     </div>
                   </td>

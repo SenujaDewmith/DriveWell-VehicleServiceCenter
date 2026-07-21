@@ -65,6 +65,9 @@ interface ServiceRecordData {
   reservation_id: number;
   remarks: string | null;
   quality_checked: boolean;
+  has_oil_change: boolean;
+  current_odometer: number | null;
+  next_service_odometer: number | null;
   items: RecordItem[];
 }
 
@@ -170,17 +173,27 @@ export function SupervisorDashboard() {
   const [remarksStatus, setRemarksStatus] = useState<SaveStatus>("idle");
   const [noteStatus, setNoteStatus] = useState<Record<number, SaveStatus>>({});
   const [editMode, setEditMode] = useState(false);
+  const [oilChangeChecked, setOilChangeChecked] = useState(false);
+  const [currentOdoDraft, setCurrentOdoDraft] = useState("");
+  const [nextOdoDraft, setNextOdoDraft] = useState("");
+  const [odoStatus, setOdoStatus] = useState<SaveStatus>("idle");
+  const [odoValidationError, setOdoValidationError] = useState("");
 
   const remarksTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const remarksSavingValueRef = useRef<string | null>(null);
   const noteTimersRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const noteSavingValueRef = useRef<Record<number, string>>({});
+  const odoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selected = bookings.find((b) => b.reservation_id === selectedId);
   const currentStepIdx = selected ? stepIndexForStatus(selected.status) : -1;
   const nextStatus = currentStepIdx >= 0 && currentStepIdx < STEP_TARGET_STATUS.length - 1 ? STEP_TARGET_STATUS[currentStepIdx + 1] : null;
+  // If an oil change was flagged, both odometer readings must be saved too —
+  // checked against the saved record, not the local draft, since that's the
+  // same truth the backend itself enforces before allowing "Completed".
+  const odometerIncomplete = (record?.has_oil_change ?? false) && (record?.current_odometer == null || record?.next_service_odometer == null);
   // Completing a service is the sign-off point — quality check must happen first.
-  const advanceBlocked = nextStatus === "Completed" && !(record?.quality_checked ?? false);
+  const advanceBlocked = nextStatus === "Completed" && (!(record?.quality_checked ?? false) || odometerIncomplete);
   // Once Completed (the last step), the record is finalized and read-only for good.
   const isLocked = currentStepIdx >= DISPLAY_STEPS.length - 1;
   const viewMode = isLocked || ((record?.quality_checked ?? false) && !editMode);
@@ -214,6 +227,10 @@ export function SupervisorDashboard() {
         setRecord(d.record);
         setAssignments(d.assignments);
         setRemarksDraft(d.record.remarks ?? "");
+        setOilChangeChecked(d.record.has_oil_change);
+        setCurrentOdoDraft(d.record.current_odometer != null ? String(d.record.current_odometer) : "");
+        setNextOdoDraft(d.record.next_service_odometer != null ? String(d.record.next_service_odometer) : "");
+        setOdoValidationError("");
         const drafts: Record<number, string> = {};
         d.assignments.forEach((a) => { drafts[a.assignment_id] = a.work_note ?? ""; });
         setNoteDrafts(drafts);
@@ -223,6 +240,9 @@ export function SupervisorDashboard() {
         setAssignments([]);
         setRemarksDraft("");
         setNoteDrafts({});
+        setOilChangeChecked(false);
+        setCurrentOdoDraft("");
+        setNextOdoDraft("");
       })
       .finally(() => setRecordLoading(false));
   };
@@ -240,6 +260,10 @@ export function SupervisorDashboard() {
     }
     Object.values(noteTimersRef.current).forEach(clearTimeout);
     noteTimersRef.current = {};
+    if (odoTimerRef.current) {
+      clearTimeout(odoTimerRef.current);
+      odoTimerRef.current = null;
+    }
 
     setEditMode(false);
 
@@ -250,6 +274,11 @@ export function SupervisorDashboard() {
       setNoteDrafts({});
       setRemarksStatus("idle");
       setNoteStatus({});
+      setOilChangeChecked(false);
+      setCurrentOdoDraft("");
+      setNextOdoDraft("");
+      setOdoStatus("idle");
+      setOdoValidationError("");
       loadRecord(selectedId);
     } else {
       setRecord(null);
@@ -288,6 +317,15 @@ export function SupervisorDashboard() {
     }
   };
 
+  // updateServiceRecord is a full-replace endpoint, not a partial patch — every
+  // call must resend the odometer fields too, or they'd silently get wiped
+  // back to false/null by whichever field-level save fires next.
+  const odometerPayload = (r: ServiceRecordData) => ({
+    has_oil_change: r.has_oil_change,
+    current_odometer: r.current_odometer,
+    next_service_odometer: r.next_service_odometer,
+  });
+
   const saveRemarks = async (value: string) => {
     if (!selectedId || !record) return;
     // Skip no-op saves and duplicate calls for a value already in flight
@@ -296,7 +334,7 @@ export function SupervisorDashboard() {
     remarksSavingValueRef.current = value;
     setRemarksStatus("saving");
     try {
-      await api.put(`/api/service-records/${selectedId}`, { remarks: value, quality_checked: record.quality_checked });
+      await api.put(`/api/service-records/${selectedId}`, { remarks: value, quality_checked: record.quality_checked, ...odometerPayload(record) });
       setRecord((prev) => (prev ? { ...prev, remarks: value } : prev));
       setRemarksStatus("saved");
     } catch (err) {
@@ -326,13 +364,96 @@ export function SupervisorDashboard() {
     if (!selectedId || !record || isLocked) return;
     const next = !record.quality_checked;
     try {
-      await api.put(`/api/service-records/${selectedId}`, { remarks: record.remarks ?? "", quality_checked: next });
+      await api.put(`/api/service-records/${selectedId}`, { remarks: record.remarks ?? "", quality_checked: next, ...odometerPayload(record) });
       setRecord({ ...record, quality_checked: next });
       // Checking QC switches the fields above into the read-only summary view.
       if (next) setEditMode(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update quality check");
     }
+  };
+
+  function validateOdoLocal(hasOilChange: boolean, current: string, next: string): string {
+    if (!hasOilChange) return "";
+    if (!current.trim() || !next.trim()) return "Both odometer readings are required for an oil change";
+    const c = Number(current);
+    const n = Number(next);
+    if (!Number.isFinite(c) || !Number.isFinite(n) || c < 0 || n < 0) return "Enter valid, non-negative odometer readings";
+    if (n <= c) return "Next service reading must be greater than the current reading";
+    return "";
+  }
+
+  const saveOdometer = async (hasOilChange: boolean, current: string, next: string) => {
+    if (!selectedId || !record) return;
+    const currentNum = hasOilChange && current.trim() ? Number(current) : null;
+    const nextNum = hasOilChange && next.trim() ? Number(next) : null;
+    const unchanged =
+      hasOilChange === record.has_oil_change &&
+      currentNum === record.current_odometer &&
+      nextNum === record.next_service_odometer;
+    if (unchanged) return;
+
+    setOdoStatus("saving");
+    setError("");
+    try {
+      await api.put(`/api/service-records/${selectedId}`, {
+        remarks: record.remarks ?? "",
+        quality_checked: record.quality_checked,
+        has_oil_change: hasOilChange,
+        current_odometer: currentNum,
+        next_service_odometer: nextNum,
+      });
+      setRecord((prev) => (prev ? { ...prev, has_oil_change: hasOilChange, current_odometer: currentNum, next_service_odometer: nextNum } : prev));
+      setOdoStatus("saved");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save odometer reading");
+      setOdoStatus("error");
+    }
+  };
+
+  const attemptSaveOdo = (current: string, next: string) => {
+    const validationMsg = validateOdoLocal(true, current, next);
+    setOdoValidationError(validationMsg);
+    if (validationMsg) {
+      setOdoStatus("idle");
+      return;
+    }
+    saveOdometer(true, current, next);
+  };
+
+  const handleOilChangeToggle = (checked: boolean) => {
+    setOilChangeChecked(checked);
+    setOdoValidationError("");
+    if (odoTimerRef.current) {
+      clearTimeout(odoTimerRef.current);
+      odoTimerRef.current = null;
+    }
+    if (!checked) {
+      // Unchecking is unambiguous — clear and save immediately, no validation needed.
+      setCurrentOdoDraft("");
+      setNextOdoDraft("");
+      saveOdometer(false, "", "");
+    }
+    // Checking it doesn't save yet — wait for both readings to be entered.
+  };
+
+  const handleOdoFieldChange = (field: "current" | "next", value: string) => {
+    if (field === "current") setCurrentOdoDraft(value);
+    else setNextOdoDraft(value);
+    setOdoStatus("idle");
+    setOdoValidationError("");
+    if (odoTimerRef.current) clearTimeout(odoTimerRef.current);
+    const nextCurrent = field === "current" ? value : currentOdoDraft;
+    const nextNext = field === "next" ? value : nextOdoDraft;
+    odoTimerRef.current = setTimeout(() => attemptSaveOdo(nextCurrent, nextNext), AUTOSAVE_DELAY_MS);
+  };
+
+  const flushOdo = () => {
+    if (odoTimerRef.current) {
+      clearTimeout(odoTimerRef.current);
+      odoTimerRef.current = null;
+    }
+    if (oilChangeChecked) attemptSaveOdo(currentOdoDraft, nextOdoDraft);
   };
 
   const addItem = async (catalogItemId: string) => {
@@ -564,11 +685,79 @@ export function SupervisorDashboard() {
                     </button>
                     {advanceBlocked && (
                       <p className="text-xs text-muted-foreground mt-1 text-center">
-                        Complete the quality check before marking this service as Completed.
+                        {!record.quality_checked
+                          ? "Complete the quality check before marking this service as Completed."
+                          : "Enter both odometer readings before marking this service as Completed."}
                       </p>
                     )}
                   </div>
                 )}
+
+                {/* Meter Reading (ODO) — only relevant when an oil change was done */}
+                <div className="rounded-md border border-border p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-muted-foreground">Meter Reading (ODO)</span>
+                    {!viewMode && <SaveStatusLabel status={odoStatus} />}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Only applicable if an oil change (engine oil or gear oil — ATF/CVT/Manual) was done during this service — not for services like body washes.
+                  </p>
+
+                  {viewMode ? (
+                    record.has_oil_change ? (
+                      <p className="text-sm text-foreground">
+                        Current: <span className="font-medium">{record.current_odometer?.toLocaleString() ?? "—"} km</span>
+                        {" → "}Next service due at <span className="font-medium">{record.next_service_odometer?.toLocaleString() ?? "—"} km</span>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No oil change performed for this service</p>
+                    )
+                  ) : (
+                    <>
+                      <label className="flex items-center gap-2 text-sm text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={oilChangeChecked}
+                          onChange={(e) => handleOilChangeToggle(e.target.checked)}
+                          className="h-4 w-4 rounded border-border accent-accent"
+                        />
+                        This service included an oil change (engine or gear oil)
+                      </label>
+
+                      {oilChangeChecked && (
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <div>
+                            <label className="text-xs text-muted-foreground">Current Reading (km)</label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={currentOdoDraft}
+                              onChange={(e) => handleOdoFieldChange("current", e.target.value)}
+                              onBlur={flushOdo}
+                              placeholder="e.g. 45000"
+                              className="w-full mt-0.5 border border-border rounded-md bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground">Next Service Due At (km)</label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={nextOdoDraft}
+                              onChange={(e) => handleOdoFieldChange("next", e.target.value)}
+                              onBlur={flushOdo}
+                              placeholder="e.g. 50000"
+                              className="w-full mt-0.5 border border-border rounded-md bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      {odoValidationError && (
+                        <p className="text-xs text-destructive">{odoValidationError}</p>
+                      )}
+                    </>
+                  )}
+                </div>
 
                 {viewMode ? (
                   <div className="space-y-3 text-sm rounded-md border border-border p-3">

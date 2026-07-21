@@ -7,6 +7,8 @@ const {
   updatePackage,
   deactivatePackage,
   activatePackage,
+  featurePackage,
+  unfeaturePackage,
   uploadPackageImage,
   removePackageImage,
 } = require("../controllers/packages.controller");
@@ -173,6 +175,48 @@ router.patch("/:id/deactivate", managerOnly, deactivatePackage);
  *       500: { description: Server error }
  */
 router.patch("/:id/activate", managerOnly, activatePackage);
+
+/**
+ * @swagger
+ * /api/packages/{id}/feature:
+ *   patch:
+ *     summary: Feature a package on the public landing page's "Popular Service Packages" section (Manager only)
+ *     tags: [Packages]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Package featured }
+ *       403: { description: Manager only }
+ *       404: { description: Package not found }
+ *       500: { description: Server error }
+ */
+router.patch("/:id/feature", managerOnly, featurePackage);
+
+/**
+ * @swagger
+ * /api/packages/{id}/unfeature:
+ *   patch:
+ *     summary: Remove a package from the landing page's "Popular Service Packages" section (Manager only)
+ *     tags: [Packages]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Package unfeatured }
+ *       403: { description: Manager only }
+ *       404: { description: Package not found }
+ *       500: { description: Server error }
+ */
+router.patch("/:id/unfeature", managerOnly, unfeaturePackage);
 
 const handleImageUpload = (req, res, next) => {
   uploadMiddleware.single("image")(req, res, (err) => {

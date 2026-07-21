@@ -104,6 +104,36 @@ const activatePackage = async (req, res) => {
   }
 };
 
+const featurePackage = async (req, res) => {
+  try {
+    const pkg = await prisma.servicePackage.update({
+      where: { package_id: parseInt(req.params.id) },
+      data: { is_featured: true },
+      select: { package_id: true, name: true },
+    });
+    res.status(200).json({ message: "Package featured", package: pkg });
+  } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Package not found" });
+    logger.error(`featurePackage failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const unfeaturePackage = async (req, res) => {
+  try {
+    const pkg = await prisma.servicePackage.update({
+      where: { package_id: parseInt(req.params.id) },
+      data: { is_featured: false },
+      select: { package_id: true, name: true },
+    });
+    res.status(200).json({ message: "Package unfeatured", package: pkg });
+  } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Package not found" });
+    logger.error(`unfeaturePackage failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 const uploadPackageImage = async (req, res) => {
   const { id } = req.params;
   if (!req.file) return res.status(400).json({ message: "No image file uploaded" });
@@ -161,5 +191,5 @@ const removePackageImage = async (req, res) => {
 
 module.exports = {
   listPackages, getPackage, createPackage, updatePackage, deactivatePackage, activatePackage,
-  uploadPackageImage, removePackageImage,
+  featurePackage, unfeaturePackage, uploadPackageImage, removePackageImage,
 };

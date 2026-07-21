@@ -16,6 +16,9 @@ export interface InvoiceViewData {
   payment_status: string;
   payment_method: string | null;
   items: { description: string; quantity: number; line_total: string }[];
+  has_oil_change?: boolean;
+  current_odometer?: number | null;
+  next_service_odometer?: number | null;
   supervisor_remarks?: string | null;
   supervisor_items?: { description: string; quantity: number }[];
 }
@@ -31,6 +34,9 @@ interface InvoiceDocumentProps {
   discount: number;
   totalAmount: number;
   paymentMethod: string | null;
+  hasOilChange?: boolean;
+  currentOdometer?: number | null;
+  nextServiceOdometer?: number | null;
 }
 
 // The printable invoice body — the single receipt layout every admin surface
@@ -38,6 +44,7 @@ interface InvoiceDocumentProps {
 export function InvoiceDocument({
   bookingRef, dateLabel, customerName, vehicleLine, packageName,
   baseAmount, items, discount, totalAmount, paymentMethod,
+  hasOilChange, currentOdometer, nextServiceOdometer,
 }: InvoiceDocumentProps) {
   return (
     <div className="p-4 print:p-4" id="invoice-print">
@@ -89,6 +96,12 @@ export function InvoiceDocument({
 
       <div className="text-xs text-muted-foreground">
         <p>Payment: {paymentMethod ?? "—"}</p>
+        {hasOilChange && (
+          <p className="mt-1">
+            Odometer: {currentOdometer?.toLocaleString() ?? "—"} km — Next service due at{" "}
+            <span className="font-medium text-foreground">{nextServiceOdometer?.toLocaleString() ?? "—"} km</span>
+          </p>
+        )}
         <p className="mt-2 text-center text-xs">Thank you for choosing DriveWell!</p>
       </div>
     </div>
@@ -177,6 +190,9 @@ export function InvoiceViewModal({ invoice, onClose }: { invoice: InvoiceViewDat
           discount={parseFloat(invoice.discount)}
           totalAmount={parseFloat(invoice.total_amount)}
           paymentMethod={invoice.payment_method}
+          hasOilChange={invoice.has_oil_change}
+          currentOdometer={invoice.current_odometer}
+          nextServiceOdometer={invoice.next_service_odometer}
         />
 
         <div className="p-3 border-t border-border no-print">

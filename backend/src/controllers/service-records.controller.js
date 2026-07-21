@@ -159,9 +159,29 @@ const createServiceRecord = async (req, res) => {
   }
 };
 
+// The odometer reading only matters when this service involved an oil change —
+// enforced here (not just client-side) since it feeds the customer's invoice.
+const validateOdometer = (has_oil_change, current_odometer, next_service_odometer) => {
+  if (!has_oil_change) return null;
+
+  const current = current_odometer !== undefined && current_odometer !== null && current_odometer !== "" ? parseInt(current_odometer) : null;
+  const next = next_service_odometer !== undefined && next_service_odometer !== null && next_service_odometer !== "" ? parseInt(next_service_odometer) : null;
+
+  if (current === null || next === null || Number.isNaN(current) || Number.isNaN(next))
+    return "Current and next-service odometer readings are required when an oil change was done";
+  if (current < 0 || next < 0)
+    return "Odometer readings cannot be negative";
+  if (next <= current)
+    return "Next service odometer reading must be greater than the current reading";
+  return null;
+};
+
 const updateServiceRecord = async (req, res) => {
   const { booking_id } = req.params;
-  const { remarks, quality_checked } = req.body;
+  const { remarks, quality_checked, has_oil_change, current_odometer, next_service_odometer } = req.body;
+
+  const odometerError = validateOdometer(has_oil_change, current_odometer, next_service_odometer);
+  if (odometerError) return res.status(400).json({ message: odometerError });
 
   try {
     await assertBookingEditable(parseInt(booking_id));
@@ -171,6 +191,9 @@ const updateServiceRecord = async (req, res) => {
       data: {
         remarks: remarks || null,
         quality_checked: quality_checked ?? false,
+        has_oil_change: has_oil_change ?? false,
+        current_odometer: has_oil_change ? parseInt(current_odometer) : null,
+        next_service_odometer: has_oil_change ? parseInt(next_service_odometer) : null,
       },
     });
     if (quality_checked) {
@@ -198,13 +221,16 @@ const updateStatus = async (req, res) => {
       if (status === "Completed") {
         const record = await tx.serviceRecord.findUnique({
           where: { reservation_id: parseInt(booking_id) },
-          select: { record_id: true, quality_checked: true },
+          select: { record_id: true, quality_checked: true, has_oil_change: true, current_odometer: true, next_service_odometer: true },
         });
         if (!record) {
           const err = new Error("Service record not found"); err.status = 404; throw err;
         }
         if (!record.quality_checked) {
           const err = new Error("Quality check must be completed before marking the service as Completed"); err.status = 400; throw err;
+        }
+        if (record.has_oil_change && (record.current_odometer == null || record.next_service_odometer == null)) {
+          const err = new Error("Odometer readings are required before marking the service as Completed"); err.status = 400; throw err;
         }
         await tx.serviceRecord.update({
           where: { record_id: record.record_id },

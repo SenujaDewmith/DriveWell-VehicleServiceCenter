@@ -38,6 +38,12 @@ const flattenInvoice = (i, { includeSupervisorNotes = false } = {}) => ({
     quantity: it.quantity,
     line_total: it.line_total,
   })),
+  // Odometer reading is genuinely useful to the customer (their next-service
+  // due distance), unlike the supervisor's internal notes below — so this is
+  // always included, for every role.
+  has_oil_change: i.reservation?.service_record?.has_oil_change ?? false,
+  current_odometer: i.reservation?.service_record?.current_odometer ?? null,
+  next_service_odometer: i.reservation?.service_record?.next_service_odometer ?? null,
   ...(includeSupervisorNotes && {
     supervisor_remarks: i.reservation?.service_record?.remarks ?? null,
     supervisor_items: (i.reservation?.service_record?.items ?? []).map((it) => ({
@@ -64,6 +70,9 @@ const INVOICE_INCLUDE = {
       service_record: {
         select: {
           remarks: true,
+          has_oil_change: true,
+          current_odometer: true,
+          next_service_odometer: true,
           items: { select: { description: true, quantity: true } },
         },
       },
@@ -169,6 +178,9 @@ const getInvoiceDraft = async (req, res) => {
       package_name: booking.package?.name,
       package_price: booking.package?.price,
       remarks: booking.service_record?.remarks ?? null,
+      has_oil_change: booking.service_record?.has_oil_change ?? false,
+      current_odometer: booking.service_record?.current_odometer ?? null,
+      next_service_odometer: booking.service_record?.next_service_odometer ?? null,
       suggested_items: (booking.service_record?.items ?? []).map((it) => ({
         catalog_item_id: it.catalog_item_id,
         description: it.description,

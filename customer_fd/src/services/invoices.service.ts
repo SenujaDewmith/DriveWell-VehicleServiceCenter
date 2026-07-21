@@ -29,6 +29,9 @@ export interface Invoice {
   plate_no: string | null;
   package_name: string | null;
   items: InvoiceItem[];
+  has_oil_change: boolean;
+  current_odometer: number | null;
+  next_service_odometer: number | null;
 }
 
 export const invoicesService = {

@@ -30,10 +30,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         { to: "/vehicles", label: "My Vehicles" },
         { to: "/services", label: "Services" },
         { to: "/bookings", label: "My Bookings" },
+        { to: "/about", label: "About" },
       ]
     : [
         { to: "/", label: "Home" },
         { to: "/services", label: "Services" },
+        { to: "/about", label: "About" },
       ];
 
   return (
@@ -186,7 +188,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div>
               <h3 className="font-semibold mb-3">Support</h3>
               <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-cta transition-colors">About Us</a></li>
+                <li><Link to="/about" className="hover:text-cta transition-colors">About Us</Link></li>
                 <li><a href="#" className="hover:text-cta transition-colors">Contact</a></li>
                 <li><a href="#" className="hover:text-cta transition-colors">FAQ</a></li>
               </ul>

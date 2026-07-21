@@ -55,6 +55,9 @@ const BOOKING_DETAIL_INCLUDE = {
     select: {
       remarks: true,
       quality_checked: true,
+      has_oil_change: true,
+      current_odometer: true,
+      next_service_odometer: true,
       started_at: true,
       completed_at: true,
       items: { select: { description: true, quantity: true } },
@@ -72,6 +75,11 @@ const flattenBookingDetail = (r, { includeServiceItems = false } = {}) => ({
     ? {
         remarks: r.service_record.remarks,
         quality_checked: r.service_record.quality_checked,
+        // Same as invoices.controller.js: genuinely useful to the customer
+        // (their next-service-due distance), so always included, unlike items.
+        has_oil_change: r.service_record.has_oil_change,
+        current_odometer: r.service_record.current_odometer,
+        next_service_odometer: r.service_record.next_service_odometer,
         started_at: r.service_record.started_at,
         completed_at: r.service_record.completed_at,
         ...(includeServiceItems && {

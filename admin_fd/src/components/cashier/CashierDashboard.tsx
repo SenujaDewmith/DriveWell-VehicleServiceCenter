@@ -26,6 +26,9 @@ interface InvoiceDraft {
   package_name: string;
   package_price: string;
   remarks: string | null;
+  has_oil_change: boolean;
+  current_odometer: number | null;
+  next_service_odometer: number | null;
   suggested_items: {
     catalog_item_id: number | null;
     description: string;
@@ -449,6 +452,12 @@ export function CashierDashboard() {
                   <p><span className="text-muted-foreground">Customer:</span> {draft.customer_name}</p>
                   <p><span className="text-muted-foreground">Vehicle:</span> {draft.plate_no} — {draft.make} {draft.model} ({draft.vehicle_type})</p>
                   <p><span className="text-muted-foreground">Package:</span> {draft.package_name}</p>
+                  {draft.has_oil_change && (
+                    <p>
+                      <span className="text-muted-foreground">Odometer:</span> {draft.current_odometer?.toLocaleString() ?? "—"} km
+                      {" → next service at "}{draft.next_service_odometer?.toLocaleString() ?? "—"} km
+                    </p>
+                  )}
                 </div>
 
                 <SupervisorServiceDetails remarks={draft.remarks} items={draft.suggested_items} />
@@ -590,6 +599,9 @@ export function CashierDashboard() {
               discount={parseFloat(createdInvoice.discount)}
               totalAmount={parseFloat(createdInvoice.total_amount)}
               paymentMethod={paymentMethod}
+              hasOilChange={draft.has_oil_change}
+              currentOdometer={draft.current_odometer}
+              nextServiceOdometer={draft.next_service_odometer}
             />
             <div className="p-3 border-t border-border no-print">
               <button

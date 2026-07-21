@@ -1,10 +1,38 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
-import { Car, Calendar, FileText, Users, CheckCircle, Star, Clock, Shield } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { servicesService } from "@/services/services.service";
+import { ASSET_BASE_URL } from "@/lib/apiClient";
+import { Car, Calendar, FileText, Users, CheckCircle, Star, Clock, Shield, Loader2 } from "lucide-react";
+
+function fmtDuration(mins: number) {
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return m ? `${h}h ${m}min` : `${h}h`;
+}
+
+function getBullets(description: string | null): string[] {
+  if (!description) return [];
+  return description.split("\n").map((l) => l.trim()).filter(Boolean);
+}
+
+function imageSrc(image_url: string | null) {
+  return image_url ? `${ASSET_BASE_URL}${image_url}` : null;
+}
+
+const MAX_FEATURED_PACKAGES = 3;
 
 export default function Landing() {
   const navigate = useNavigate();
+
+  const packagesQuery = useQuery({
+    queryKey: ["packages"],
+    queryFn: () => servicesService.getPackages().then((r) => r.packages),
+  });
+  const featuredPackages = (packagesQuery.data ?? [])
+    .filter((p) => p.is_featured)
+    .slice(0, MAX_FEATURED_PACKAGES);
 
   return (
     <div className="min-h-screen">
@@ -90,111 +118,103 @@ export default function Landing() {
       </section>
 
       {/* Popular Packages */}
-      <section className="py-20">
-        <div className="container mx-auto px-4">
-          <h2 className="text-4xl font-bold text-center mb-4">Popular Service Packages</h2>
-          <p className="text-center text-muted-foreground mb-12 text-lg">
-            Professional care for every need and budget
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              {
-                name: "Basic Wash",
-                price: "LKR 2,999",
-                duration: "30 min",
-                features: ["Exterior wash", "Tire cleaning", "Interior vacuum", "Window cleaning"],
-                popular: true,
-              },
-              {
-                name: "Full Service",
-                price: "LKR 7,999",
-                duration: "1h 30min",
-                features: ["Everything in Basic", "Interior detailing", "Waxing", "Engine bay cleaning", "Undercarriage wash"],
-                popular: true,
-              },
-              {
-                name: "Premium Detailing",
-                price: "LKR 14,999",
-                duration: "3h",
-                features: ["Everything in Full Service", "Paint correction", "Ceramic coating", "Leather conditioning", "Headlight restoration"],
-                premium: true,
-              },
-            ].map((pkg) => (
-              <Card
-                key={pkg.name}
-                className={`relative ${
-                  pkg.popular ? "border-cta border-2 shadow-lg" : pkg.premium ? "border-accent border-2" : ""
-                }`}
-              >
-                {pkg.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="bg-cta text-cta-foreground text-xs font-semibold px-3 py-1 rounded-full">
-                      Most Popular
-                    </span>
-                  </div>
-                )}
-                {pkg.premium && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="bg-accent text-accent-foreground text-xs font-semibold px-3 py-1 rounded-full">
-                      Premium
-                    </span>
-                  </div>
-                )}
-                <CardHeader>
-                  <CardTitle className="text-2xl">{pkg.name}</CardTitle>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold text-cta">{pkg.price}</span>
-                    <span className="text-muted-foreground">/ {pkg.duration}</span>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-3">
-                    {pkg.features.map((feature) => (
-                      <li key={feature} className="flex items-start gap-2">
-                        <CheckCircle className="h-5 w-5 text-cta shrink-0 mt-0.5" />
-                        <span className="text-sm">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Button
-                    className="w-full mt-6 bg-cta text-cta-foreground hover:bg-cta/90"
-                    onClick={() => navigate("/book")}
-                  >
-                    Book Now
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+      {(packagesQuery.isPending || featuredPackages.length > 0) && (
+        <section className="py-20">
+          <div className="container mx-auto px-4">
+            <h2 className="text-4xl font-bold text-center mb-4">Popular Service Packages</h2>
+            <p className="text-center text-muted-foreground mb-12 text-lg">
+              Professional care for every need and budget
+            </p>
+            {packagesQuery.isPending ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-cta" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-7 max-w-6xl mx-auto">
+                {featuredPackages.map((pkg) => (
+                  <Card key={pkg.package_id} className="relative border-cta border-2 shadow-lg transition-all hover:shadow-xl hover:-translate-y-1">
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+                      <span className="bg-cta text-cta-foreground text-xs font-semibold px-3 py-1 rounded-full">
+                        Most Popular
+                      </span>
+                    </div>
+                    <div className="aspect-[2/1] w-full rounded-t-lg bg-muted flex items-center justify-center overflow-hidden relative">
+                      {pkg.package_code && (
+                        <span className="absolute top-2 left-2 rounded-md bg-background/90 px-2 py-0.5 text-xs font-mono font-medium text-foreground shadow-sm">
+                          {pkg.package_code}
+                        </span>
+                      )}
+                      {imageSrc(pkg.image_url) ? (
+                        <img src={imageSrc(pkg.image_url)!} alt={pkg.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <Car className="h-10 w-10 text-muted-foreground" />
+                      )}
+                    </div>
+                    <CardHeader className="p-5">
+                      <CardTitle className="text-xl">{pkg.name}</CardTitle>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl font-bold text-cta">
+                          LKR {parseFloat(pkg.price).toLocaleString()}
+                        </span>
+                        <span className="text-sm text-muted-foreground">/ {fmtDuration(pkg.estimated_duration)}</span>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-5 pt-0">
+                      <ul className="space-y-1.5">
+                        {getBullets(pkg.description).map((feature) => (
+                          <li key={feature} className="flex items-start gap-2">
+                            <CheckCircle className="h-5 w-5 text-cta shrink-0 mt-0.5" />
+                            <span className="text-sm">{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <Button
+                        className="w-full mt-4 bg-cta text-cta-foreground hover:bg-cta/90"
+                        onClick={() => navigate(`/book?package=${pkg.package_id}`)}
+                      >
+                        Book Now
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* How It Works */}
       <section className="py-20 bg-muted/30">
         <div className="container mx-auto px-4">
           <h2 className="text-4xl font-bold text-center mb-4">How It Works</h2>
           <p className="text-center text-muted-foreground mb-12 text-lg">
-            Three simple steps to a pristine vehicle
+            Four simple steps to a pristine vehicle
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {[
               {
                 step: "1",
                 icon: Users,
                 title: "Register & Add Vehicles",
-                description: "Create your account and add your vehicle details in minutes",
+                description: "Create your account and add your vehicle's details in minutes",
               },
               {
                 step: "2",
                 icon: Calendar,
-                title: "Choose Service & Time",
-                description: "Select your preferred package and convenient time slot",
+                title: "Book Your Service",
+                description: "Pick a package and choose a convenient date and time slot",
               },
               {
                 step: "3",
-                icon: Car,
-                title: "Track & Pickup",
-                description: "Monitor service progress and collect your spotless vehicle",
+                icon: Clock,
+                title: "Track Progress",
+                description: "Follow your service through each stage, from Started to Completed",
+              },
+              {
+                step: "4",
+                icon: FileText,
+                title: "Review Invoice & Pick Up",
+                description: "Check your itemized invoice once service is done, then collect your vehicle",
               },
             ].map((step) => (
               <div key={step.step} className="text-center">

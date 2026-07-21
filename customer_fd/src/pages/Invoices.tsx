@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { invoicesService } from "@/services/invoices.service";
-import { FileText, Printer, Loader2 } from "lucide-react";
+import { FileText, Printer, Loader2, Gauge } from "lucide-react";
 
 export default function Invoices() {
   const { user } = useAuth();
@@ -103,6 +103,17 @@ export default function Invoices() {
                           <p className="font-bold text-cta text-lg">LKR {parseFloat(invoice.total_amount).toLocaleString()}</p>
                         </div>
                       </div>
+
+                      {invoice.has_oil_change && (
+                        <div className="mt-4 flex items-center gap-3 rounded-lg border-2 border-cta/20 bg-cta/5 px-4 py-3">
+                          <Gauge className="h-5 w-5 text-cta shrink-0" />
+                          <p className="text-sm">
+                            Odometer at this service: <span className="font-medium">{invoice.current_odometer?.toLocaleString() ?? "—"} km</span>
+                            {" — "}Next service due at{" "}
+                            <span className="font-semibold text-cta">{invoice.next_service_odometer?.toLocaleString() ?? "—"} km</span>
+                          </p>
+                        </div>
+                      )}
 
                       <div className="mt-4 pt-4 border-t border-border space-y-2">
                         <div className="flex justify-between text-sm">
