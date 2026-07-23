@@ -469,6 +469,21 @@ export function SupervisorDashboard() {
     }
   };
 
+  // Lets the supervisor add a one-off note that isn't in the catalog yet —
+  // saved as a real catalog item (price left for a Manager to set later) so
+  // it's immediately searchable/reusable next time, instead of being a
+  // throwaway piece of text.
+  const quickAddCatalogItem = async (name: string) => {
+    if (!selectedId) return;
+    try {
+      const res = await api.post<{ item: CatalogItem; created: boolean }>("/api/charge-catalog/quick-add", { name });
+      setCatalog((prev) => (prev.some((c) => c.catalog_item_id === res.item.catalog_item_id) ? prev : [...prev, res.item]));
+      await addItem(String(res.item.catalog_item_id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add custom note");
+    }
+  };
+
   const removeItem = async (itemId: number) => {
     if (!selectedId) return;
     try {
@@ -858,8 +873,10 @@ export function SupervisorDashboard() {
                           }))}
                           value={newItemCatalogId}
                           onValueChange={addItem}
+                          onCreateOption={quickAddCatalogItem}
+                          createLabel={(search) => `Add "${search}" as new note`}
                           placeholder="Search parts / work items to add..."
-                          searchPlaceholder="Search..."
+                          searchPlaceholder="Search or type a new note..."
                           className="text-sm h-9"
                         />
                       </div>

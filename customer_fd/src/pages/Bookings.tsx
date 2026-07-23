@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as DatePickerCalendar } from "@/components/ui/calendar";
 import {
@@ -76,9 +76,12 @@ export default function Bookings() {
   const setActiveTab = (tab: string) => {
     setSearchParams(tab === "past" ? { tab: "past" } : {}, { replace: true });
   };
-  const [packageFilter, setPackageFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [upcomingVehicleFilter, setUpcomingVehicleFilter] = useState("all");
+  const [pastVehicleFilter, setPastVehicleFilter] = useState("all");
+  const [upcomingPackageFilter, setUpcomingPackageFilter] = useState("all");
+  const [pastPackageFilter, setPastPackageFilter] = useState("all");
   const [fromPickerOpen, setFromPickerOpen] = useState(false);
   const [toPickerOpen, setToPickerOpen] = useState(false);
 
@@ -115,23 +118,59 @@ export default function Bookings() {
   const upcomingBookings = bookings.filter((b) => UPCOMING.includes(b.status));
   const pastBookings = bookings.filter((b) => PAST.includes(b.status));
 
-  const pastPackageOptions = Array.from(
-    new Set(pastBookings.map((b) => b.package_name).filter((name): name is string => !!name))
-  ).sort();
+  // Vehicle options are drawn from the full set of the logged-in user's own bookings
+  // (the /bookings API is already scoped server-side to the authenticated user), so the
+  // same dropdown works whether a plate's bookings currently sit in Upcoming, Past, or both.
+  const vehicleOptions: ComboboxOption[] = Array.from(
+    new Map(
+      bookings
+        .filter((b) => !!b.plate_no)
+        .map((b) => [
+          b.vehicle_id,
+          {
+            value: String(b.vehicle_id),
+            label: [b.plate_no, b.make && b.model ? `(${b.make} ${b.model})` : null].filter(Boolean).join(" "),
+          },
+        ])
+    ).values()
+  ).sort((a, b) => a.label.localeCompare(b.label));
 
-  const filtersActive = packageFilter !== "all" || !!dateFrom || !!dateTo;
+  // Like vehicleOptions, drawn from the full set of the user's own bookings so the same
+  // list of packages is offered in both tabs regardless of which tab a package currently has bookings in.
+  const packageOptions: ComboboxOption[] = Array.from(
+    new Set(bookings.map((b) => b.package_name).filter((name): name is string => !!name))
+  )
+    .sort()
+    .map((name) => ({ value: name, label: name }));
 
-  const filteredPastBookings = pastBookings.filter((b) => {
-    if (packageFilter !== "all" && b.package_name !== packageFilter) return false;
-    if (dateFrom && b.service_date < dateFrom) return false;
-    if (dateTo && b.service_date > dateTo) return false;
+  const upcomingFiltersActive = upcomingVehicleFilter !== "all" || upcomingPackageFilter !== "all";
+  const filtersActive =
+    pastPackageFilter !== "all" || !!dateFrom || !!dateTo || pastVehicleFilter !== "all";
+
+  const filteredUpcomingBookings = upcomingBookings.filter((b) => {
+    if (upcomingVehicleFilter !== "all" && String(b.vehicle_id) !== upcomingVehicleFilter) return false;
+    if (upcomingPackageFilter !== "all" && b.package_name !== upcomingPackageFilter) return false;
     return true;
   });
 
+  const filteredPastBookings = pastBookings.filter((b) => {
+    if (pastPackageFilter !== "all" && b.package_name !== pastPackageFilter) return false;
+    if (dateFrom && b.service_date < dateFrom) return false;
+    if (dateTo && b.service_date > dateTo) return false;
+    if (pastVehicleFilter !== "all" && String(b.vehicle_id) !== pastVehicleFilter) return false;
+    return true;
+  });
+
+  const clearUpcomingFilters = () => {
+    setUpcomingVehicleFilter("all");
+    setUpcomingPackageFilter("all");
+  };
+
   const clearFilters = () => {
-    setPackageFilter("all");
+    setPastPackageFilter("all");
     setDateFrom("");
     setDateTo("");
+    setPastVehicleFilter("all");
   };
 
   const BookingCard = ({ booking, showCancel }: { booking: Booking; showCancel?: boolean }) => (
@@ -264,9 +303,56 @@ export default function Bookings() {
               </Card>
             ) : (
               <div className="space-y-4">
-                {upcomingBookings.map((b) => (
-                  <BookingCard key={b.reservation_id} booking={b} showCancel />
-                ))}
+                <Card>
+                  <CardContent className="p-4 flex flex-col sm:flex-row sm:items-end gap-4">
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Vehicle</Label>
+                      <Combobox
+                        options={vehicleOptions}
+                        value={upcomingVehicleFilter === "all" ? "" : upcomingVehicleFilter}
+                        onValueChange={(v) => setUpcomingVehicleFilter(v || "all")}
+                        placeholder="All Vehicles"
+                        searchPlaceholder="Search plate number..."
+                        emptyText="No matching vehicle."
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Package</Label>
+                      <Combobox
+                        options={packageOptions}
+                        value={upcomingPackageFilter === "all" ? "" : upcomingPackageFilter}
+                        onValueChange={(v) => setUpcomingPackageFilter(v || "all")}
+                        placeholder="All Packages"
+                        searchPlaceholder="Search package..."
+                        emptyText="No matching package."
+                      />
+                    </div>
+                    {upcomingFiltersActive && (
+                      <Button variant="ghost" onClick={clearUpcomingFilters} className="text-muted-foreground">
+                        Clear Filters
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {filteredUpcomingBookings.length === 0 ? (
+                  <Card className="text-center py-12">
+                    <CardContent>
+                      <Calendar className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-xl font-semibold mb-2">No bookings match your filters</h3>
+                      <p className="text-muted-foreground mb-4">Try selecting a different vehicle or package</p>
+                      <Button variant="outline" onClick={clearUpcomingFilters}>
+                        Clear Filters
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredUpcomingBookings.map((b) => (
+                      <BookingCard key={b.reservation_id} booking={b} showCancel />
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </TabsContent>
@@ -285,20 +371,26 @@ export default function Bookings() {
                 <Card>
                   <CardContent className="p-4 flex flex-col sm:flex-row sm:items-end gap-4">
                     <div className="flex-1 space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Vehicle</Label>
+                      <Combobox
+                        options={vehicleOptions}
+                        value={pastVehicleFilter === "all" ? "" : pastVehicleFilter}
+                        onValueChange={(v) => setPastVehicleFilter(v || "all")}
+                        placeholder="All Vehicles"
+                        searchPlaceholder="Search plate number..."
+                        emptyText="No matching vehicle."
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Package</Label>
-                      <Select value={packageFilter} onValueChange={setPackageFilter}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Packages</SelectItem>
-                          {pastPackageOptions.map((name) => (
-                            <SelectItem key={name} value={name}>
-                              {name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Combobox
+                        options={packageOptions}
+                        value={pastPackageFilter === "all" ? "" : pastPackageFilter}
+                        onValueChange={(v) => setPastPackageFilter(v || "all")}
+                        placeholder="All Packages"
+                        searchPlaceholder="Search package..."
+                        emptyText="No matching package."
+                      />
                     </div>
                     <div className="flex-1 space-y-1.5">
                       <Label className="text-xs text-muted-foreground">From</Label>

@@ -32,6 +32,33 @@ const createChargeCatalogItem = async (req, res) => {
   }
 };
 
+// Lets Supervisor (not just Manager) add a one-off catalog entry directly from
+// the "Additional Work" dropdown when nothing matching already exists — price
+// starts at 0 and is tagged for Manager follow-up, rather than requiring a
+// Manager round-trip before the note can even be recorded on the service.
+// Case-insensitive name match against active items reuses the existing entry
+// instead of creating a near-duplicate ("Brake Pad" vs "brake pad").
+const quickAddChargeCatalogItem = async (req, res) => {
+  const { name } = req.body;
+  try {
+    const existing = await prisma.chargeCatalogItem.findFirst({
+      where: { is_active: true, name: { equals: name, mode: "insensitive" } },
+    });
+    if (existing) {
+      return res.status(200).json({ message: "Matching charge catalog item already exists", item: existing, created: false });
+    }
+
+    const item = await prisma.chargeCatalogItem.create({
+      data: { name, default_price: 0, category: "Supervisor Added" },
+    });
+    logActivity(prisma, { user_id: req.user.user_id, action: "CHARGE_CATALOG_ITEM_CREATED", entity_type: "charge_catalog_item", entity_id: item.catalog_item_id });
+    res.status(201).json({ message: "Charge catalog item created", item, created: true });
+  } catch (error) {
+    logger.error(`quickAddChargeCatalogItem failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 const updateChargeCatalogItem = async (req, res) => {
   const { name, description, default_price, category } = req.body;
   try {
@@ -77,6 +104,6 @@ const activateChargeCatalogItem = async (req, res) => {
 };
 
 module.exports = {
-  listChargeCatalog, createChargeCatalogItem, updateChargeCatalogItem,
+  listChargeCatalog, createChargeCatalogItem, quickAddChargeCatalogItem, updateChargeCatalogItem,
   deactivateChargeCatalogItem, activateChargeCatalogItem,
 };

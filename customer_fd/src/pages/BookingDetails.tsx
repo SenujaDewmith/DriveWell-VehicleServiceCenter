@@ -22,13 +22,23 @@ import { CANCELLATION_CUTOFF_HOURS, canSelfCancel, bookingListTab } from "@/lib/
 import { ArrowLeft, Car, Calendar, Clock, CheckCircle, Loader2, Wrench, FileText, Printer, Gauge } from "lucide-react";
 import { toast } from "sonner";
 
-function fmtDate(d: string) {
+function fmtDate(d: string | Date) {
   return new Date(d).toLocaleDateString("en-LK", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
   });
+}
+
+// Industry-standard oil-change reminder: due at the odometer reading the technician
+// set, or a fixed number of months after this service — whichever comes first.
+const SERVICE_DUE_MONTHS = 6;
+
+function addMonths(d: string, months: number): Date {
+  const date = new Date(d);
+  date.setMonth(date.getMonth() + months);
+  return date;
 }
 
 function fmtTime(t: string) {
@@ -306,18 +316,36 @@ export default function BookingDetails() {
           </Card>
         )}
 
-        {serviceRecord?.has_oil_change && (
-          <Card className="border-2 border-cta/20 bg-cta/5">
-            <CardContent className="flex items-center gap-3 py-4">
-              <Gauge className="h-5 w-5 text-cta shrink-0" />
-              <p className="text-sm">
-                Odometer at this service: <span className="font-medium">{serviceRecord.current_odometer?.toLocaleString() ?? "—"} km</span>
-                {" — "}Next service due at{" "}
-                <span className="font-semibold text-cta">{serviceRecord.next_service_odometer?.toLocaleString() ?? "—"} km</span>
-              </p>
-            </CardContent>
-          </Card>
-        )}
+        {serviceRecord?.has_oil_change && (() => {
+          const dueDate = serviceRecord.completed_at
+            ? addMonths(serviceRecord.completed_at, SERVICE_DUE_MONTHS)
+            : null;
+          return (
+            <Card className="border-2 border-cta/20 bg-cta/5">
+              <CardContent className="flex items-start gap-3 py-4">
+                <Gauge className="h-5 w-5 text-cta shrink-0 mt-0.5" />
+                <div className="text-sm space-y-1">
+                  <p>
+                    Odometer at this service:{" "}
+                    <span className="font-medium">{serviceRecord.current_odometer?.toLocaleString() ?? "—"} km</span>
+                  </p>
+                  <p>
+                    Next service due at{" "}
+                    <span className="font-semibold text-cta">
+                      {serviceRecord.next_service_odometer?.toLocaleString() ?? "—"} km
+                    </span>
+                    {dueDate && (
+                      <>
+                        {" "}or by <span className="font-semibold text-cta">{fmtDate(dueDate)}</span>
+                      </>
+                    )}
+                    {" "}— whichever comes first.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         {invoice && (
           <Card>

@@ -1,14 +1,15 @@
 const express = require("express");
 const router = express.Router();
 const {
-  listChargeCatalog, createChargeCatalogItem, updateChargeCatalogItem,
+  listChargeCatalog, createChargeCatalogItem, quickAddChargeCatalogItem, updateChargeCatalogItem,
   deactivateChargeCatalogItem, activateChargeCatalogItem,
 } = require("../controllers/charge-catalog.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
 const validate = require("../middlewares/validate.middleware");
-const { chargeCatalogItemSchema } = require("../schemas/charge-catalog.schema");
+const { chargeCatalogItemSchema, quickAddChargeCatalogItemSchema } = require("../schemas/charge-catalog.schema");
 
 const managerOnly = [verifyToken, authorizeRoles("Service Center Manager")];
+const supervisorOrManager = [verifyToken, authorizeRoles("Supervisor", "Service Center Manager")];
 
 /**
  * @swagger
@@ -47,6 +48,38 @@ router.get("/", verifyToken, listChargeCatalog);
  *       500: { description: Server error }
  */
 router.post("/", managerOnly, validate(chargeCatalogItemSchema), createChargeCatalogItem);
+
+/**
+ * @swagger
+ * /api/charge-catalog/quick-add:
+ *   post:
+ *     summary: Create (or reuse) a catalog item by name only — no price required (Supervisor / Manager)
+ *     description: >
+ *       Lets a Supervisor record a one-off "Additional Work" note as a real catalog entry on the
+ *       spot, without waiting on a Manager to price it first. Case-insensitive name match against
+ *       active items reuses the existing entry instead of creating a duplicate. New items start
+ *       at a default_price of 0 and are tagged "Supervisor Added" so a Manager can find and price
+ *       them later on the Charge Catalog page.
+ *     tags: [ChargeCatalog]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string, example: "Wiper blade replacement" }
+ *     responses:
+ *       200: { description: Matching active item already existed — reused, not created }
+ *       201: { description: New item created }
+ *       400: { description: Validation error }
+ *       403: { description: Supervisor or Manager only }
+ *       500: { description: Server error }
+ */
+router.post("/quick-add", supervisorOrManager, validate(quickAddChargeCatalogItemSchema), quickAddChargeCatalogItem);
 
 /**
  * @swagger

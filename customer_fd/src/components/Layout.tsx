@@ -190,7 +190,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <ul className="space-y-2 text-sm">
                 <li><Link to="/about" className="hover:text-cta transition-colors">About Us</Link></li>
                 <li><a href="#" className="hover:text-cta transition-colors">Contact</a></li>
-                <li><a href="#" className="hover:text-cta transition-colors">FAQ</a></li>
+                <li><Link to="/faq" className="hover:text-cta transition-colors">FAQ</Link></li>
               </ul>
             </div>
             <div>

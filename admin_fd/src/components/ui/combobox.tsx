@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,12 @@ interface ComboboxProps {
   emptyText?: string;
   disabled?: boolean;
   className?: string;
+  // When provided, typing text that doesn't exactly match any existing option
+  // surfaces a "+ Create '<text>'" row — the same inline-create pattern used
+  // by Notion/Linear/GitHub labels, so adding a new option and picking it are
+  // the same action instead of a separate form.
+  onCreateOption?: (label: string) => void;
+  createLabel?: (search: string) => string;
 }
 
 export function Combobox({
@@ -39,12 +45,27 @@ export function Combobox({
   emptyText = "No results found.",
   disabled = false,
   className,
+  onCreateOption,
+  createLabel = (search) => `Create "${search}"`,
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const selected = options.find((o) => o.value === value);
 
+  const trimmedSearch = search.trim();
+  const filtered = trimmedSearch
+    ? options.filter((o) => o.label.toLowerCase().includes(trimmedSearch.toLowerCase()))
+    : options;
+  const exactMatchExists = options.some((o) => o.label.toLowerCase() === trimmedSearch.toLowerCase());
+  const showCreate = !!onCreateOption && trimmedSearch.length > 0 && !exactMatchExists;
+
+  const closeAndReset = () => {
+    setOpen(false);
+    setSearch("");
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(next) => { setOpen(next); if (!next) setSearch(""); }}>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -59,12 +80,12 @@ export function Combobox({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+        <Command shouldFilter={false}>
+          <CommandInput placeholder={searchPlaceholder} value={search} onValueChange={setSearch} />
           <CommandList>
-            <CommandEmpty>{emptyText}</CommandEmpty>
+            {filtered.length === 0 && !showCreate && <CommandEmpty>{emptyText}</CommandEmpty>}
             <CommandGroup>
-              {options.map((option) => (
+              {filtered.map((option) => (
                 <CommandItem
                   key={option.value}
                   value={option.label}
@@ -72,7 +93,7 @@ export function Combobox({
                   onSelect={() => {
                     if (option.disabled) return;
                     onValueChange(option.value === value ? "" : option.value);
-                    setOpen(false);
+                    closeAndReset();
                   }}
                 >
                   <Check
@@ -82,6 +103,19 @@ export function Combobox({
                   {option.disabled && <span className="ml-auto text-xs text-muted-foreground">Added</span>}
                 </CommandItem>
               ))}
+              {showCreate && (
+                <CommandItem
+                  value={`__create__${trimmedSearch}`}
+                  onSelect={() => {
+                    onCreateOption!(trimmedSearch);
+                    closeAndReset();
+                  }}
+                  className="text-accent"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  {createLabel(trimmedSearch)}
+                </CommandItem>
+              )}
             </CommandGroup>
           </CommandList>
         </Command>

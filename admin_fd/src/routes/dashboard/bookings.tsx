@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { StatusBadge } from "@/components/manager/ManagerOverview";
 import { InvoiceViewModal, type InvoiceViewData } from "@/components/invoices/InvoiceView";
-import { Eye } from "lucide-react";
+import { Eye, X } from "lucide-react";
 
 type BookingStatus =
   | "Booked"
@@ -81,6 +81,19 @@ function BookingsPage() {
     return true;
   });
 
+  // Counts reflect the status filter only (not the search box) — so switching
+  // status tabs shows how many bookings are in each, independent of search text.
+  const statusCounts = statuses.reduce((acc, s) => {
+    acc[s] = bookings.filter((b) => b.status === s).length;
+    return acc;
+  }, {} as Record<BookingStatus, number>);
+
+  const hasFilter = statusFilter !== "All" || search !== "";
+  const clearFilter = () => {
+    setStatusFilter("All");
+    setSearch("");
+  };
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-foreground">All Bookings</h1>
@@ -105,7 +118,7 @@ function BookingsPage() {
                 : "border-border text-muted-foreground"
             }`}
           >
-            All
+            All ({bookings.length})
           </button>
           {statuses.map((s) => (
             <button
@@ -117,10 +130,18 @@ function BookingsPage() {
                   : "border-border text-muted-foreground"
               }`}
             >
-              {s}
+              {s} ({statusCounts[s]})
             </button>
           ))}
         </div>
+        {hasFilter && (
+          <button
+            onClick={clearFilter}
+            className="flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground hover:border-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="h-3 w-3" /> Clear Filter
+          </button>
+        )}
       </div>
 
       <div className="rounded-lg border border-border bg-card overflow-x-auto">

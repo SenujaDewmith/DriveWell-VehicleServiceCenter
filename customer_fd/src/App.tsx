@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Layout } from "@/components/Layout";
 import Landing from "./pages/Landing";
 import About from "./pages/About";
+import FAQ from "./pages/FAQ";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
@@ -56,6 +57,7 @@ const App = () => (
                 <Route path="/register" element={<Register />} />
                 <Route path="/services" element={<Services />} />
                 <Route path="/about" element={<About />} />
+                <Route path="/faq" element={<FAQ />} />
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 <Route path="/vehicles" element={<ProtectedRoute><Vehicles /></ProtectedRoute>} />

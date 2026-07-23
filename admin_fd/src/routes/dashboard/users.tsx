@@ -108,7 +108,7 @@ function UsersPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">User Management</h1>
+        <h1 className="text-2xl font-bold text-foreground">Staff Management</h1>
         <button
           onClick={openNew}
           className="flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors"

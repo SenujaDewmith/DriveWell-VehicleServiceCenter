@@ -2,6 +2,17 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
 import { Plus, Pencil, ToggleLeft, ToggleRight, Star, X, ImagePlus, Trash2, Car } from "lucide-react";
 import { api, BASE } from "@/lib/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export const Route = createFileRoute("/dashboard/packages")({
   component: PackagesPage,
@@ -93,8 +104,11 @@ function fmtDuration(mins: number) {
   return m ? `${h}h ${m}min` : `${h}h`;
 }
 
+type StatusFilter = "All" | "Active" | "Inactive";
+
 function PackagesPage() {
   const [packages, setPackages] = useState<ApiPackage[]>([]);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ApiPackage | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -277,6 +291,14 @@ function PackagesPage() {
     }
   };
 
+  const activeCount = packages.filter((p) => p.is_active).length;
+  const inactiveCount = packages.length - activeCount;
+  const filteredPackages = packages.filter((p) => {
+    if (statusFilter === "Active") return p.is_active;
+    if (statusFilter === "Inactive") return !p.is_active;
+    return true;
+  });
+
   const featuredCount = packages.filter((p) => p.is_featured).length;
 
   const toggleFeatured = async (pkg: ApiPackage) => {
@@ -326,6 +348,22 @@ function PackagesPage() {
       {pageError && (
         <p className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md px-3 py-2">{pageError}</p>
       )}
+
+      <div className="flex gap-1 flex-wrap">
+        {(["All", "Active", "Inactive"] as StatusFilter[]).map((s) => (
+          <button
+            key={s}
+            onClick={() => setStatusFilter(s)}
+            className={`rounded-md border px-2 py-1.5 text-sm font-medium transition-colors ${
+              statusFilter === s
+                ? "border-accent bg-accent text-accent-foreground"
+                : "border-border text-muted-foreground"
+            }`}
+          >
+            {s} ({s === "All" ? packages.length : s === "Active" ? activeCount : inactiveCount})
+          </button>
+        ))}
+      </div>
 
       {showForm && (
         <div ref={formRef} className="rounded-lg border border-border bg-card p-5 space-y-4 scroll-mt-4">
@@ -528,7 +566,7 @@ function PackagesPage() {
               </tr>
             </thead>
             <tbody>
-              {packages.map((pkg) => (
+              {filteredPackages.map((pkg) => (
                 <tr key={pkg.package_id} className="border-b border-border last:border-0 hover:bg-muted/20">
                   <td className="py-2 px-3">
                     <div className="h-12 w-16 rounded-md border border-border bg-background flex items-center justify-center overflow-hidden">
@@ -579,17 +617,38 @@ function PackagesPage() {
                       >
                         <Pencil className="h-3 w-3" />
                       </button>
-                      <button
-                        onClick={() => toggleActive(pkg)}
-                        title={pkg.is_active ? "Deactivate" : "Activate"}
-                        className="p-1 text-muted-foreground hover:text-foreground"
-                      >
-                        {pkg.is_active ? (
-                          <ToggleRight className="h-3 w-3 text-accent" />
-                        ) : (
-                          <ToggleLeft className="h-3 w-3" />
-                        )}
-                      </button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <button
+                            title={pkg.is_active ? "Deactivate" : "Activate"}
+                            className="p-1 text-muted-foreground hover:text-foreground"
+                          >
+                            {pkg.is_active ? (
+                              <ToggleRight className="h-3 w-3 text-accent" />
+                            ) : (
+                              <ToggleLeft className="h-3 w-3" />
+                            )}
+                          </button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              {pkg.is_active ? "Deactivate this package?" : "Activate this package?"}
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {pkg.is_active
+                                ? `"${pkg.name}" will be hidden from customers and can no longer be booked. Existing bookings for this package are not affected.`
+                                : `"${pkg.name}" will become visible to customers and available for booking again.`}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => toggleActive(pkg)}>
+                              {pkg.is_active ? "Deactivate" : "Activate"}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                       <button
                         onClick={() => toggleFeatured(pkg)}
                         disabled={!pkg.is_featured && featuredCount >= MAX_FEATURED_PACKAGES}
@@ -610,10 +669,12 @@ function PackagesPage() {
                   </td>
                 </tr>
               ))}
-              {packages.length === 0 && (
+              {filteredPackages.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-muted-foreground">
-                    No packages found. Click &ldquo;Add Package&rdquo; to create one.
+                    {packages.length === 0
+                      ? <>No packages found. Click &ldquo;Add Package&rdquo; to create one.</>
+                      : `No ${statusFilter.toLowerCase()} packages found.`}
                   </td>
                 </tr>
               )}
