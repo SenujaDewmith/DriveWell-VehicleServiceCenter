@@ -1,12 +1,16 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { User } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
+import { authService } from "@/services/auth.service";
+import { changePasswordSchema, ChangePasswordFormData } from "@/lib/schemas/auth";
 
 export default function Profile() {
   const { user, updateProfile } = useAuth();
@@ -16,6 +20,29 @@ export default function Profile() {
     email: "",
     phone: "",
   });
+
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+
+  const {
+    register: registerPasswordField,
+    handleSubmit: handlePasswordSubmit,
+    reset: resetPasswordForm,
+    formState: { errors: passwordErrors, isSubmitting: isChangingPassword },
+  } = useForm<ChangePasswordFormData>({
+    resolver: zodResolver(changePasswordSchema),
+  });
+
+  const onChangePassword = async (data: ChangePasswordFormData) => {
+    try {
+      await authService.changePassword(data.currentPassword, data.newPassword);
+      toast.success("Password changed successfully!");
+      resetPasswordForm();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to change password");
+    }
+  };
 
   useEffect(() => {
     if (!user) {
@@ -101,25 +128,86 @@ export default function Profile() {
             <CardTitle>Change Password</CardTitle>
           </CardHeader>
           <CardContent>
-            <form className="space-y-4 max-w-2xl">
+            <form onSubmit={handlePasswordSubmit(onChangePassword)} className="space-y-4 max-w-2xl">
               <div className="space-y-2">
                 <Label htmlFor="current-password">Current Password</Label>
-                <Input id="current-password" type="password" />
+                <div className="relative">
+                  <Input
+                    id="current-password"
+                    type={showCurrentPassword ? "text" : "password"}
+                    className="pr-10"
+                    {...registerPasswordField("currentPassword")}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword((prev) => !prev)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                    aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+                    tabIndex={-1}
+                  >
+                    {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {passwordErrors.currentPassword && (
+                  <p className="text-sm text-destructive">{passwordErrors.currentPassword.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="new-password">New Password</Label>
-                <Input id="new-password" type="password" />
+                <div className="relative">
+                  <Input
+                    id="new-password"
+                    type={showNewPassword ? "text" : "password"}
+                    className="pr-10"
+                    {...registerPasswordField("newPassword")}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword((prev) => !prev)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                    aria-label={showNewPassword ? "Hide password" : "Show password"}
+                    tabIndex={-1}
+                  >
+                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {passwordErrors.newPassword ? (
+                  <p className="text-sm text-destructive">{passwordErrors.newPassword.message}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    At least 8 characters, with uppercase, lowercase, a number, and a special character. No spaces.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirm New Password</Label>
-                <Input id="confirm-password" type="password" />
+                <div className="relative">
+                  <Input
+                    id="confirm-password"
+                    type={showConfirmNewPassword ? "text" : "password"}
+                    className="pr-10"
+                    {...registerPasswordField("confirmNewPassword")}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmNewPassword((prev) => !prev)}
+                    className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                    aria-label={showConfirmNewPassword ? "Hide password" : "Show password"}
+                    tabIndex={-1}
+                  >
+                    {showConfirmNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {passwordErrors.confirmNewPassword && (
+                  <p className="text-sm text-destructive">{passwordErrors.confirmNewPassword.message}</p>
+                )}
               </div>
               <Button
-                type="button"
+                type="submit"
                 variant="outline"
-                onClick={() => toast.success("Password change feature coming soon!")}
+                disabled={isChangingPassword}
               >
-                Update Password
+                {isChangingPassword ? "Updating..." : "Update Password"}
               </Button>
             </form>
           </CardContent>

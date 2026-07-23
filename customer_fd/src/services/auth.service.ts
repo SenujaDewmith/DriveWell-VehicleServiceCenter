@@ -25,4 +25,10 @@ export const authService = {
   logout: () => apiClient.post<void>("/auth/logout", {}),
 
   getProfile: () => apiClient.get<ProfileResponse>("/auth/profile"),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiClient.put<{ message: string }>("/profile/change-password", {
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
 };

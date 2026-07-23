@@ -37,11 +37,6 @@ const changePassword = async (req, res) => {
   const { user_id } = req.user;
   const { current_password, new_password } = req.body;
 
-  if (!current_password || !new_password)
-    return res.status(400).json({ message: "current_password and new_password are required" });
-  if (new_password.length < 6)
-    return res.status(400).json({ message: "New password must be at least 6 characters" });
-
   try {
     const user = await prisma.user.findUnique({
       where: { user_id },

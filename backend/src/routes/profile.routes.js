@@ -2,6 +2,8 @@ const express = require("express");
 const router = express.Router();
 const { updateProfile, changePassword } = require("../controllers/profile.controller");
 const { verifyToken } = require("../middlewares/auth.middleware");
+const validate = require("../middlewares/validate.middleware");
+const { changePasswordSchema } = require("../schemas/auth.schema");
 
 /**
  * @swagger
@@ -76,6 +78,6 @@ router.put("/", verifyToken, updateProfile);
  *       401: { description: Current password incorrect }
  *       500: { description: Server error }
  */
-router.put("/change-password", verifyToken, changePassword);
+router.put("/change-password", verifyToken, validate(changePasswordSchema), changePassword);
 
 module.exports = router;
