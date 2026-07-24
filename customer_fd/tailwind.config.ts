@@ -81,10 +81,17 @@ export default {
             height: "0",
           },
         },
+        // Rests at normal size and only "pops" briefly once per cycle — a
+        // continuous pulse/bounce reads as broken rather than eye-catching.
+        "cta-pop": {
+          "0%, 80%, 100%": { transform: "scale(1)" },
+          "90%": { transform: "scale(1.12)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "cta-pop": "cta-pop 3s ease-in-out infinite",
       },
     },
   },

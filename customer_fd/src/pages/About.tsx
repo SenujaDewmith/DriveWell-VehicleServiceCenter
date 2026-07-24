@@ -103,7 +103,7 @@ export default function About() {
             <Button
               size="lg"
               variant="outline"
-              className="text-lg px-8 py-6 border-secondary-foreground/30 hover:bg-secondary-foreground/10"
+              className="text-lg text-black dark:text-white px-8 py-6 border-secondary-foreground/30 hover:bg-secondary-foreground/10"
               onClick={() => navigate("/services")}
             >
               View Our Services

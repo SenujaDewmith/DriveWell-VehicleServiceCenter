@@ -12,6 +12,7 @@ import {
 import { Moon, Sun, Menu, User, LogOut, Car, Calendar, FileText, Star } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { BookNowFab } from "@/components/BookNowFab";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, logout } = useAuth();
@@ -166,6 +167,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="flex-1">{children}</main>
+
+      <BookNowFab />
 
       <footer className="border-t border-border bg-secondary text-secondary-foreground">
         <div className="container mx-auto px-4 py-12">
