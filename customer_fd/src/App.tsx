@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -26,7 +27,19 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
+
+  // Wait for the session check to finish before deciding — otherwise a
+  // logged-in user doing a hard refresh gets bounced to /login for a frame
+  // while the cookie is still being verified against the backend.
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-cta" />
+      </div>
+    );
+  }
+
   return user ? <>{children}</> : <Navigate to="/login" />;
 }
 
