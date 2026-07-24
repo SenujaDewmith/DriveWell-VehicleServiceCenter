@@ -74,7 +74,10 @@ const App = () => (
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 <Route path="/vehicles" element={<ProtectedRoute><Vehicles /></ProtectedRoute>} />
-                <Route path="/book" element={<ProtectedRoute><BookService /></ProtectedRoute>} />
+                {/* Not wrapped in ProtectedRoute — BookService gates itself with an inline
+                    AuthModal so an unauthenticated visitor keeps their in-progress selection
+                    (e.g. ?package=) instead of being redirected away to /login. */}
+                <Route path="/book" element={<BookService />} />
                 <Route path="/bookings" element={<ProtectedRoute><Bookings /></ProtectedRoute>} />
                 <Route path="/bookings/:id" element={<ProtectedRoute><BookingDetails /></ProtectedRoute>} />
                 <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />

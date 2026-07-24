@@ -76,8 +76,8 @@ export default function Profile() {
   if (!user) return null;
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mx-auto max-w-4xl space-y-6">
+    <div className="container mx-auto px-4 py-6">
+      <div className="mx-auto max-w-4xl space-y-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">My Profile</h1>
           <p className="text-sm text-muted-foreground">
@@ -86,7 +86,7 @@ export default function Profile() {
         </div>
 
         <Card>
-          <CardContent className="flex flex-col items-center gap-4 py-6 text-center sm:flex-row sm:text-left">
+          <CardContent className="flex flex-col items-center gap-4 py-4 text-center sm:flex-row sm:text-left">
             <div className="h-16 w-16 shrink-0 rounded-full bg-cta flex items-center justify-center text-cta-foreground text-2xl font-bold">
               {user.name.charAt(0)}
             </div>
@@ -102,9 +102,9 @@ export default function Profile() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Card className="flex flex-col">
-            <CardHeader className="pb-4">
+            <CardHeader className="pb-3">
               <CardTitle className="text-lg">Personal Information</CardTitle>
               <CardDescription>
                 Update your name and contact details
@@ -113,9 +113,9 @@ export default function Profile() {
             <CardContent className="flex flex-1 flex-col">
               <form
                 onSubmit={handleSubmit}
-                className="flex flex-1 flex-col space-y-4"
+                className="flex flex-1 flex-col space-y-3"
               >
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="name">Full Name</Label>
                   <Input
                     id="name"
@@ -126,7 +126,7 @@ export default function Profile() {
                     required
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="email">Email</Label>
                   <Input
                     id="email"
@@ -138,7 +138,7 @@ export default function Profile() {
                     required
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="phone">Phone Number</Label>
                   <Input
                     id="phone"
@@ -161,7 +161,7 @@ export default function Profile() {
           </Card>
 
           <Card className="flex flex-col">
-            <CardHeader className="pb-4">
+            <CardHeader className="pb-3">
               <CardTitle className="text-lg">Change Password</CardTitle>
               <CardDescription>
                 Choose a strong password to keep your account secure
@@ -170,9 +170,9 @@ export default function Profile() {
             <CardContent className="flex flex-1 flex-col">
               <form
                 onSubmit={handlePasswordSubmit(onChangePassword)}
-                className="flex flex-1 flex-col space-y-4"
+                className="flex flex-1 flex-col space-y-3"
               >
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="current-password">Current Password</Label>
                   <div className="relative">
                     <Input
@@ -203,7 +203,7 @@ export default function Profile() {
                     </p>
                   )}
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="new-password">New Password</Label>
                   <div className="relative">
                     <Input
@@ -234,12 +234,11 @@ export default function Profile() {
                     </p>
                   ) : (
                     <p className="text-xs text-muted-foreground">
-                      At least 8 characters, with uppercase, lowercase, a
-                      number, and a special character. No spaces.
+                      8+ chars, mixed case, a number & a symbol
                     </p>
                   )}
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="confirm-password">Confirm New Password</Label>
                   <div className="relative">
                     <Input

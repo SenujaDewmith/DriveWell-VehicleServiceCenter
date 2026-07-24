@@ -23,6 +23,14 @@ const sendEmail = async (to, subject, html) => {
   }
 };
 
+const sendWelcomeEmail = (to, { customerName }) =>
+  sendEmail(to, "Welcome to DriveWell!", `
+    <h2>Welcome to DriveWell, ${customerName}!</h2>
+    <p>Your account has been created successfully.</p>
+    <p>You can now log in to book vehicle servicing, track your service history, and manage your vehicles all in one place.</p>
+    <p>Thank you for choosing DriveWell!</p>
+  `);
+
 const sendBookingConfirmation = (to, { customerName, bookingRef, packageName, serviceDate, slotTime }) =>
   sendEmail(to, "Booking Confirmed – DriveWell", `
     <h2>Booking Confirmed</h2>
@@ -55,4 +63,4 @@ const sendStatusUpdate = (to, { customerName, bookingRef, status }) =>
     <p>Thank you for your patience.</p>
   `);
 
-module.exports = { sendBookingConfirmation, sendBookingCancellation, sendStatusUpdate };
+module.exports = { sendWelcomeEmail, sendBookingConfirmation, sendBookingCancellation, sendStatusUpdate };

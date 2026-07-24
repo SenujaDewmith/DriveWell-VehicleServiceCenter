@@ -133,12 +133,14 @@ const options = {
         },
         ReservationInput: {
           type: "object",
-          required: ["vehicle_id", "package_id", "service_date", "start_time"],
+          required: ["vehicle_id", "package_id", "service_date", "start_time", "terms_accepted", "terms_version"],
           properties: {
-            vehicle_id:   { type: "integer", example: 2 },
-            package_id:   { type: "integer", example: 1 },
-            service_date: { type: "string",  format: "date", example: "2025-06-15" },
-            start_time:   { type: "string",  example: "08:00", description: "HH:MM — must match one of the package's generated appointment windows for that date" },
+            vehicle_id:     { type: "integer", example: 2 },
+            package_id:     { type: "integer", example: 1 },
+            service_date:   { type: "string",  format: "date", example: "2025-06-15" },
+            start_time:     { type: "string",  example: "08:00", description: "HH:MM — must match one of the package's generated appointment windows for that date" },
+            terms_accepted: { type: "boolean", example: true, description: "Must be true — explicit clickwrap consent to the Terms & Conditions" },
+            terms_version:  { type: "string",  example: "1.0", description: "T&C version shown to the customer — must match the current version" },
           },
         },
         // ── Charge Catalog ──────────────────────────────────────

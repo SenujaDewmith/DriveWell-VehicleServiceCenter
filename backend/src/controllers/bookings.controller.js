@@ -17,6 +17,10 @@ const MANAGER_ROLE = 1;
 // (staff/manager cancellations are exempt — this is a self-service guardrail, not a hard business rule)
 const CANCELLATION_CUTOFF_MINUTES = 24 * 60;
 
+// Must match TERMS_VERSION in customer_fd/src/lib/terms.ts — bump both together when the
+// T&C text changes so bookings always record which wording the customer actually accepted.
+const CURRENT_TERMS_VERSION = "1.0";
+
 const flattenBooking = (r) => ({
   reservation_id: r.reservation_id,
   booking_ref: r.booking_ref,
@@ -160,10 +164,17 @@ const getBooking = async (req, res) => {
 
 const createBooking = async (req, res) => {
   const { user_id } = req.user;
-  const { vehicle_id, package_id, service_date, start_time } = req.body;
+  const { vehicle_id, package_id, service_date, start_time, terms_accepted, terms_version } = req.body;
 
   if (!vehicle_id || !package_id || !service_date || !start_time)
     return res.status(400).json({ message: "vehicle_id, package_id, service_date, and start_time are required" });
+
+  // Consent is enforced server-side (not just a disabled button in the UI) and the
+  // accepted version is recorded on the reservation for later dispute resolution.
+  if (terms_accepted !== true)
+    return res.status(400).json({ message: "You must accept the Terms & Conditions to place a booking" });
+  if (terms_version !== CURRENT_TERMS_VERSION)
+    return res.status(400).json({ message: "Our Terms & Conditions have been updated — please review and accept the latest version" });
 
   try {
     const { reservation_id, booking_ref, pkgName, startStr, endStr } = await prisma.$transaction(async (tx) => {
@@ -238,6 +249,8 @@ const createBooking = async (req, res) => {
           start_time: minutesToTimeDate(startMin),
           end_time: minutesToTimeDate(endMin),
           service_date: new Date(service_date),
+          terms_version,
+          terms_accepted_at: new Date(),
         },
       });
 

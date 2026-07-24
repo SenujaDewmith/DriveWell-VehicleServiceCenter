@@ -91,24 +91,24 @@ export function BookingCalendar({ packageId, selectedDate, onSelectDate }: Booki
 
   return (
     <div className="border rounded-lg overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 bg-muted/30 border-b">
+      <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b">
         <div className="flex items-center gap-1">
-          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => goToMonth(-1)}>
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => goToMonth(-1)}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={() => goToMonth(1)}>
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => goToMonth(1)}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
         <span className="font-semibold text-sm">
           {MONTH_NAMES[viewMonth.getMonth()]} {viewMonth.getFullYear()}
         </span>
-        <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={goToday}>
+        <Button type="button" variant="outline" size="sm" className="h-6 text-xs" onClick={goToday}>
           Today
         </Button>
       </div>
 
-      <div className="p-3">
+      <div className="p-2.5">
         {loading ? (
           <div className="flex justify-center py-10">
             <Loader2 className="h-6 w-6 animate-spin text-cta" />
@@ -117,7 +117,7 @@ export function BookingCalendar({ packageId, selectedDate, onSelectDate }: Booki
           <>
             <div className="grid grid-cols-7 gap-1 mb-1">
               {WEEKDAYS.map((w) => (
-                <div key={w} className="text-center text-[10px] font-medium text-muted-foreground py-1">
+                <div key={w} className="text-center text-[10px] font-medium text-muted-foreground py-0.5">
                   {w}
                 </div>
               ))}
@@ -138,7 +138,7 @@ export function BookingCalendar({ packageId, selectedDate, onSelectDate }: Booki
                     type="button"
                     disabled={disabled}
                     onClick={() => onSelectDate(key)}
-                    className={`flex flex-col items-center justify-center gap-0.5 rounded-md py-1.5 text-xs transition-colors ${
+                    className={`flex flex-col items-center justify-center gap-0.5 rounded-md py-1 text-xs transition-colors ${
                       !inMonth || isPast
                         ? "text-muted-foreground/30 cursor-default"
                         : isSelected
@@ -165,7 +165,7 @@ export function BookingCalendar({ packageId, selectedDate, onSelectDate }: Booki
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-t bg-muted/20">
+      <div className="flex flex-wrap items-center gap-3 px-3 py-2 border-t bg-muted/20">
         {LEGEND.map((l) => (
           <div key={l.status} className="flex items-center gap-1.5">
             <span className={`h-2 w-2 rounded-full ${STATUS_DOT[l.status]}`} />

@@ -168,6 +168,10 @@ model Reservation {
   service_date   DateTime @db.Date
   status         String   @default("Booked") @db.VarChar(30)
   created_at     DateTime @default(now())
+  // Clickwrap consent record — which T&C version the customer accepted and when.
+  // Nullable because reservations created before this feature carry no acceptance.
+  terms_version     String?   @db.VarChar(10)
+  terms_accepted_at DateTime?
 
   customer_user  User           @relation("CustomerReservations", fields: [customer_id], references: [user_id])
   vehicle        Vehicle        @relation(fields: [vehicle_id], references: [vehicle_id])

@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const data = await api.post<{ user: { id: number; email: string; role_id: number } }>(
-      "/api/auth/login",
+      "/api/auth/staff/login",
       { email, password },
     );
     const role = ROLE_MAP[data.user.role_id] ?? "staff";

@@ -11,6 +11,11 @@ import { servicesService, type ServicePackage } from "@/services/services.servic
 import { bookingsService, type AvailableSlot } from "@/services/bookings.service";
 import { AddVehicleDialog } from "@/components/AddVehicleDialog";
 import { BookingCalendar } from "@/components/BookingCalendar";
+import { TermsDialog } from "@/components/TermsDialog";
+import { AuthModal } from "@/components/auth/AuthModal";
+import { Checkbox } from "@/components/ui/checkbox";
+import { TERMS_VERSION } from "@/lib/terms";
+import { CANCELLATION_CUTOFF_HOURS } from "@/lib/bookingRules";
 import { ASSET_BASE_URL } from "@/lib/apiClient";
 import { Calendar, Car, Clock, CheckCircle, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -32,14 +37,14 @@ function fmtDuration(mins: number) {
 }
 
 const STEPS = [
-  { number: 1, label: "Vehicle" },
-  { number: 2, label: "Package" },
-  { number: 3, label: "Date & Time" },
+  { number: 1, label: "Package" },
+  { number: 2, label: "Date & Time" },
+  { number: 3, label: "Vehicle" },
   { number: 4, label: "Confirm" },
 ] as const;
 
 export default function BookService() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectedPackage = searchParams.get("package");
@@ -57,10 +62,16 @@ export default function BookService() {
   const [selectedSlotTime, setSelectedSlotTime] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [addVehicleOpen, setAddVehicleOpen] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
 
+  // Gate booking behind an inline modal instead of redirecting to /login, so an
+  // unauthenticated visitor never loses their place in the booking flow (e.g. a
+  // preselected package from ?package=) — they authenticate and keep going right here.
+  const [authModalOpen, setAuthModalOpen] = useState(false);
   useEffect(() => {
-    if (!user) navigate("/login");
-  }, [user, navigate]);
+    if (!isLoading && !user) setAuthModalOpen(true);
+  }, [isLoading, user]);
 
   const vehiclesQuery = useQuery({
     queryKey: ["vehicles"],
@@ -81,11 +92,16 @@ export default function BookService() {
   }, [vehiclesQuery.isError, packagesQuery.isError]);
 
   // Pre-select the package passed via ?package= once its data has loaded (runs once — bails
-  // out as soon as a package is selected, whether by this effect or by the user).
+  // out as soon as a package is selected, whether by this effect or by the user). The user
+  // already chose this package from the landing/services page, so skip straight past the
+  // now-redundant package step to Date & Time.
   useEffect(() => {
     if (!preselectedPackage || selectedPackageId || packages.length === 0) return;
     const match = packages.find((p) => p.package_id.toString() === preselectedPackage);
-    if (match) setSelectedPackageId(match.package_id);
+    if (match) {
+      setSelectedPackageId(match.package_id);
+      setStep(2);
+    }
   }, [preselectedPackage, packages, selectedPackageId]);
 
   // Re-fetch available slots whenever the selected date OR package changes — covers
@@ -107,7 +123,7 @@ export default function BookService() {
   }, [selectedDate, selectedPackageId]);
 
   const handleConfirm = async () => {
-    if (!selectedVehicleId || !selectedPackageId || !selectedDate || !selectedStartTime) return;
+    if (!selectedVehicleId || !selectedPackageId || !selectedDate || !selectedStartTime || !termsAccepted) return;
     setIsSubmitting(true);
     try {
       const res = await bookingsService.createBooking({
@@ -115,6 +131,8 @@ export default function BookService() {
         package_id: selectedPackageId,
         service_date: selectedDate,
         start_time: selectedStartTime,
+        terms_accepted: true,
+        terms_version: TERMS_VERSION,
       });
       toast.success(`Booking confirmed! Ref: ${res.booking_ref}`);
       navigate("/bookings");
@@ -133,23 +151,34 @@ export default function BookService() {
   const vehicle = vehicles.find((v) => v.vehicle_id === selectedVehicleId);
   const pkg = packages.find((p) => p.package_id === selectedPackageId);
 
-  if (!user) return null;
+  // Mirrors ProtectedRoute's loading guard — /book is intentionally NOT wrapped in
+  // ProtectedRoute (see App.tsx) so an unauthenticated visit renders this page with
+  // an AuthModal instead of bouncing to /login.
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-cta" />
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <h1 className="text-4xl font-bold mb-8 text-center">Book a Service</h1>
+      <h1 className="text-3xl font-bold mb-5 text-center">Book a Service</h1>
 
-      {/* Step indicator */}
-      <div className="mb-6 rounded-lg border bg-card shadow-sm p-6">
+      {/* Step indicator — compact horizontal stepper (small circle + connector, label
+          reduced to caption size) so it reads at a glance without pushing step content
+          below the fold. */}
+      <div className="mb-4 rounded-lg border bg-card shadow-sm px-4 py-3">
         <div className="flex items-start">
           {STEPS.map((s, idx) => {
             const isComplete = step > s.number;
             const isCurrent = step === s.number;
             return (
               <div key={s.number} className="flex items-center flex-1 last:flex-none">
-                <div className="flex flex-col items-center gap-2">
+                <div className="flex flex-col items-center gap-1">
                   <div
-                    className={`h-10 w-10 shrink-0 rounded-full flex items-center justify-center font-semibold transition-colors ${
+                    className={`h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${
                       isComplete
                         ? "bg-cta text-cta-foreground"
                         : isCurrent
@@ -157,10 +186,10 @@ export default function BookService() {
                           : "bg-muted text-muted-foreground"
                     }`}
                   >
-                    {isComplete ? <CheckCircle className="h-5 w-5" /> : s.number}
+                    {isComplete ? <CheckCircle className="h-4 w-4" /> : s.number}
                   </div>
                   <span
-                    className={`text-xs text-center whitespace-nowrap ${
+                    className={`text-[11px] leading-none text-center whitespace-nowrap ${
                       isCurrent ? "font-semibold text-foreground" : "text-muted-foreground"
                     }`}
                   >
@@ -168,7 +197,7 @@ export default function BookService() {
                   </span>
                 </div>
                 {idx < STEPS.length - 1 && (
-                  <div className={`flex-1 h-0.5 mx-2 mb-5 rounded-full ${step > s.number ? "bg-cta" : "bg-muted"}`} />
+                  <div className={`flex-1 h-0.5 mx-2 mb-4 rounded-full ${step > s.number ? "bg-cta" : "bg-muted"}`} />
                 )}
               </div>
             );
@@ -176,8 +205,204 @@ export default function BookService() {
         </div>
       </div>
 
-      {/* Step 1 — Select Vehicle */}
+      {/* Step 1 — Select Package */}
       {step === 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5" />
+              Select Service Package
+            </CardTitle>
+            <CardDescription>Choose the service package that fits your needs</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Same viewport-capped scroll pattern as the vehicle step, so the
+                actions below stay reachable however large the catalog grows. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[min(52vh,28rem)] overflow-y-auto overscroll-contain -m-1 p-1">
+              {packages.map((p) => {
+                const isSelected = selectedPackageId === p.package_id;
+                return (
+                  <Card
+                    key={p.package_id}
+                    className={`cursor-pointer transition-all overflow-hidden flex flex-col ${isSelected ? "border-cta border-2 bg-cta/5" : "hover:border-cta/50"}`}
+                    onClick={() => setSelectedPackageId(p.package_id)}
+                  >
+                    {/* Fixed 128px thumbnail strip — enough to actually read the photo
+                        without the image dominating the card over its details/price. */}
+                    <div className="relative h-32 w-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                      {imageSrc(p.image_url) ? (
+                        <img
+                          src={imageSrc(p.image_url)!}
+                          alt={p.name}
+                          className="h-full w-full object-cover object-center"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <Car className="h-8 w-8 text-muted-foreground" />
+                      )}
+                      {isSelected && (
+                        <div className="absolute top-2 right-2 h-5 w-5 rounded-full bg-cta text-cta-foreground flex items-center justify-center shadow">
+                          <CheckCircle className="h-3.5 w-3.5" />
+                        </div>
+                      )}
+                    </div>
+                    <CardContent className="p-3 flex flex-col flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold text-sm">{p.name}</h3>
+                        {p.package_code && (
+                          <span className="text-[10px] font-mono text-muted-foreground">{p.package_code}</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-2 flex-1">{p.description}</p>
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t">
+                        <div>
+                          <span className="text-base font-bold text-cta">
+                            LKR {parseFloat(p.price).toLocaleString()}
+                          </span>
+                          <span className="text-muted-foreground text-[10px] font-medium ml-1">Upwards</span>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">{fmtDuration(p.estimated_duration)}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+            {/* Sticky action bar — keeps Continue visible even when the card
+                overflows short viewports (e.g. mobile). */}
+            <div className="sticky bottom-0 -mx-6 -mb-6 rounded-b-lg border-t bg-card px-6 py-4">
+              <Button
+                className="w-full bg-cta text-cta-foreground hover:bg-cta/90"
+                onClick={() => setStep(2)}
+                disabled={!selectedPackageId}
+              >
+                Continue
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Step 2 — Date & Time */}
+      {step === 2 && (
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Choose Date & Time
+            </CardTitle>
+            <CardDescription>Select your preferred appointment slot</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Date</Label>
+                <BookingCalendar packageId={selectedPackageId!} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label>Available Time Slots</Label>
+                  {selectedDate && (
+                    <Badge variant="outline" className="border-cta text-cta">
+                      {new Date(selectedDate).toLocaleDateString("en-LK", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </Badge>
+                  )}
+                </div>
+
+                {!selectedDate ? (
+                  <p className="text-sm text-muted-foreground py-8 text-center">
+                    Select a date to see available slots.
+                  </p>
+                ) : slotsLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-cta" />
+                  </div>
+                ) : dateAvailable === false ? (
+                  <p className="text-sm text-destructive py-8 text-center">
+                    No slots available on this date. Please choose another date.
+                  </p>
+                ) : (
+                  // Capped to match the calendar's rendered height (not an arbitrary
+                  // value) so the two columns sit flush and neither one pushes the
+                  // sticky action bar below the fold.
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[22rem] overflow-y-auto overscroll-contain -m-1 p-1">
+                    {slots.map((slot) => {
+                      const isSelected = selectedStartTime === slot.start_time;
+                      const isFull = slot.remaining <= 0;
+                      return (
+                        <button
+                          key={slot.start_time}
+                          type="button"
+                          disabled={isFull}
+                          onClick={() => {
+                            setSelectedStartTime(slot.start_time);
+                            setSelectedSlotTime(`${fmtTime(slot.start_time)} - ${fmtTime(slot.end_time)}`);
+                          }}
+                          className={`text-left border-2 rounded-lg p-2.5 transition-colors ${
+                            isSelected
+                              ? "border-cta bg-cta/5"
+                              : isFull
+                                ? "opacity-50 cursor-not-allowed border-border"
+                                : "border-border hover:border-cta/50"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between mb-1.5">
+                            <div>
+                              <p className="font-semibold">{fmtTime(slot.start_time)} - {fmtTime(slot.end_time)}</p>
+                              {pkg && <p className="text-xs text-muted-foreground">Est. service time: {fmtDuration(pkg.estimated_duration)}</p>}
+                            </div>
+                            <span
+                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                                isFull ? "bg-destructive/10 text-destructive" : "bg-cta/10 text-cta"
+                              }`}
+                            >
+                              {isFull ? "FULL" : "AVAILABLE"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4 text-xs">
+                            <span className="text-muted-foreground">
+                              Free <span className="font-medium text-foreground">{slot.remaining}</span>
+                            </span>
+                            <span className="text-muted-foreground">
+                              Booked <span className="font-medium text-foreground">{slot.booked_count}</span>
+                            </span>
+                          </div>
+                          {isSelected && (
+                            <p className="text-xs text-cta font-medium mt-2 flex items-center gap-1">
+                              <CheckCircle className="h-3 w-3" /> Selected
+                            </p>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Sticky action bar — keeps Back/Confirm visible on short viewports. */}
+            <div className="sticky bottom-0 -mx-6 -mb-6 rounded-b-lg border-t bg-card px-6 py-4 flex gap-3">
+              <Button variant="outline" onClick={() => setStep(1)} className="flex-1">Back</Button>
+              <Button
+                className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90"
+                onClick={() => setStep(3)}
+                disabled={!selectedDate || !selectedStartTime || dateAvailable === false}
+              >
+                Confirm Selection
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Step 3 — Select Vehicle */}
+      {step === 3 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -200,7 +425,9 @@ export default function BookService() {
                 </Button>
               </div>
             ) : (
-              <div className="grid gap-4">
+              // Capped to viewport height so long vehicle lists scroll internally
+              // and the Continue button below stays reachable without page scrolling.
+              <div className="grid gap-4 sm:grid-cols-2 max-h-[min(50vh,26rem)] overflow-y-auto overscroll-contain -m-1 p-1">
                 {vehicles.map((v) => (
                   <Card
                     key={v.vehicle_id}
@@ -236,193 +463,16 @@ export default function BookService() {
                 </Card>
               </div>
             )}
-            <Button
-              className="w-full bg-cta text-cta-foreground hover:bg-cta/90"
-              onClick={() => setStep(2)}
-              disabled={!selectedVehicleId}
-            >
-              Continue
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Step 2 — Select Package */}
-      {step === 2 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5" />
-              Select Service Package
-            </CardTitle>
-            <CardDescription>Choose the service package that fits your needs</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {packages.map((p) => {
-                const isSelected = selectedPackageId === p.package_id;
-                return (
-                  <Card
-                    key={p.package_id}
-                    className={`cursor-pointer transition-all overflow-hidden flex flex-col ${isSelected ? "border-cta border-2 bg-cta/5" : "hover:border-cta/50"}`}
-                    onClick={() => setSelectedPackageId(p.package_id)}
-                  >
-                    <div className="relative h-20 w-full bg-muted flex items-center justify-center overflow-hidden shrink-0">
-                      {imageSrc(p.image_url) ? (
-                        <img src={imageSrc(p.image_url)!} alt={p.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <Car className="h-7 w-7 text-muted-foreground" />
-                      )}
-                      {isSelected && (
-                        <div className="absolute top-1.5 right-1.5 h-5 w-5 rounded-full bg-cta text-cta-foreground flex items-center justify-center shadow">
-                          <CheckCircle className="h-3.5 w-3.5" />
-                        </div>
-                      )}
-                    </div>
-                    <CardContent className="p-3 flex flex-col flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold text-sm">{p.name}</h3>
-                        {p.package_code && (
-                          <span className="text-[10px] font-mono text-muted-foreground">{p.package_code}</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2 flex-1">{p.description}</p>
-                      <div className="flex items-center justify-between mt-2 pt-2 border-t">
-                        <div>
-                          <span className="text-base font-bold text-cta">
-                            LKR {parseFloat(p.price).toLocaleString()}
-                          </span>
-                          <span className="text-muted-foreground text-[10px] font-medium ml-1">Upwards</span>
-                        </div>
-                        <span className="text-[10px] text-muted-foreground">{fmtDuration(p.estimated_duration)}</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-            <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setStep(1)} className="flex-1">Back</Button>
-              <Button
-                className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90"
-                onClick={() => setStep(3)}
-                disabled={!selectedPackageId}
-              >
-                Continue
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Step 3 — Date & Time */}
-      {step === 3 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Choose Date & Time
-            </CardTitle>
-            <CardDescription>Select your preferred appointment slot</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label>Date</Label>
-                <BookingCalendar packageId={selectedPackageId!} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Available Time Slots</Label>
-                  {selectedDate && (
-                    <Badge variant="outline" className="border-cta text-cta">
-                      {new Date(selectedDate).toLocaleDateString("en-LK", {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </Badge>
-                  )}
-                </div>
-
-                {!selectedDate ? (
-                  <p className="text-sm text-muted-foreground py-8 text-center">
-                    Select a date to see available slots.
-                  </p>
-                ) : slotsLoading ? (
-                  <div className="flex justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-cta" />
-                  </div>
-                ) : dateAvailable === false ? (
-                  <p className="text-sm text-destructive py-8 text-center">
-                    No slots available on this date. Please choose another date.
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {slots.map((slot) => {
-                      const isSelected = selectedStartTime === slot.start_time;
-                      const isFull = slot.remaining <= 0;
-                      return (
-                        <button
-                          key={slot.start_time}
-                          type="button"
-                          disabled={isFull}
-                          onClick={() => {
-                            setSelectedStartTime(slot.start_time);
-                            setSelectedSlotTime(`${fmtTime(slot.start_time)} - ${fmtTime(slot.end_time)}`);
-                          }}
-                          className={`text-left border-2 rounded-lg p-3 transition-colors ${
-                            isSelected
-                              ? "border-cta bg-cta/5"
-                              : isFull
-                                ? "opacity-50 cursor-not-allowed border-border"
-                                : "border-border hover:border-cta/50"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <p className="font-semibold">{fmtTime(slot.start_time)} - {fmtTime(slot.end_time)}</p>
-                              {pkg && <p className="text-xs text-muted-foreground">Est. service time: {fmtDuration(pkg.estimated_duration)}</p>}
-                            </div>
-                            <span
-                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
-                                isFull ? "bg-destructive/10 text-destructive" : "bg-cta/10 text-cta"
-                              }`}
-                            >
-                              {isFull ? "FULL" : "AVAILABLE"}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-4 text-xs">
-                            <span className="text-muted-foreground">
-                              Free <span className="font-medium text-foreground">{slot.remaining}</span>
-                            </span>
-                            <span className="text-muted-foreground">
-                              Booked <span className="font-medium text-foreground">{slot.booked_count}</span>
-                            </span>
-                          </div>
-                          {isSelected && (
-                            <p className="text-xs text-cta font-medium mt-2 flex items-center gap-1">
-                              <CheckCircle className="h-3 w-3" /> Selected
-                            </p>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex gap-3">
+            {/* Sticky action bar — keeps Back/Continue visible even when the card
+                overflows short viewports (e.g. mobile). */}
+            <div className="sticky bottom-0 -mx-6 -mb-6 rounded-b-lg border-t bg-card px-6 py-4 flex gap-3">
               <Button variant="outline" onClick={() => setStep(2)} className="flex-1">Back</Button>
               <Button
                 className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90"
                 onClick={() => setStep(4)}
-                disabled={!selectedDate || !selectedStartTime || dateAvailable === false}
+                disabled={!selectedVehicleId}
               >
-                Confirm Selection
+                Continue
               </Button>
             </div>
           </CardContent>
@@ -432,65 +482,100 @@ export default function BookService() {
       {/* Step 4 — Review & Confirm */}
       {step === 4 && (
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-cta" />
               Review & Confirm
             </CardTitle>
             <CardDescription>Please review your booking details</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-4">
-              <div className="flex justify-between items-start p-4 bg-muted/30 rounded-lg">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Vehicle</p>
-                  <p className="font-semibold">{vehicle?.make} {vehicle?.model}</p>
-                  <p className="text-sm text-muted-foreground">{vehicle?.plate_no}</p>
+          <CardContent className="space-y-3">
+            {/* One divided-row summary instead of three separate boxed cards — the same
+                information reads at a glance in noticeably less vertical space, the
+                standard layout for checkout/order-review summaries. */}
+            <div className="rounded-lg border divide-y overflow-hidden">
+              <div className="flex justify-between items-center gap-3 px-4 py-2.5 bg-muted/30">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Car className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm text-muted-foreground shrink-0">Vehicle</span>
                 </div>
-                <Car className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div className="flex justify-between items-start p-4 bg-muted/30 rounded-lg">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Service Package</p>
-                  <p className="font-semibold">{pkg?.name}</p>
-                  <p className="text-sm text-muted-foreground">{pkg ? fmtDuration(pkg.estimated_duration) : ""}</p>
+                <div className="text-right min-w-0">
+                  <p className="font-semibold text-sm truncate">{vehicle?.make} {vehicle?.model}</p>
+                  <p className="text-xs text-muted-foreground">{vehicle?.plate_no}</p>
                 </div>
-                <CheckCircle className="h-5 w-5 text-muted-foreground" />
               </div>
-              <div className="flex justify-between items-start p-4 bg-muted/30 rounded-lg">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Date & Time</p>
-                  <p className="font-semibold">
+              <div className="flex justify-between items-center gap-3 px-4 py-2.5 bg-muted/30">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <CheckCircle className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm text-muted-foreground shrink-0">Package</span>
+                </div>
+                <div className="text-right min-w-0">
+                  <p className="font-semibold text-sm truncate">{pkg?.name}</p>
+                  <p className="text-xs text-muted-foreground">{pkg ? fmtDuration(pkg.estimated_duration) : ""}</p>
+                </div>
+              </div>
+              <div className="flex justify-between items-center gap-3 px-4 py-2.5 bg-muted/30">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm text-muted-foreground shrink-0">Date & Time</span>
+                </div>
+                <div className="text-right min-w-0">
+                  <p className="font-semibold text-sm truncate">
                     {new Date(selectedDate).toLocaleDateString("en-LK", {
-                      weekday: "long",
-                      month: "long",
+                      weekday: "short",
+                      month: "short",
                       day: "numeric",
                       year: "numeric",
                     })}
                   </p>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedSlotTime || "Time slot: To be confirmed"}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{selectedSlotTime || "To be confirmed"}</p>
                 </div>
-                <Clock className="h-5 w-5 text-muted-foreground" />
               </div>
-              <div className="flex justify-between items-center p-4 bg-cta/10 rounded-lg border-2 border-cta">
-                <span className="font-semibold text-lg">Estimated Cost</span>
-                <span className="text-2xl font-bold text-cta">
+              <div className="flex justify-between items-center px-4 py-3 bg-cta/10">
+                <span className="font-semibold text-sm">Estimated Cost</span>
+                <span className="text-xl font-bold text-cta">
                   {pkg ? `LKR ${parseFloat(pkg.price).toLocaleString()} Upwards` : "—"}
                 </span>
               </div>
             </div>
-            <p className="text-sm text-muted-foreground text-center">
-              By confirming, you agree to our terms and conditions. Final invoice may include additional charges for
-              extra work discovered during service.
-            </p>
-            <div className="flex gap-3">
+            {/* Clickwrap consent — unticked by default; gates the Confirm button and is
+                re-validated server-side. Replaces the old passive "by confirming…" text. */}
+            <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3">
+              <Checkbox
+                id="accept-terms"
+                checked={termsAccepted}
+                onCheckedChange={(checked) => setTermsAccepted(checked === true)}
+                className="mt-0.5"
+              />
+              <div className="space-y-0.5">
+                <label htmlFor="accept-terms" className="block cursor-pointer text-sm font-medium leading-snug">
+                  I have read and agree to the{" "}
+                  <button
+                    type="button"
+                    className="font-semibold text-cta underline underline-offset-2 hover:text-cta/80"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setTermsOpen(true);
+                    }}
+                  >
+                    Terms &amp; Conditions
+                  </button>
+                </label>
+                <p className="text-xs text-muted-foreground leading-snug">
+                  Includes our {CANCELLATION_CUTOFF_HOURS}-hour cancellation policy and possible additional charges
+                  for extra work discovered during service.
+                </p>
+              </div>
+            </div>
+            {/* Sticky action bar — pins Back/Confirm on short viewports. The summary
+                above stays in normal flow (not scroll-capped) so every detail the
+                user is confirming remains scannable. */}
+            <div className="sticky bottom-0 -mx-6 -mb-6 rounded-b-lg border-t bg-card px-6 py-4 flex gap-3">
               <Button variant="outline" onClick={() => setStep(3)} className="flex-1">Back</Button>
               <Button
                 className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90"
                 onClick={handleConfirm}
-                disabled={isSubmitting}
+                disabled={isSubmitting || !termsAccepted}
               >
                 {isSubmitting ? (
                   <>
@@ -510,6 +595,28 @@ export default function BookService() {
         open={addVehicleOpen}
         onOpenChange={setAddVehicleOpen}
         onVehicleAdded={handleVehicleAdded}
+      />
+
+      <TermsDialog
+        open={termsOpen}
+        onOpenChange={setTermsOpen}
+        onAgree={() => {
+          setTermsAccepted(true);
+          setTermsOpen(false);
+        }}
+      />
+
+      <AuthModal
+        open={authModalOpen}
+        onOpenChange={(open) => {
+          setAuthModalOpen(open);
+          // Dismissed without signing in — there's nothing to book on this page
+          // yet, so send them somewhere useful instead of leaving them stranded.
+          if (!open && !user) navigate("/services");
+        }}
+        onSuccess={() => setAuthModalOpen(false)}
+        title="Sign in to book a service"
+        description="Sign in or create an account to pick your vehicle, package, and time slot."
       />
     </div>
   );

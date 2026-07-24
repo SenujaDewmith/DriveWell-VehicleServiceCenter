@@ -2,6 +2,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
+const { sendWelcomeEmail } = require("../services/email.service");
 require("dotenv").config();
 
 const register = async (req, res) => {
@@ -37,6 +38,7 @@ const register = async (req, res) => {
     });
 
     logger.info(`New customer registered — user_id: ${user.user_id}`);
+    sendWelcomeEmail(user.email, { customerName: name.trim() });
     res.status(201).json({ message: "User registered successfully", user });
   } catch (error) {
     if (error.status) return res.status(error.status).json({ message: error.message });
@@ -45,7 +47,13 @@ const register = async (req, res) => {
   }
 };
 
-const login = async (req, res) => {
+// Role IDs allowed to authenticate through each portal. Enforced server-side
+// so a role mismatch can't be bypassed by calling the API directly — the
+// frontend that's calling it is never trusted to self-report who it is.
+const CUSTOMER_ROLE_IDS = [5];
+const STAFF_ROLE_IDS = [1, 2, 3, 4];
+
+const authenticate = async (req, res, { allowedRoleIds, wrongPortalMessage }) => {
   const { email, password, rememberMe = false } = req.body;
 
   try {
@@ -57,6 +65,11 @@ const login = async (req, res) => {
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) return res.status(401).json({ message: "Invalid email or password" });
+
+    if (!allowedRoleIds.includes(user.role_id)) {
+      logger.warn(`Login blocked — user_id: ${user.user_id} used wrong portal (role_id ${user.role_id})`);
+      return res.status(403).json({ message: wrongPortalMessage });
+    }
 
     const expiresIn = rememberMe ? "30d" : "1d";
     const maxAge = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
@@ -84,6 +97,18 @@ const login = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+const login = (req, res) =>
+  authenticate(req, res, {
+    allowedRoleIds: CUSTOMER_ROLE_IDS,
+    wrongPortalMessage: "This portal is for customers only. Staff should use the staff login.",
+  });
+
+const staffLogin = (req, res) =>
+  authenticate(req, res, {
+    allowedRoleIds: STAFF_ROLE_IDS,
+    wrongPortalMessage: "This portal is for service center staff only.",
+  });
 
 const logout = (req, res) => {
   res.clearCookie("token", {
@@ -124,4 +149,4 @@ const getProfile = async (req, res) => {
   }
 };
 
-module.exports = { register, login, logout, getProfile };
+module.exports = { register, login, staffLogin, logout, getProfile };

@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { register, login, logout, getProfile } = require("../controllers/auth.controller");
+const { register, login, staffLogin, logout, getProfile } = require("../controllers/auth.controller");
 const { verifyToken } = require("../middlewares/auth.middleware");
 const validate = require("../middlewares/validate.middleware");
 const { registerSchema, loginSchema } = require("../schemas/auth.schema");
@@ -71,10 +71,50 @@ router.post("/register", validate(registerSchema), register);
  *                     role_id: { type: integer, example: 5 }
  *       400: { description: Missing fields }
  *       401: { description: Invalid credentials }
- *       403: { description: Account inactive }
+ *       403: { description: Account inactive, or account is a staff/management account }
  *       500: { description: Server error }
  */
 router.post("/login", validate(loginSchema), login);
+
+/**
+ * @swagger
+ * /api/auth/staff/login:
+ *   post:
+ *     summary: Staff/management login and receive JWT in HttpOnly cookie
+ *     description: Same credential flow as customer login, but only accounts with a staff role (Service Center Manager, Supervisor, Cashier, Service Staff) are accepted. Customer accounts are rejected.
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email:    { type: string, format: email, example: manager@drivewell.com }
+ *               password: { type: string, example: password123 }
+ *     responses:
+ *       200:
+ *         description: Login successful. JWT set as HttpOnly cookie.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message: { type: string, example: Login successful }
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:      { type: integer, example: 1 }
+ *                     email:   { type: string,  example: manager@drivewell.com }
+ *                     role_id: { type: integer, example: 1 }
+ *       400: { description: Missing fields }
+ *       401: { description: Invalid credentials }
+ *       403: { description: Account inactive, or account is a customer account }
+ *       500: { description: Server error }
+ */
+router.post("/staff/login", validate(loginSchema), staffLogin);
 
 /**
  * @swagger

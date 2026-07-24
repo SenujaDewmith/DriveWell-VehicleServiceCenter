@@ -59,6 +59,10 @@ export interface CreateBookingPayload {
   package_id: number;
   service_date: string;
   start_time: string;
+  // Clickwrap consent — backend rejects bookings without terms_accepted: true
+  // and records which T&C version the customer agreed to.
+  terms_accepted: boolean;
+  terms_version: string;
 }
 
 export interface AvailableSlot {

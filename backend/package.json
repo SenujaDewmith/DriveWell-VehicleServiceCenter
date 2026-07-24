@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "db:seed": "node prisma/seed.js"
+    "db:seed": "node prisma/seed.js",
+    "mailhog:start": "docker start mailhog || docker run -d --name mailhog -p 1025:1025 -p 8025:8025 mailhog/mailhog",
+    "mailhog:stop": "docker stop mailhog"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
