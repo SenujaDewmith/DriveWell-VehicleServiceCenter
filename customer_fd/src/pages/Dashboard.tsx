@@ -186,27 +186,27 @@ export default function Dashboard() {
                   {upcomingBookings.slice(0, 5).map((booking) => (
                     <div
                       key={booking.reservation_id}
-                      className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/30 transition-colors cursor-pointer"
+                      className="flex items-center justify-between gap-4 p-4 border border-border rounded-lg hover:bg-muted/30 transition-colors cursor-pointer"
                       onClick={() => navigate(`/bookings/${booking.reservation_id}`)}
                     >
-                      <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 bg-cta/10 rounded-lg flex items-center justify-center">
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
+                        <div className="h-12 w-12 bg-cta/10 rounded-lg flex items-center justify-center shrink-0">
                           <Car className="h-6 w-6 text-cta" />
                         </div>
-                        <div>
-                          <p className="font-semibold">
+                        <div className="min-w-0">
+                          <p className="font-semibold truncate">
                             {booking.make} {booking.model}
                           </p>
-                          <p className="text-sm text-muted-foreground">{booking.package_name}</p>
+                          <p className="text-sm text-muted-foreground truncate">{booking.package_name}</p>
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right w-28 shrink-0">
                         <p className="text-sm font-medium">{fmtDate(booking.service_date)}</p>
                         <p className="text-sm text-muted-foreground">
                           {booking.slot_time ? booking.slot_time.slice(0, 5) : "To be confirmed"}
                         </p>
                       </div>
-                      <Badge variant="outline" className={STATUS_COLORS[booking.status]}>
+                      <Badge variant="outline" className={`shrink-0 w-28 justify-center ${STATUS_COLORS[booking.status]}`}>
                         {booking.status}
                       </Badge>
                     </div>

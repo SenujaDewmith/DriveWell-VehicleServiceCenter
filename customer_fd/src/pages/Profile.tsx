@@ -20,6 +20,7 @@ import {
   changePasswordSchema,
   ChangePasswordFormData,
 } from "@/lib/schemas/auth";
+import { PasswordHint } from "@/components/auth/PasswordHint";
 
 export default function Profile() {
   const { user, updateProfile } = useAuth();
@@ -38,10 +39,12 @@ export default function Profile() {
     register: registerPasswordField,
     handleSubmit: handlePasswordSubmit,
     reset: resetPasswordForm,
+    watch: watchPasswordField,
     formState: { errors: passwordErrors, isSubmitting: isChangingPassword },
   } = useForm<ChangePasswordFormData>({
     resolver: zodResolver(changePasswordSchema),
   });
+  const newPassword = watchPasswordField("newPassword", "");
 
   const onChangePassword = async (data: ChangePasswordFormData) => {
     try {
@@ -228,15 +231,7 @@ export default function Profile() {
                       )}
                     </button>
                   </div>
-                  {passwordErrors.newPassword ? (
-                    <p className="text-sm text-destructive">
-                      {passwordErrors.newPassword.message}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      8+ chars, mixed case, a number & a symbol
-                    </p>
-                  )}
+                  <PasswordHint password={newPassword} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="confirm-password">Confirm New Password</Label>

@@ -76,10 +76,13 @@ export default function Bookings() {
   const setActiveTab = (tab: string) => {
     setSearchParams(tab === "past" ? { tab: "past" } : {}, { replace: true });
   };
+  // Seeded once from ?vehicle= (e.g. arriving from a vehicle card's "Service History" link)
+  // so both tabs open already scoped to that vehicle — read via initializer, not effect, so
+  // it only applies on first load and doesn't fight the user's own filter changes afterward.
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [upcomingVehicleFilter, setUpcomingVehicleFilter] = useState("all");
-  const [pastVehicleFilter, setPastVehicleFilter] = useState("all");
+  const [upcomingVehicleFilter, setUpcomingVehicleFilter] = useState(() => searchParams.get("vehicle") ?? "all");
+  const [pastVehicleFilter, setPastVehicleFilter] = useState(() => searchParams.get("vehicle") ?? "all");
   const [upcomingPackageFilter, setUpcomingPackageFilter] = useState("all");
   const [pastPackageFilter, setPastPackageFilter] = useState("all");
   const [fromPickerOpen, setFromPickerOpen] = useState(false);
@@ -142,6 +145,13 @@ export default function Bookings() {
   )
     .sort()
     .map((name) => ({ value: name, label: name }));
+
+  // Drives the header subtitle — tracks whichever tab is active so it follows the dropdown
+  // live (not just the ?vehicle= it was seeded from) and falls back to plain "My Bookings"
+  // copy once vehicleOptions doesn't recognize the id (e.g. "All Vehicles" or a brand-new
+  // vehicle with no bookings yet, so it never appears in the list).
+  const activeVehicleFilter = activeTab === "past" ? pastVehicleFilter : upcomingVehicleFilter;
+  const filteredVehicleLabel = vehicleOptions.find((v) => v.value === activeVehicleFilter)?.label;
 
   const upcomingFiltersActive = upcomingVehicleFilter !== "all" || upcomingPackageFilter !== "all";
   const filtersActive =
@@ -269,8 +279,14 @@ export default function Bookings() {
     <div className="container mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-4xl font-bold mb-2">My Bookings</h1>
-          <p className="text-muted-foreground">View and manage your service bookings</p>
+          <h1 className="text-4xl font-bold mb-2">
+            {filteredVehicleLabel ? `Service History — ${filteredVehicleLabel}` : "My Bookings"}
+          </h1>
+          <p className="text-muted-foreground">
+            {filteredVehicleLabel
+              ? "Past and upcoming services for this vehicle"
+              : "View and manage your service bookings"}
+          </p>
         </div>
         <Button className="bg-cta text-cta-foreground hover:bg-cta/90" onClick={() => navigate("/book")}>
           <Calendar className="mr-2 h-4 w-4" />

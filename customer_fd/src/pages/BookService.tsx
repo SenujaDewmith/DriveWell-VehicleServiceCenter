@@ -13,6 +13,7 @@ import { AddVehicleDialog } from "@/components/AddVehicleDialog";
 import { BookingCalendar } from "@/components/BookingCalendar";
 import { TermsDialog } from "@/components/TermsDialog";
 import { AuthModal } from "@/components/auth/AuthModal";
+import { ScrollFade } from "@/components/ScrollFade";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TERMS_VERSION } from "@/lib/terms";
 import { CANCELLATION_CUTOFF_HOURS } from "@/lib/bookingRules";
@@ -218,7 +219,10 @@ export default function BookService() {
           <CardContent className="space-y-4">
             {/* Same viewport-capped scroll pattern as the vehicle step, so the
                 actions below stay reachable however large the catalog grows. */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[min(52vh,28rem)] overflow-y-auto overscroll-contain -m-1 p-1">
+            <ScrollFade
+              className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[min(52vh,28rem)] overflow-y-auto overscroll-contain -m-1 p-1"
+              deps={[packages.length]}
+            >
               {packages.map((p) => {
                 const isSelected = selectedPackageId === p.package_id;
                 return (
@@ -267,7 +271,7 @@ export default function BookService() {
                   </Card>
                 );
               })}
-            </div>
+            </ScrollFade>
             {/* Sticky action bar — keeps Continue visible even when the card
                 overflows short viewports (e.g. mobile). */}
             <div className="sticky bottom-0 -mx-6 -mb-6 rounded-b-lg border-t bg-card px-6 py-4">
@@ -331,7 +335,10 @@ export default function BookService() {
                   // Capped to match the calendar's rendered height (not an arbitrary
                   // value) so the two columns sit flush and neither one pushes the
                   // sticky action bar below the fold.
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[22rem] overflow-y-auto overscroll-contain -m-1 p-1">
+                  <ScrollFade
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[22rem] overflow-y-auto overscroll-contain -m-1 p-1"
+                    deps={[slots.length]}
+                  >
                     {slots.map((slot) => {
                       const isSelected = selectedStartTime === slot.start_time;
                       const isFull = slot.remaining <= 0;
@@ -381,7 +388,7 @@ export default function BookService() {
                         </button>
                       );
                     })}
-                  </div>
+                  </ScrollFade>
                 )}
               </div>
             </div>
@@ -427,7 +434,10 @@ export default function BookService() {
             ) : (
               // Capped to viewport height so long vehicle lists scroll internally
               // and the Continue button below stays reachable without page scrolling.
-              <div className="grid gap-4 sm:grid-cols-2 max-h-[min(50vh,26rem)] overflow-y-auto overscroll-contain -m-1 p-1">
+              <ScrollFade
+                className="grid gap-4 sm:grid-cols-2 max-h-[min(50vh,26rem)] overflow-y-auto overscroll-contain -m-1 p-1"
+                deps={[vehicles.length]}
+              >
                 {vehicles.map((v) => (
                   <Card
                     key={v.vehicle_id}
@@ -461,7 +471,7 @@ export default function BookService() {
                     <p className="font-semibold text-muted-foreground">Add New Vehicle</p>
                   </CardContent>
                 </Card>
-              </div>
+              </ScrollFade>
             )}
             {/* Sticky action bar — keeps Back/Continue visible even when the card
                 overflows short viewports (e.g. mobile). */}

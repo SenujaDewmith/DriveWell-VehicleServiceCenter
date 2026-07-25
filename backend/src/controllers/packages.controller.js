@@ -5,6 +5,10 @@ const logger = require("../utils/logger");
 const { logActivity } = require("../lib/activityLogger");
 const { PACKAGES_DIR } = require("../middlewares/upload.middleware");
 
+// Matches MAX_FEATURED_PACKAGES in admin_fd/packages.tsx and customer_fd/Landing.tsx —
+// the landing page only ever displays the first 5 featured packages.
+const MAX_FEATURED_PACKAGES = 5;
+
 const deleteImageFile = (imageUrl) => {
   if (!imageUrl) return;
   const filename = path.basename(imageUrl);
@@ -106,8 +110,24 @@ const activatePackage = async (req, res) => {
 
 const featurePackage = async (req, res) => {
   try {
+    const packageId = parseInt(req.params.id);
+    const existing = await prisma.servicePackage.findUnique({
+      where: { package_id: packageId },
+      select: { is_featured: true },
+    });
+    if (!existing) return res.status(404).json({ message: "Package not found" });
+
+    if (!existing.is_featured) {
+      const featuredCount = await prisma.servicePackage.count({ where: { is_featured: true } });
+      if (featuredCount >= MAX_FEATURED_PACKAGES) {
+        return res.status(400).json({
+          message: `Already have ${MAX_FEATURED_PACKAGES} popular packages selected. Unfeature one before adding another.`,
+        });
+      }
+    }
+
     const pkg = await prisma.servicePackage.update({
-      where: { package_id: parseInt(req.params.id) },
+      where: { package_id: packageId },
       data: { is_featured: true },
       select: { package_id: true, name: true },
     });

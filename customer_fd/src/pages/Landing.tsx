@@ -30,7 +30,7 @@ function imageSrc(image_url: string | null) {
   return image_url ? `${ASSET_BASE_URL}${image_url}` : null;
 }
 
-const MAX_FEATURED_PACKAGES = 3;
+const MAX_FEATURED_PACKAGES = 5;
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -43,8 +43,8 @@ export default function Landing() {
     .filter((p) => p.is_featured)
     .slice(0, MAX_FEATURED_PACKAGES);
 
-  // Carousel dot indicators + a gentle auto-advance — only visibly does anything on
-  // viewports narrower than lg, where all 3 slides don't already fit side by side.
+  // Carousel dot indicators + a gentle auto-advance — the lg layout shows 3 slides at
+  // once, so with up to 5 featured packages there's still more to scroll through there.
   const [packagesApi, setPackagesApi] = useState<CarouselApi>();
   const [packagesSlide, setPackagesSlide] = useState(0);
 

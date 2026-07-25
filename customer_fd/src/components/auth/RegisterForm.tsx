@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 import { registerSchema, RegisterFormData } from "@/lib/schemas/auth";
+import { PasswordHint } from "@/components/auth/PasswordHint";
 
 interface RegisterFormProps {
   onSuccess: () => void;
@@ -21,9 +22,10 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<RegisterFormData>({
+  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
   });
+  const password = watch("password", "");
 
   const onSubmit = async (data: RegisterFormData) => {
     try {
@@ -86,13 +88,7 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-          {errors.password ? (
-            <p className="text-sm text-destructive">{errors.password.message}</p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              At least 8 characters, with uppercase, lowercase, a number, and a special character. No spaces.
-            </p>
-          )}
+          <PasswordHint password={password} />
         </div>
         <div className="space-y-2">
           <Label htmlFor="confirmPassword">Confirm Password</Label>

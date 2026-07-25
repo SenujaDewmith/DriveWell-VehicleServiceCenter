@@ -57,9 +57,9 @@ const EMPTY_FORM: PackageForm = { name: "", code_suffix: "", description: "", es
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 // Matches the landing page's "Popular Service Packages" section, which only ever
-// displays the first 3 featured packages — capped here so the admin can't select
+// displays the first 5 featured packages — capped here so the admin can't select
 // more than what's actually shown.
-const MAX_FEATURED_PACKAGES = 3;
+const MAX_FEATURED_PACKAGES = 5;
 
 function imageSrc(image_url: string | null) {
   return image_url ? `${BASE}${image_url}` : null;

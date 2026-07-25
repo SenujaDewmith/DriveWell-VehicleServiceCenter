@@ -17,7 +17,7 @@ import {
   type VehicleTypeOption,
 } from "@/services/vehicles.service";
 import { YEAR_OPTIONS } from "@/lib/vehicleYears";
-import { Car, Edit, Trash2, Plus, Loader2 } from "lucide-react";
+import { Car, Edit, Trash2, Plus, Loader2, Wrench, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 interface FormErrors {
@@ -246,21 +246,35 @@ export default function Vehicles() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {vehicles.map((vehicle) => (
-            <Card key={vehicle.vehicle_id} className="hover:shadow-lg transition-shadow">
+            <Card
+              key={vehicle.vehicle_id}
+              className="hover:shadow-lg transition-shadow cursor-pointer"
+              onClick={() => navigate(`/bookings?vehicle=${vehicle.vehicle_id}`)}
+            >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="h-12 w-12 bg-cta/10 rounded-lg flex items-center justify-center">
                     <Car className="h-6 w-6 text-cta" />
                   </div>
                   <div className="flex gap-2">
-                    <Button size="icon" variant="ghost" onClick={() => openEdit(vehicle)}>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEdit(vehicle);
+                      }}
+                    >
                       <Edit className="h-4 w-4" />
                     </Button>
                     <Button
                       size="icon"
                       variant="ghost"
                       disabled={deletingId === vehicle.vehicle_id}
-                      onClick={() => handleDelete(vehicle)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(vehicle);
+                      }}
                     >
                       {deletingId === vehicle.vehicle_id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -288,6 +302,13 @@ export default function Vehicles() {
                       <span className="font-medium">{vehicle.year}</span>
                     </p>
                   )}
+                </div>
+                <div className="flex items-center justify-between mt-4 pt-3 border-t text-sm text-cta font-medium">
+                  <span className="flex items-center gap-1.5">
+                    <Wrench className="h-4 w-4" />
+                    Service History
+                  </span>
+                  <ChevronRight className="h-4 w-4" />
                 </div>
               </CardContent>
             </Card>
