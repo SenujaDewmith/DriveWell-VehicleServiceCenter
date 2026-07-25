@@ -1,9 +1,18 @@
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { ScrollFade } from "@/components/ScrollFade";
 import { fmtDuration, imageSrc } from "@/lib/packageFormat";
 import { type ServicePackage } from "@/services/services.service";
-import { Car, CheckCircle } from "lucide-react";
+import { Car, CheckCircle, Eye, Clock, Users } from "lucide-react";
 
 interface PackageStepProps {
   packages: ServicePackage[];
@@ -13,6 +22,13 @@ interface PackageStepProps {
 }
 
 export function PackageStep({ packages, selectedPackageId, onSelect, onContinue }: PackageStepProps) {
+  const [detailsPackage, setDetailsPackage] = useState<ServicePackage | null>(null);
+
+  const handleChoose = (packageId: number) => {
+    onSelect(packageId);
+    onContinue();
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -34,8 +50,7 @@ export function PackageStep({ packages, selectedPackageId, onSelect, onContinue 
             return (
               <Card
                 key={p.package_id}
-                className={`cursor-pointer transition-all overflow-hidden flex flex-col ${isSelected ? "border-cta border-2 bg-cta/5" : "hover:border-cta/50"}`}
-                onClick={() => onSelect(p.package_id)}
+                className={`transition-all overflow-hidden flex flex-col ${isSelected ? "border-cta border-2 bg-cta/5" : "hover:border-cta/50"}`}
               >
                 {/* Fixed 128px thumbnail strip — enough to actually read the photo
                     without the image dominating the card over its details/price. */}
@@ -73,23 +88,90 @@ export function PackageStep({ packages, selectedPackageId, onSelect, onContinue 
                     </div>
                     <span className="text-[10px] text-muted-foreground">{fmtDuration(p.estimated_duration)}</span>
                   </div>
+                  {/* Two explicit actions per card: a low-commitment way to inspect
+                      the package, and a high-commitment way to pick it and move on. */}
+                  <div className="flex items-center gap-2 mt-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setDetailsPackage(p)}
+                    >
+                      <Eye className="h-3.5 w-3.5 mr-1.5" />
+                      View Details
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90"
+                      onClick={() => handleChoose(p.package_id)}
+                    >
+                      Select
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             );
           })}
         </ScrollFade>
-        {/* Sticky action bar — keeps Continue visible even when the card
-            overflows short viewports (e.g. mobile). */}
-        <div className="sticky bottom-0 -mx-6 -mb-6 rounded-b-lg border-t bg-card px-6 py-4">
-          <Button
-            className="w-full bg-cta text-cta-foreground hover:bg-cta/90"
-            onClick={onContinue}
-            disabled={!selectedPackageId}
-          >
-            Continue
-          </Button>
-        </div>
       </CardContent>
+
+      <Dialog open={detailsPackage !== null} onOpenChange={(open) => !open && setDetailsPackage(null)}>
+        <DialogContent className="sm:max-w-md">
+          {detailsPackage && (
+            <>
+              <div className="relative h-48 w-full bg-muted flex items-center justify-center overflow-hidden rounded-md -mt-2">
+                {imageSrc(detailsPackage.image_url) ? (
+                  <img
+                    src={imageSrc(detailsPackage.image_url)!}
+                    alt={detailsPackage.name}
+                    className="h-full w-full object-cover object-center"
+                  />
+                ) : (
+                  <Car className="h-12 w-12 text-muted-foreground" />
+                )}
+              </div>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  {detailsPackage.name}
+                  {detailsPackage.package_code && (
+                    <span className="text-xs font-mono text-muted-foreground">{detailsPackage.package_code}</span>
+                  )}
+                </DialogTitle>
+                <DialogDescription>{detailsPackage.description || "No description available."}</DialogDescription>
+              </DialogHeader>
+              <div className="flex items-center justify-between rounded-md border bg-muted/40 px-3 py-2">
+                <span className="text-xl font-bold text-cta">
+                  LKR {parseFloat(detailsPackage.price).toLocaleString()}
+                  <span className="text-muted-foreground text-xs font-medium ml-1">Upwards</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <Clock className="h-4 w-4" />
+                  {fmtDuration(detailsPackage.estimated_duration)}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Users className="h-4 w-4" />
+                  Up to {detailsPackage.max_capacity} vehicle{detailsPackage.max_capacity === 1 ? "" : "s"}
+                </span>
+              </div>
+              <DialogFooter>
+                <Button
+                  className="w-full bg-cta text-cta-foreground hover:bg-cta/90"
+                  onClick={() => {
+                    handleChoose(detailsPackage.package_id);
+                    setDetailsPackage(null);
+                  }}
+                >
+                  Select This Package
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
