@@ -34,6 +34,10 @@ interface ComboboxProps {
   // the same action instead of a separate form.
   onCreateOption?: (label: string) => void;
   createLabel?: (search: string) => string;
+  // Pre-fills the search box on mount — lets a caller seed the field with text a user
+  // already typed elsewhere (e.g. a customer's free-typed make/model) so it's editable
+  // right here instead of starting blank and forcing a full retype.
+  defaultSearch?: string;
 }
 
 export function Combobox({
@@ -47,9 +51,10 @@ export function Combobox({
   className,
   onCreateOption,
   createLabel = (search) => `Create "${search}"`,
+  defaultSearch = "",
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(defaultSearch);
   const selected = options.find((o) => o.value === value);
 
   const trimmedSearch = search.trim();

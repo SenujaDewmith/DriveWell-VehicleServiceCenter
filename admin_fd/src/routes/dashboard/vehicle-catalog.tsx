@@ -888,6 +888,9 @@ function PendingGroupCard({
             searchPlaceholder="Search makes..."
             emptyText="No make found."
             onCreateOption={createMake}
+            // Seeds the search box with what the customer typed so the admin can fix a
+            // typo or accept it as-is, instead of retyping the make from scratch.
+            defaultSearch={!group.makeId ? (group.customMake ?? "") : ""}
           />
         </div>
         <div className="space-y-1">
@@ -901,6 +904,7 @@ function PendingGroupCard({
             emptyText="No model found."
             disabled={!selectedMakeId || loadingModels}
             onCreateOption={selectedMakeId ? createModel : undefined}
+            defaultSearch={group.customModel}
           />
         </div>
         <button
