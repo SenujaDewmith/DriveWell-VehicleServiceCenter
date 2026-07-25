@@ -66,7 +66,7 @@ model Staff {
 }
 
 model VehicleMake {
-  make_id Int    @id
+  make_id Int    @id @default(autoincrement())
   name    String @db.VarChar(100)
 
   models   VehicleModel[]
@@ -76,7 +76,7 @@ model VehicleMake {
 }
 
 model VehicleModel {
-  model_id        Int    @id
+  model_id        Int    @id @default(autoincrement())
   name            String @db.VarChar(150)
   make_id         Int
   start_year      Int?
@@ -91,7 +91,7 @@ model VehicleModel {
 }
 
 model VehicleType {
-  type_id Int    @id
+  type_id Int    @id @default(autoincrement())
   name    String @db.VarChar(50)
 
   models   VehicleModel[]
@@ -104,8 +104,14 @@ model Vehicle {
   vehicle_id           Int       @id @default(autoincrement())
   customer_id          Int?
   previous_customer_id Int?
-  make_id              Int
-  model_id             Int
+  make_id              Int?
+  model_id             Int?
+  // Set when the customer's make/model wasn't in the catalog — kept as a
+  // permanent audit trail of what they typed, even after a manager resolves
+  // it by linking make_id/model_id to a real (possibly newly-created) entry.
+  // model_id IS NULL is the "pending catalog review" signal.
+  custom_make          String?   @db.VarChar(100)
+  custom_model         String?   @db.VarChar(150)
   vehicle_type_id      Int
   year                 Int?
   plate_no             String    @unique @db.VarChar(30)
@@ -114,8 +120,8 @@ model Vehicle {
 
   customer          User?                    @relation("CustomerVehicles", fields: [customer_id], references: [user_id], onDelete: SetNull)
   previous_customer User?                    @relation("PreviousVehicleOwner", fields: [previous_customer_id], references: [user_id], onDelete: SetNull)
-  make              VehicleMake              @relation(fields: [make_id], references: [make_id])
-  model             VehicleModel             @relation(fields: [model_id], references: [model_id])
+  make              VehicleMake?             @relation(fields: [make_id], references: [make_id])
+  model             VehicleModel?            @relation(fields: [model_id], references: [model_id])
   vehicle_type      VehicleType              @relation(fields: [vehicle_type_id], references: [type_id])
   reservations      Reservation[]
   transfer_requests VehicleTransferRequest[]

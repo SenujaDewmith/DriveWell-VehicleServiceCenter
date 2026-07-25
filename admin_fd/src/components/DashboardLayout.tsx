@@ -17,6 +17,7 @@ import {
   X,
   Wrench,
   ArrowLeftRight,
+  Car,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 
@@ -33,6 +34,7 @@ const managerNav: NavItem[] = [
   { label: "Schedule Config", to: "/dashboard/schedule", icon: <Calendar className="h-4 w-4" /> },
   { label: "Staff Management", to: "/dashboard/users", icon: <Users className="h-4 w-4" /> },
   { label: "Vehicle Transfers", to: "/dashboard/vehicle-transfers", icon: <ArrowLeftRight className="h-4 w-4" /> },
+  { label: "Vehicle Catalog", to: "/dashboard/vehicle-catalog", icon: <Car className="h-4 w-4" /> },
   { label: "All Bookings", to: "/dashboard/bookings", icon: <BookOpen className="h-4 w-4" /> },
   { label: "Revenue Reports", to: "/dashboard/revenue", icon: <DollarSign className="h-4 w-4" /> },
   { label: "Service Volume", to: "/dashboard/volume", icon: <BarChart3 className="h-4 w-4" /> },

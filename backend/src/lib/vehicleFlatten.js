@@ -5,12 +5,14 @@ const VEHICLE_SELECT = {
     make: { select: { name: true } },
     model: { select: { name: true } },
     vehicle_type: { select: { name: true } },
+    custom_make: true,
+    custom_model: true,
   },
 };
 
 const flattenVehicleRef = (vehicle) => ({
-  make: vehicle?.make?.name ?? null,
-  model: vehicle?.model?.name ?? null,
+  make: vehicle?.make?.name ?? vehicle?.custom_make ?? null,
+  model: vehicle?.model?.name ?? vehicle?.custom_model ?? null,
   vehicle_type: vehicle?.vehicle_type?.name ?? null,
   plate_no: vehicle?.plate_no ?? null,
 });

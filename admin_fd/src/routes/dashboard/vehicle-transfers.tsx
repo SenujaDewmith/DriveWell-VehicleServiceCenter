@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { PlateNumberInput } from "@/components/PlateNumberInput";
+import { isValidSriLankanPlate } from "@/lib/plateNumber";
 
 export const Route = createFileRoute("/dashboard/vehicle-transfers")({
   component: VehicleTransfersPage,
@@ -214,6 +216,10 @@ function VehicleTransfersPage() {
   const submitTransfer = async () => {
     if (!transferPlate.trim() || !newOwnerEmail.trim()) {
       setDialogError("Plate number and new owner email are required");
+      return;
+    }
+    if (!isValidSriLankanPlate(transferPlate)) {
+      setDialogError("Enter a valid Sri Lankan plate number (e.g. CAB-1234)");
       return;
     }
     setTransferring(true);
@@ -430,11 +436,10 @@ function VehicleTransfersPage() {
             )}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-muted-foreground">Plate Number</label>
-              <input
+              <PlateNumberInput
                 value={transferPlate}
-                onChange={(e) => setTransferPlate(e.target.value)}
-                placeholder="e.g. CAA-1234"
-                className="w-full border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                onChange={setTransferPlate}
+                error={!!dialogError}
               />
             </div>
             <div className="space-y-1.5">

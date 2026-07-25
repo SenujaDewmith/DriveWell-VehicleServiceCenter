@@ -17,10 +17,13 @@ const UNRESOLVED_BOOKING_STATUSES = { notIn: ["Cancelled", "No-show", "Completed
 const flattenVehicle = (v) => ({
   vehicle_id: v.vehicle_id,
   customer_id: v.customer_id,
-  make_id: v.make.make_id,
-  make: v.make.name,
-  model_id: v.model.model_id,
-  model: v.model.name,
+  make_id: v.make_id,
+  make: v.make?.name ?? v.custom_make,
+  model_id: v.model_id,
+  model: v.model?.name ?? v.custom_model,
+  custom_make: v.custom_make,
+  custom_model: v.custom_model,
+  pending_catalog_review: v.model_id === null,
   vehicle_type_id: v.vehicle_type.type_id,
   vehicle_type: v.vehicle_type.name,
   year: v.year,
@@ -138,12 +141,34 @@ const lookupPlate = async (req, res) => {
   }
 };
 
+// Either an existing catalog id or a customer-typed custom value must be given for
+// make and model (never both) — lets a customer register a vehicle whose make/model
+// isn't in the catalog yet, pending a manager resolving it via the vehicle catalog admin.
+const resolveMakeModelFields = ({ make_id, custom_make, model_id, custom_model }) => {
+  if (!make_id && !custom_make) return { error: "make_id or custom_make is required" };
+  if (make_id && custom_make) return { error: "Provide either make_id or custom_make, not both" };
+  if (!model_id && !custom_model) return { error: "model_id or custom_model is required" };
+  if (model_id && custom_model) return { error: "Provide either model_id or custom_model, not both" };
+  if (custom_make && model_id) return { error: "A custom make cannot be paired with an existing model_id" };
+
+  return {
+    fields: {
+      make_id: make_id ? parseInt(make_id) : null,
+      custom_make: custom_make ? custom_make.trim() : null,
+      model_id: model_id ? parseInt(model_id) : null,
+      custom_model: custom_model ? custom_model.trim() : null,
+    },
+  };
+};
+
 const addVehicle = async (req, res) => {
   const { user_id } = req.user;
-  const { make_id, model_id, vehicle_type_id, year, plate_no } = req.body;
+  const { make_id, custom_make, model_id, custom_model, vehicle_type_id, year, plate_no } = req.body;
 
-  if (!make_id || !model_id || !vehicle_type_id || !plate_no)
-    return res.status(400).json({ message: "make_id, model_id, vehicle_type_id, and plate_no are required" });
+  if (!vehicle_type_id || !plate_no)
+    return res.status(400).json({ message: "vehicle_type_id and plate_no are required" });
+  const { fields, error } = resolveMakeModelFields({ make_id, custom_make, model_id, custom_model });
+  if (error) return res.status(400).json({ message: error });
 
   try {
     const normalizedPlate = plate_no.trim().toUpperCase();
@@ -161,8 +186,7 @@ const addVehicle = async (req, res) => {
     const vehicle = await prisma.vehicle.create({
       data: {
         customer_id: user_id,
-        make_id: parseInt(make_id),
-        model_id: parseInt(model_id),
+        ...fields,
         vehicle_type_id: parseInt(vehicle_type_id),
         year: year || null,
         plate_no: normalizedPlate,
@@ -348,17 +372,18 @@ const listMyTransferRequests = async (req, res) => {
 const updateVehicle = async (req, res) => {
   const { user_id } = req.user;
   const { id } = req.params;
-  const { make_id, model_id, vehicle_type_id, year, plate_no } = req.body;
+  const { make_id, custom_make, model_id, custom_model, vehicle_type_id, year, plate_no } = req.body;
 
-  if (!make_id || !model_id || !vehicle_type_id || !plate_no)
-    return res.status(400).json({ message: "make_id, model_id, vehicle_type_id, and plate_no are required" });
+  if (!vehicle_type_id || !plate_no)
+    return res.status(400).json({ message: "vehicle_type_id and plate_no are required" });
+  const { fields, error } = resolveMakeModelFields({ make_id, custom_make, model_id, custom_model });
+  if (error) return res.status(400).json({ message: error });
 
   try {
     const result = await prisma.vehicle.updateMany({
       where: { vehicle_id: parseInt(id), customer_id: user_id },
       data: {
-        make_id: parseInt(make_id),
-        model_id: parseInt(model_id),
+        ...fields,
         vehicle_type_id: parseInt(vehicle_type_id),
         year: year || null,
         plate_no: plate_no.trim().toUpperCase(),

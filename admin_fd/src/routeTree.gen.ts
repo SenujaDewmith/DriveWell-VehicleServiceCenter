@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
 import { Route as DashboardVolumeRouteImport } from './routes/dashboard/volume'
 import { Route as DashboardVehicleTransfersRouteImport } from './routes/dashboard/vehicle-transfers'
+import { Route as DashboardVehicleCatalogRouteImport } from './routes/dashboard/vehicle-catalog'
 import { Route as DashboardUsersRouteImport } from './routes/dashboard/users'
 import { Route as DashboardScheduleRouteImport } from './routes/dashboard/schedule'
 import { Route as DashboardRevenueRouteImport } from './routes/dashboard/revenue'
@@ -55,6 +56,11 @@ const DashboardVehicleTransfersRoute =
     path: '/vehicle-transfers',
     getParentRoute: () => DashboardRoute,
   } as any)
+const DashboardVehicleCatalogRoute = DashboardVehicleCatalogRouteImport.update({
+  id: '/vehicle-catalog',
+  path: '/vehicle-catalog',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardUsersRoute = DashboardUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/revenue': typeof DashboardRevenueRoute
   '/dashboard/schedule': typeof DashboardScheduleRoute
   '/dashboard/users': typeof DashboardUsersRoute
+  '/dashboard/vehicle-catalog': typeof DashboardVehicleCatalogRoute
   '/dashboard/vehicle-transfers': typeof DashboardVehicleTransfersRoute
   '/dashboard/volume': typeof DashboardVolumeRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/dashboard/revenue': typeof DashboardRevenueRoute
   '/dashboard/schedule': typeof DashboardScheduleRoute
   '/dashboard/users': typeof DashboardUsersRoute
+  '/dashboard/vehicle-catalog': typeof DashboardVehicleCatalogRoute
   '/dashboard/vehicle-transfers': typeof DashboardVehicleTransfersRoute
   '/dashboard/volume': typeof DashboardVolumeRoute
   '/dashboard': typeof DashboardIndexRoute
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/dashboard/revenue': typeof DashboardRevenueRoute
   '/dashboard/schedule': typeof DashboardScheduleRoute
   '/dashboard/users': typeof DashboardUsersRoute
+  '/dashboard/vehicle-catalog': typeof DashboardVehicleCatalogRoute
   '/dashboard/vehicle-transfers': typeof DashboardVehicleTransfersRoute
   '/dashboard/volume': typeof DashboardVolumeRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -158,6 +167,7 @@ export interface FileRouteTypes {
     | '/dashboard/revenue'
     | '/dashboard/schedule'
     | '/dashboard/users'
+    | '/dashboard/vehicle-catalog'
     | '/dashboard/vehicle-transfers'
     | '/dashboard/volume'
     | '/dashboard/'
@@ -173,6 +183,7 @@ export interface FileRouteTypes {
     | '/dashboard/revenue'
     | '/dashboard/schedule'
     | '/dashboard/users'
+    | '/dashboard/vehicle-catalog'
     | '/dashboard/vehicle-transfers'
     | '/dashboard/volume'
     | '/dashboard'
@@ -189,6 +200,7 @@ export interface FileRouteTypes {
     | '/dashboard/revenue'
     | '/dashboard/schedule'
     | '/dashboard/users'
+    | '/dashboard/vehicle-catalog'
     | '/dashboard/vehicle-transfers'
     | '/dashboard/volume'
     | '/dashboard/'
@@ -242,6 +254,13 @@ declare module '@tanstack/react-router' {
       path: '/vehicle-transfers'
       fullPath: '/dashboard/vehicle-transfers'
       preLoaderRoute: typeof DashboardVehicleTransfersRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/vehicle-catalog': {
+      id: '/dashboard/vehicle-catalog'
+      path: '/vehicle-catalog'
+      fullPath: '/dashboard/vehicle-catalog'
+      preLoaderRoute: typeof DashboardVehicleCatalogRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/users': {
@@ -312,6 +331,7 @@ interface DashboardRouteChildren {
   DashboardRevenueRoute: typeof DashboardRevenueRoute
   DashboardScheduleRoute: typeof DashboardScheduleRoute
   DashboardUsersRoute: typeof DashboardUsersRoute
+  DashboardVehicleCatalogRoute: typeof DashboardVehicleCatalogRoute
   DashboardVehicleTransfersRoute: typeof DashboardVehicleTransfersRoute
   DashboardVolumeRoute: typeof DashboardVolumeRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
@@ -326,6 +346,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardRevenueRoute: DashboardRevenueRoute,
   DashboardScheduleRoute: DashboardScheduleRoute,
   DashboardUsersRoute: DashboardUsersRoute,
+  DashboardVehicleCatalogRoute: DashboardVehicleCatalogRoute,
   DashboardVehicleTransfersRoute: DashboardVehicleTransfersRoute,
   DashboardVolumeRoute: DashboardVolumeRoute,
   DashboardIndexRoute: DashboardIndexRoute,

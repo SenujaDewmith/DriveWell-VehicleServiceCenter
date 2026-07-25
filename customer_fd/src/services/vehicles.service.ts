@@ -3,10 +3,13 @@ import { apiClient } from "@/lib/apiClient";
 export interface Vehicle {
   vehicle_id: number;
   customer_id: number | null;
-  make_id: number;
+  make_id: number | null;
   make: string;
-  model_id: number;
+  model_id: number | null;
   model: string;
+  custom_make: string | null;
+  custom_model: string | null;
+  pending_catalog_review: boolean;
   vehicle_type_id: number;
   vehicle_type: string;
   year: number | null;
@@ -38,8 +41,10 @@ export interface VehicleTypeOption {
 }
 
 export type CreateVehiclePayload = {
-  make_id: number;
-  model_id: number;
+  make_id?: number;
+  custom_make?: string;
+  model_id?: number;
+  custom_model?: string;
   vehicle_type_id: number;
   year?: number;
   plate_no: string;

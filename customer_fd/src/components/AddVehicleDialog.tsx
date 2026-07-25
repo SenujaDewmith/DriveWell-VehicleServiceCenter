@@ -13,6 +13,8 @@ import {
   type VehicleTypeOption,
 } from "@/services/vehicles.service";
 import { YEAR_OPTIONS } from "@/lib/vehicleYears";
+import { isValidSriLankanPlate } from "@/lib/plateNumber";
+import { PlateNumberInput } from "@/components/ui/plate-number-input";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,18 +27,30 @@ interface FormErrors {
 
 function validateForm(data: {
   makeId: string;
+  useCustomMake: boolean;
+  customMake: string;
   modelId: string;
+  useCustomModel: boolean;
+  customModel: string;
   vehicleTypeId: string;
   plateNo: string;
 }): FormErrors {
   const errors: FormErrors = {};
-  if (!data.makeId) errors.make_id = "Make is required";
-  if (!data.modelId) errors.model_id = "Model is required";
+  if (data.useCustomMake) {
+    if (!data.customMake.trim()) errors.make_id = "Enter the make";
+  } else if (!data.makeId) {
+    errors.make_id = "Make is required";
+  }
+  if (data.useCustomModel) {
+    if (!data.customModel.trim()) errors.model_id = "Enter the model";
+  } else if (!data.modelId) {
+    errors.model_id = "Model is required";
+  }
   if (!data.vehicleTypeId) errors.vehicle_type_id = "Vehicle type is required";
   if (!data.plateNo.trim()) {
     errors.plate_no = "Plate number is required";
-  } else if (data.plateNo.trim().length < 2) {
-    errors.plate_no = "Enter a valid plate number";
+  } else if (!isValidSriLankanPlate(data.plateNo)) {
+    errors.plate_no = "Enter a valid Sri Lankan plate number (e.g. CAB-1234)";
   }
   return errors;
 }
@@ -59,6 +73,10 @@ export function AddVehicleDialog({ open, onOpenChange, onVehicleAdded }: AddVehi
   const [vehicleTypeId, setVehicleTypeId] = useState("");
   const [year, setYear] = useState("");
   const [plateNo, setPlateNo] = useState("");
+  const [useCustomMake, setUseCustomMake] = useState(false);
+  const [customMake, setCustomMake] = useState("");
+  const [useCustomModel, setUseCustomModel] = useState(false);
+  const [customModel, setCustomModel] = useState("");
 
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [saving, setSaving] = useState(false);
@@ -100,12 +118,40 @@ export function AddVehicleDialog({ open, onOpenChange, onVehicleAdded }: AddVehi
     }
   };
 
+  const enableCustomMake = () => {
+    setUseCustomMake(true);
+    setMakeId("");
+    setUseCustomModel(true);
+    setModelId("");
+  };
+
+  const disableCustomMake = () => {
+    setUseCustomMake(false);
+    setCustomMake("");
+    setUseCustomModel(false);
+    setCustomModel("");
+  };
+
+  const enableCustomModel = () => {
+    setUseCustomModel(true);
+    setModelId("");
+  };
+
+  const disableCustomModel = () => {
+    setUseCustomModel(false);
+    setCustomModel("");
+  };
+
   const resetForm = () => {
     setMakeId("");
     setModelId("");
     setVehicleTypeId("");
     setYear("");
     setPlateNo("");
+    setUseCustomMake(false);
+    setCustomMake("");
+    setUseCustomModel(false);
+    setCustomModel("");
     setFormErrors({});
   };
 
@@ -117,22 +163,26 @@ export function AddVehicleDialog({ open, onOpenChange, onVehicleAdded }: AddVehi
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const errors = validateForm({ makeId, modelId, vehicleTypeId, plateNo });
+    const errors = validateForm({ makeId, useCustomMake, customMake, modelId, useCustomModel, customModel, vehicleTypeId, plateNo });
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
       return;
     }
     setSaving(true);
     const payload: CreateVehiclePayload = {
-      make_id: parseInt(makeId),
-      model_id: parseInt(modelId),
       vehicle_type_id: parseInt(vehicleTypeId),
       plate_no: plateNo.trim(),
       ...(year ? { year: parseInt(year) } : {}),
+      ...(useCustomMake ? { custom_make: customMake.trim() } : { make_id: parseInt(makeId) }),
+      ...(useCustomModel ? { custom_model: customModel.trim() } : { model_id: parseInt(modelId) }),
     };
     try {
       const { vehicle } = await vehiclesService.createVehicle(payload);
-      toast.success("Vehicle added");
+      toast.success(
+        vehicle.pending_catalog_review
+          ? `Vehicle added — we'll review "${vehicle.make} ${vehicle.model}" and add it to our catalog shortly.`
+          : "Vehicle added"
+      );
       resetForm();
       onVehicleAdded(vehicle);
       onOpenChange(false);
@@ -158,35 +208,87 @@ export function AddVehicleDialog({ open, onOpenChange, onVehicleAdded }: AddVehi
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Make <span className="text-destructive">*</span></Label>
-                <Combobox
-                  options={makes.map((m) => ({ value: m.make_id.toString(), label: m.name }))}
-                  value={makeId}
-                  onValueChange={(v) => {
-                    setMakeId(v);
-                    if (formErrors.make_id) setFormErrors({ ...formErrors, make_id: undefined });
-                  }}
-                  placeholder="Select make"
-                  searchPlaceholder="Search makes..."
-                  emptyText="No make found."
-                  className={formErrors.make_id ? "border-destructive" : ""}
-                />
-                {formErrors.make_id && <p className="text-xs text-destructive">{formErrors.make_id}</p>}
+                {useCustomMake ? (
+                  <Input
+                    placeholder="e.g. BYD"
+                    value={customMake}
+                    onChange={(e) => {
+                      setCustomMake(e.target.value);
+                      if (formErrors.make_id) setFormErrors({ ...formErrors, make_id: undefined });
+                    }}
+                    maxLength={100}
+                    className={formErrors.make_id ? "border-destructive" : ""}
+                  />
+                ) : (
+                  <Combobox
+                    options={makes.map((m) => ({ value: m.make_id.toString(), label: m.name }))}
+                    value={makeId}
+                    onValueChange={(v) => {
+                      setMakeId(v);
+                      if (formErrors.make_id) setFormErrors({ ...formErrors, make_id: undefined });
+                    }}
+                    placeholder="Select make"
+                    searchPlaceholder="Search makes..."
+                    emptyText="No make found."
+                    className={formErrors.make_id ? "border-destructive" : ""}
+                  />
+                )}
+                <div className="flex items-center justify-between gap-2">
+                  {formErrors.make_id && <p className="text-xs text-destructive">{formErrors.make_id}</p>}
+                  <button
+                    type="button"
+                    onClick={useCustomMake ? disableCustomMake : enableCustomMake}
+                    className="text-xs text-cta hover:underline ml-auto"
+                  >
+                    {useCustomMake ? "Use dropdown instead" : "Can't find your make?"}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-2">
                 <Label>Model <span className="text-destructive">*</span></Label>
-                <Combobox
-                  options={models.map((m) => ({ value: m.model_id.toString(), label: m.name }))}
-                  value={modelId}
-                  onValueChange={handleModelChange}
-                  placeholder={!makeId ? "Select make first" : loadingModels ? "Loading..." : "Select model"}
-                  searchPlaceholder="Search models..."
-                  emptyText="No model found."
-                  disabled={!makeId || loadingModels}
-                  className={formErrors.model_id ? "border-destructive" : ""}
-                />
-                {formErrors.model_id && <p className="text-xs text-destructive">{formErrors.model_id}</p>}
+                {useCustomModel ? (
+                  <Input
+                    placeholder="e.g. Seal"
+                    value={customModel}
+                    onChange={(e) => {
+                      setCustomModel(e.target.value);
+                      if (formErrors.model_id) setFormErrors({ ...formErrors, model_id: undefined });
+                    }}
+                    maxLength={150}
+                    className={formErrors.model_id ? "border-destructive" : ""}
+                  />
+                ) : (
+                  <Combobox
+                    options={models.map((m) => ({ value: m.model_id.toString(), label: m.name }))}
+                    value={modelId}
+                    onValueChange={handleModelChange}
+                    placeholder={!makeId ? "Select make first" : loadingModels ? "Loading..." : "Select model"}
+                    searchPlaceholder="Search models..."
+                    emptyText="No model found."
+                    disabled={!makeId || loadingModels}
+                    className={formErrors.model_id ? "border-destructive" : ""}
+                  />
+                )}
+                <div className="flex items-center justify-between gap-2">
+                  {formErrors.model_id && <p className="text-xs text-destructive">{formErrors.model_id}</p>}
+                  {!useCustomMake && (
+                    <button
+                      type="button"
+                      onClick={useCustomModel ? disableCustomModel : enableCustomModel}
+                      className="text-xs text-cta hover:underline ml-auto"
+                    >
+                      {useCustomModel ? "Use dropdown instead" : "Can't find your model?"}
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {(useCustomMake || useCustomModel) && (
+                <p className="col-span-2 text-xs text-muted-foreground -mt-1">
+                  Thanks — we'll review what you entered and add it to our catalog shortly. Your vehicle is saved either way.
+                </p>
+              )}
 
               <div className="space-y-2">
                 <Label>Vehicle Type <span className="text-destructive">*</span></Label>
@@ -219,17 +321,25 @@ export function AddVehicleDialog({ open, onOpenChange, onVehicleAdded }: AddVehi
 
               <div className="space-y-2 col-span-2">
                 <Label htmlFor="add-plate_no">Plate Number <span className="text-destructive">*</span></Label>
-                <Input
+                <PlateNumberInput
                   id="add-plate_no"
-                  placeholder="e.g. CAA-1234"
                   value={plateNo}
-                  onChange={(e) => {
-                    setPlateNo(e.target.value);
+                  onChange={(next) => {
+                    setPlateNo(next);
                     if (formErrors.plate_no) setFormErrors({ ...formErrors, plate_no: undefined });
                   }}
-                  className={formErrors.plate_no ? "border-destructive" : ""}
+                  onBlur={() => {
+                    if (plateNo && !isValidSriLankanPlate(plateNo)) {
+                      setFormErrors({ ...formErrors, plate_no: "Enter a valid Sri Lankan plate number (e.g. CAB-1234)" });
+                    }
+                  }}
+                  error={!!formErrors.plate_no}
                 />
-                {formErrors.plate_no && <p className="text-xs text-destructive">{formErrors.plate_no}</p>}
+                {formErrors.plate_no ? (
+                  <p className="text-xs text-destructive">{formErrors.plate_no}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Format: 2-3 letters followed by 4 digits (e.g. KA-1234 or CAB-1234)</p>
+                )}
               </div>
             </div>
             <div className="flex justify-end gap-3 pt-2">
