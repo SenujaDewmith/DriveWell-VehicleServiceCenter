@@ -1,11 +1,17 @@
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
+const { logActivity } = require("../lib/activityLogger");
+const { sendVehicleTransferredEmail } = require("../services/email.service");
 
 const VEHICLE_INCLUDE = {
   make: { select: { make_id: true, name: true } },
   model: { select: { model_id: true, name: true } },
   vehicle_type: { select: { type_id: true, name: true } },
 };
+
+// Bookings that aren't finished yet — these are the only ones that should
+// block a detach/transfer. Completed/cancelled/no-show history never blocks.
+const UNRESOLVED_BOOKING_STATUSES = { notIn: ["Cancelled", "No-show", "Completed"] };
 
 const flattenVehicle = (v) => ({
   vehicle_id: v.vehicle_id,
@@ -19,7 +25,24 @@ const flattenVehicle = (v) => ({
   year: v.year,
   plate_no: v.plate_no,
   created_at: v.created_at,
+  detached_at: v.detached_at ?? null,
 });
+
+// Fire-and-forget notification to whoever owned the vehicle before this hand-off —
+// never awaited by callers, mirrors every other email call site in this codebase.
+const notifyPreviousOwner = async (previousCustomerId, { plateNo, reason }) => {
+  if (!previousCustomerId) return;
+  try {
+    const user = await prisma.user.findUnique({
+      where: { user_id: previousCustomerId },
+      select: { email: true, customer: { select: { full_name: true } } },
+    });
+    if (!user) return;
+    sendVehicleTransferredEmail(user.email, { customerName: user.customer?.full_name, plateNo, reason });
+  } catch (error) {
+    logger.error(`notifyPreviousOwner failed — ${error.message}`);
+  }
+};
 
 const listVehicles = async (req, res) => {
   const { user_id } = req.user;
@@ -75,6 +98,28 @@ const listVehicleTypes = async (req, res) => {
   }
 };
 
+const lookupPlate = async (req, res) => {
+  const { user_id } = req.user;
+  const plate_no = req.params.plate_no.trim().toUpperCase();
+
+  try {
+    const vehicle = await prisma.vehicle.findUnique({
+      where: { plate_no },
+      include: VEHICLE_INCLUDE,
+    });
+    if (!vehicle) return res.status(200).json({ found: false });
+    if (vehicle.customer_id === user_id)
+      return res.status(200).json({ found: true, status: "own", vehicle: flattenVehicle(vehicle) });
+    if (vehicle.customer_id === null)
+      return res.status(200).json({ found: true, status: "claimable", vehicle: flattenVehicle(vehicle) });
+    // Owned by someone else — don't leak their vehicle's details through a lookup.
+    return res.status(200).json({ found: true, status: "active_elsewhere" });
+  } catch (error) {
+    logger.error(`lookupPlate failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 const addVehicle = async (req, res) => {
   const { user_id } = req.user;
   const { make_id, model_id, vehicle_type_id, year, plate_no } = req.body;
@@ -83,6 +128,18 @@ const addVehicle = async (req, res) => {
     return res.status(400).json({ message: "make_id, model_id, vehicle_type_id, and plate_no are required" });
 
   try {
+    const normalizedPlate = plate_no.trim().toUpperCase();
+    const existing = await prisma.vehicle.findUnique({
+      where: { plate_no: normalizedPlate },
+      select: { customer_id: true },
+    });
+    if (existing && existing.customer_id === null) {
+      return res.status(409).json({
+        message: "A vehicle with this plate is already registered but currently unclaimed. Use Claim Vehicle to link it to your account instead.",
+        claimable: true,
+      });
+    }
+
     const vehicle = await prisma.vehicle.create({
       data: {
         customer_id: user_id,
@@ -90,7 +147,7 @@ const addVehicle = async (req, res) => {
         model_id: parseInt(model_id),
         vehicle_type_id: parseInt(vehicle_type_id),
         year: year || null,
-        plate_no: plate_no.trim().toUpperCase(),
+        plate_no: normalizedPlate,
       },
       include: VEHICLE_INCLUDE,
     });
@@ -102,6 +159,64 @@ const addVehicle = async (req, res) => {
     if (error.code === "P2003")
       return res.status(400).json({ message: "Invalid make, model, or vehicle type" });
     logger.error(`addVehicle failed for user_id: ${user_id} — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const claimVehicle = async (req, res) => {
+  const { user_id } = req.user;
+  const { plate_no } = req.body;
+  if (!plate_no) return res.status(400).json({ message: "plate_no is required" });
+  const normalizedPlate = plate_no.trim().toUpperCase();
+
+  try {
+    let claimedVehicleId = null;
+    let previousCustomerId = null;
+
+    await prisma.$transaction(async (tx) => {
+      // Guarded conditional update — only succeeds if the plate is still
+      // unclaimed at the moment of the write, closing the race window a
+      // plain findFirst-then-update would leave open.
+      const existingBeforeClaim = await tx.vehicle.findUnique({
+        where: { plate_no: normalizedPlate },
+        select: { vehicle_id: true, customer_id: true, previous_customer_id: true },
+      });
+      if (!existingBeforeClaim) {
+        const err = new Error("No vehicle found with that plate number");
+        err.status = 404;
+        throw err;
+      }
+
+      const result = await tx.vehicle.updateMany({
+        where: { plate_no: normalizedPlate, customer_id: null },
+        data: { customer_id: user_id, detached_at: null },
+      });
+
+      if (result.count === 0) {
+        const stillThere = await tx.vehicle.findUnique({
+          where: { plate_no: normalizedPlate },
+          select: { customer_id: true },
+        });
+        const err = new Error(
+          stillThere && stillThere.customer_id !== null
+            ? "This vehicle is already actively owned by another customer and cannot be claimed."
+            : "This vehicle was just claimed by someone else. Please try again."
+        );
+        err.status = 409;
+        throw err;
+      }
+
+      claimedVehicleId = existingBeforeClaim.vehicle_id;
+      previousCustomerId = existingBeforeClaim.previous_customer_id;
+      await logActivity(tx, { user_id, action: "VEHICLE_CLAIMED", entity_type: "vehicle", entity_id: claimedVehicleId });
+    });
+
+    const vehicle = await prisma.vehicle.findUnique({ where: { vehicle_id: claimedVehicleId }, include: VEHICLE_INCLUDE });
+    notifyPreviousOwner(previousCustomerId, { plateNo: normalizedPlate, reason: "claimed" });
+    res.status(200).json({ message: "Vehicle claimed successfully", vehicle: flattenVehicle(vehicle) });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    logger.error(`claimVehicle failed for user_id: ${user_id} — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -142,7 +257,7 @@ const updateVehicle = async (req, res) => {
   }
 };
 
-const deleteVehicle = async (req, res) => {
+const detachVehicle = async (req, res) => {
   const { user_id } = req.user;
   const { id } = req.params;
 
@@ -153,24 +268,76 @@ const deleteVehicle = async (req, res) => {
     });
     if (!vehicle) return res.status(404).json({ message: "Vehicle not found" });
 
-    const bookingCount = await prisma.reservation.count({
-      where: { vehicle_id: parseInt(id) },
+    const unresolvedBookingCount = await prisma.reservation.count({
+      where: { vehicle_id: parseInt(id), status: UNRESOLVED_BOOKING_STATUSES },
     });
-    if (bookingCount > 0) {
+    if (unresolvedBookingCount > 0) {
       return res.status(400).json({
-        message: "This vehicle has booking history and cannot be deleted. Vehicles with past or active bookings are kept for service and invoice records.",
+        message: "This vehicle has an upcoming or in-progress booking and cannot be removed. Cancel or complete the booking first.",
       });
     }
 
-    await prisma.vehicle.delete({ where: { vehicle_id: parseInt(id) } });
-    res.status(200).json({ message: "Vehicle deleted" });
+    await prisma.vehicle.update({
+      where: { vehicle_id: parseInt(id) },
+      data: { customer_id: null, previous_customer_id: user_id, detached_at: new Date() },
+    });
+    await logActivity(prisma, { user_id, action: "VEHICLE_DETACHED", entity_type: "vehicle", entity_id: parseInt(id) });
+    res.status(200).json({ message: "Vehicle removed from your account. You can restore it any time before someone else claims it." });
   } catch (error) {
-    logger.error(`deleteVehicle failed — ${error.message}`);
+    logger.error(`detachVehicle failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const listMyDetachedVehicles = async (req, res) => {
+  const { user_id } = req.user;
+  try {
+    const vehicles = await prisma.vehicle.findMany({
+      where: { customer_id: null, previous_customer_id: user_id },
+      include: VEHICLE_INCLUDE,
+      orderBy: { detached_at: "desc" },
+    });
+    res.status(200).json({ vehicles: vehicles.map(flattenVehicle) });
+  } catch (error) {
+    logger.error(`listMyDetachedVehicles failed for user_id: ${user_id} — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const restoreVehicle = async (req, res) => {
+  const { user_id } = req.user;
+  const { id } = req.params;
+  const vehicleId = parseInt(id);
+
+  try {
+    const result = await prisma.vehicle.updateMany({
+      where: { vehicle_id: vehicleId, customer_id: null, previous_customer_id: user_id },
+      data: { customer_id: user_id, previous_customer_id: null, detached_at: null },
+    });
+
+    if (result.count === 0) {
+      const existing = await prisma.vehicle.findUnique({
+        where: { vehicle_id: vehicleId },
+        select: { customer_id: true, previous_customer_id: true },
+      });
+      if (!existing) return res.status(404).json({ message: "Vehicle not found" });
+      if (existing.customer_id !== null)
+        return res.status(409).json({ message: "This vehicle has already been claimed by another customer and can no longer be restored." });
+      return res.status(403).json({ message: "You are not authorized to restore this vehicle." });
+    }
+
+    await logActivity(prisma, { user_id, action: "VEHICLE_RESTORED", entity_type: "vehicle", entity_id: vehicleId });
+    const vehicle = await prisma.vehicle.findUnique({ where: { vehicle_id: vehicleId }, include: VEHICLE_INCLUDE });
+    res.status(200).json({ message: "Vehicle restored", vehicle: flattenVehicle(vehicle) });
+  } catch (error) {
+    logger.error(`restoreVehicle failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
 };
 
 module.exports = {
-  listVehicles, addVehicle, updateVehicle, deleteVehicle,
+  listVehicles, addVehicle, updateVehicle, detachVehicle,
+  lookupPlate, claimVehicle, listMyDetachedVehicles, restoreVehicle,
   listMakes, listModels, listVehicleTypes,
+  VEHICLE_INCLUDE, flattenVehicle, UNRESOLVED_BOOKING_STATUSES, notifyPreviousOwner,
 };

@@ -2,7 +2,7 @@ import { apiClient } from "@/lib/apiClient";
 
 export interface Vehicle {
   vehicle_id: number;
-  customer_id: number;
+  customer_id: number | null;
   make_id: number;
   make: string;
   model_id: number;
@@ -12,7 +12,13 @@ export interface Vehicle {
   year: number | null;
   plate_no: string;
   created_at: string;
+  detached_at: string | null;
 }
+
+export type PlateLookupResult =
+  | { found: false }
+  | { found: true; status: "own" | "claimable"; vehicle: Vehicle }
+  | { found: true; status: "active_elsewhere" };
 
 export interface VehicleMake {
   make_id: number;
@@ -49,6 +55,17 @@ export const vehiclesService = {
     apiClient.put<{ message: string; vehicle: Vehicle }>(`/vehicles/${id}`, data),
 
   deleteVehicle: (id: number) => apiClient.delete<{ message: string }>(`/vehicles/${id}`),
+
+  lookupPlate: (plate: string) =>
+    apiClient.get<PlateLookupResult>(`/vehicles/lookup/${encodeURIComponent(plate.trim().toUpperCase())}`),
+
+  claimVehicle: (plate_no: string) =>
+    apiClient.post<{ message: string; vehicle: Vehicle }>("/vehicles/claim", { plate_no }),
+
+  getDetachedVehicles: () => apiClient.get<{ vehicles: Vehicle[] }>("/vehicles/detached"),
+
+  restoreVehicle: (id: number) =>
+    apiClient.post<{ message: string; vehicle: Vehicle }>(`/vehicles/${id}/restore`, {}),
 
   getMakes: () => apiClient.get<{ makes: VehicleMake[] }>("/vehicles/makes"),
 

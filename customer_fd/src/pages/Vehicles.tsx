@@ -25,7 +25,7 @@ import {
   type VehicleTypeOption,
 } from "@/services/vehicles.service";
 import { YEAR_OPTIONS } from "@/lib/vehicleYears";
-import { Car, Edit, Trash2, Plus, Loader2, Wrench, ChevronRight } from "lucide-react";
+import { Car, Edit, Trash2, Plus, Loader2, Wrench, ChevronRight, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 interface FormErrors {
@@ -64,10 +64,20 @@ export default function Vehicles() {
   });
   const vehicles = vehiclesQuery.data ?? [];
   const loading = vehiclesQuery.isPending;
+  const detachedQuery = useQuery({
+    queryKey: ["vehicles", "detached"],
+    queryFn: () => vehiclesService.getDetachedVehicles().then((r) => r.vehicles),
+    enabled: !!user,
+  });
+  const detachedVehicles = detachedQuery.data ?? [];
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [vehicleToDelete, setVehicleToDelete] = useState<Vehicle | null>(null);
+  const [restoringId, setRestoringId] = useState<number | null>(null);
+  const [claimPrompt, setClaimPrompt] = useState<Vehicle | null>(null);
+  const [claiming, setClaiming] = useState(false);
+  const [lookingUpPlate, setLookingUpPlate] = useState(false);
 
   const [makes, setMakes] = useState<VehicleMake[]>([]);
   const [models, setModels] = useState<VehicleModel[]>([]);
@@ -155,7 +165,7 @@ export default function Vehicles() {
   };
 
   const closeDialog = (open: boolean) => {
-    if (saving) return;
+    if (saving || lookingUpPlate) return;
     if (!open) resetForm();
     setDialogOpen(open);
   };
@@ -179,6 +189,7 @@ export default function Vehicles() {
       queryClient.setQueryData<Vehicle[]>(["vehicles"], (prev) =>
         (prev ?? []).filter((v) => v.vehicle_id !== vehicle.vehicle_id)
       );
+      queryClient.invalidateQueries({ queryKey: ["vehicles", "detached"] });
       toast.success("Vehicle removed");
       setVehicleToDelete(null);
     } catch (err) {
@@ -195,7 +206,6 @@ export default function Vehicles() {
       setFormErrors(errors);
       return;
     }
-    setSaving(true);
     const payload: CreateVehiclePayload = {
       make_id: parseInt(makeId),
       model_id: parseInt(modelId),
@@ -203,6 +213,28 @@ export default function Vehicles() {
       plate_no: plateNo.trim(),
       ...(year ? { year: parseInt(year) } : {}),
     };
+
+    if (!editingVehicle) {
+      setLookingUpPlate(true);
+      try {
+        const lookup = await vehiclesService.lookupPlate(plateNo.trim());
+        if (lookup.found && lookup.status === "claimable") {
+          setClaimPrompt(lookup.vehicle);
+          return;
+        }
+        if (lookup.found && lookup.status === "active_elsewhere") {
+          setFormErrors({ ...errors, plate_no: "This plate is already registered to another active account. Contact DriveWell staff to arrange a transfer." });
+          return;
+        }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to look up plate number");
+        return;
+      } finally {
+        setLookingUpPlate(false);
+      }
+    }
+
+    setSaving(true);
     try {
       if (editingVehicle) {
         const { vehicle } = await vehiclesService.updateVehicle(editingVehicle.vehicle_id, payload);
@@ -221,6 +253,40 @@ export default function Vehicles() {
       toast.error(err instanceof Error ? err.message : "Failed to save vehicle");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const confirmClaim = async () => {
+    if (!claimPrompt) return;
+    setClaiming(true);
+    try {
+      const { vehicle } = await vehiclesService.claimVehicle(claimPrompt.plate_no);
+      queryClient.setQueryData<Vehicle[]>(["vehicles"], (prev) => [vehicle, ...(prev ?? [])]);
+      toast.success("Vehicle claimed successfully");
+      setClaimPrompt(null);
+      setDialogOpen(false);
+      resetForm();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to claim vehicle");
+    } finally {
+      setClaiming(false);
+    }
+  };
+
+  const restoreDetached = async (vehicle: Vehicle) => {
+    setRestoringId(vehicle.vehicle_id);
+    try {
+      const { vehicle: restored } = await vehiclesService.restoreVehicle(vehicle.vehicle_id);
+      queryClient.setQueryData<Vehicle[]>(["vehicles"], (prev) => [restored, ...(prev ?? [])]);
+      queryClient.setQueryData<Vehicle[]>(["vehicles", "detached"], (prev) =>
+        (prev ?? []).filter((v) => v.vehicle_id !== vehicle.vehicle_id)
+      );
+      toast.success("Vehicle restored");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to restore vehicle");
+      queryClient.invalidateQueries({ queryKey: ["vehicles", "detached"] });
+    } finally {
+      setRestoringId(null);
     }
   };
 
@@ -328,6 +394,41 @@ export default function Vehicles() {
         </div>
       )}
 
+      {detachedVehicles.length > 0 && (
+        <div className="mt-10">
+          <h2 className="text-lg font-semibold mb-3">Recently Removed</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {detachedVehicles.map((vehicle) => (
+              <Card key={vehicle.vehicle_id} className="bg-muted/40">
+                <CardContent className="pt-6">
+                  <h3 className="font-semibold">{vehicle.make} {vehicle.model}</h3>
+                  <p className="text-sm text-muted-foreground">{vehicle.plate_no}</p>
+                  {vehicle.detached_at && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Removed on {new Date(vehicle.detached_at).toLocaleDateString()}
+                    </p>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-3 w-full"
+                    disabled={restoringId === vehicle.vehicle_id}
+                    onClick={() => restoreDetached(vehicle)}
+                  >
+                    {restoringId === vehicle.vehicle_id ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <RotateCcw className="mr-2 h-4 w-4" />
+                    )}
+                    Restore
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
       <Dialog open={dialogOpen} onOpenChange={closeDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -420,7 +521,7 @@ export default function Vehicles() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={saving}
+                  disabled={saving || lookingUpPlate}
                   onClick={() => closeDialog(false)}
                 >
                   Cancel
@@ -428,10 +529,10 @@ export default function Vehicles() {
                 <Button
                   type="submit"
                   className="bg-cta text-cta-foreground hover:bg-cta/90"
-                  disabled={saving}
+                  disabled={saving || lookingUpPlate}
                 >
-                  {saving ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{editingVehicle ? "Updating..." : "Adding..."}</>
+                  {saving || lookingUpPlate ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{lookingUpPlate ? "Checking plate..." : editingVehicle ? "Updating..." : "Adding..."}</>
                   ) : (
                     editingVehicle ? "Update Vehicle" : "Add Vehicle"
                   )}
@@ -452,11 +553,11 @@ export default function Vehicles() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Delete {vehicleToDelete?.make} {vehicleToDelete?.model}?
+              Remove {vehicleToDelete?.make} {vehicleToDelete?.model}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently remove {vehicleToDelete?.plate_no} from your account. This action cannot
-              be undone.
+              This will remove {vehicleToDelete?.plate_no} from your account. It won't be deleted — you can
+              restore it from Recently Removed any time before someone else claims it.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -473,7 +574,44 @@ export default function Vehicles() {
               disabled={!!deletingId}
             >
               {deletingId && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {deletingId ? "Deleting..." : "Delete Vehicle"}
+              {deletingId ? "Removing..." : "Remove Vehicle"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!claimPrompt}
+        onOpenChange={(open) => {
+          if (claiming) return;
+          if (!open) setClaimPrompt(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Claim this vehicle?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {claimPrompt?.plate_no} ({claimPrompt?.make} {claimPrompt?.model}
+              {claimPrompt?.year ? `, ${claimPrompt.year}` : ""}) is already registered in DriveWell but
+              currently has no owner. Claiming it will link it to your account along with its full service
+              history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setClaimPrompt(null)}
+              disabled={claiming}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-cta text-cta-foreground hover:bg-cta/90"
+              onClick={confirmClaim}
+              disabled={claiming}
+            >
+              {claiming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {claiming ? "Claiming..." : "Claim Vehicle"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

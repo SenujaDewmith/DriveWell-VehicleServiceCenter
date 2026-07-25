@@ -63,4 +63,17 @@ const sendStatusUpdate = (to, { customerName, bookingRef, status }) =>
     <p>Thank you for your patience.</p>
   `);
 
-module.exports = { sendWelcomeEmail, sendBookingConfirmation, sendBookingCancellation, sendStatusUpdate };
+const sendVehicleTransferredEmail = (to, { customerName, plateNo, reason }) =>
+  sendEmail(to, "Your Vehicle Has Changed Hands – DriveWell", `
+    <h2>Vehicle Ownership Update</h2>
+    <p>Hi ${customerName},</p>
+    <p>Your vehicle <strong>${plateNo}</strong> ${reason === "claimed"
+      ? "has been claimed and linked to a new owner's DriveWell account."
+      : "has been transferred to a new owner by DriveWell staff."}</p>
+    <p>If you did not expect this change, please contact DriveWell support.</p>
+  `);
+
+module.exports = {
+  sendWelcomeEmail, sendBookingConfirmation, sendBookingCancellation, sendStatusUpdate,
+  sendVehicleTransferredEmail,
+};

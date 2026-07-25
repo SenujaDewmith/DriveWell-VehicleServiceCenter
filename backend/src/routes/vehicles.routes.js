@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const {
-  listVehicles, addVehicle, updateVehicle, deleteVehicle,
+  listVehicles, addVehicle, updateVehicle, detachVehicle,
+  lookupPlate, claimVehicle, listMyDetachedVehicles, restoreVehicle,
   listMakes, listModels, listVehicleTypes,
 } = require("../controllers/vehicles.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
@@ -133,6 +134,66 @@ router.get("/types", customerOnly, listVehicleTypes);
 
 /**
  * @swagger
+ * /api/vehicles/detached:
+ *   get:
+ *     summary: List the authenticated customer's own vehicles that are currently detached (removed but unclaimed)
+ *     tags: [Vehicles]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200: { description: List of detached vehicles }
+ *       401: { description: Not authenticated }
+ *       500: { description: Server error }
+ */
+router.get("/detached", customerOnly, listMyDetachedVehicles);
+
+/**
+ * @swagger
+ * /api/vehicles/lookup/{plate_no}:
+ *   get:
+ *     summary: Look up a plate number to check whether it's unregistered, claimable, or actively owned by someone else
+ *     tags: [Vehicles]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: plate_no
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Lookup result }
+ *       401: { description: Not authenticated }
+ *       500: { description: Server error }
+ */
+router.get("/lookup/:plate_no", customerOnly, lookupPlate);
+
+/**
+ * @swagger
+ * /api/vehicles/claim:
+ *   post:
+ *     summary: Claim an existing, currently-detached vehicle by plate number, inheriting its service history
+ *     tags: [Vehicles]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               plate_no: { type: string }
+ *     responses:
+ *       200: { description: Vehicle claimed }
+ *       404: { description: No vehicle found with that plate }
+ *       409: { description: Vehicle is actively owned by someone else, or was just claimed }
+ *       401: { description: Not authenticated }
+ *       500: { description: Server error }
+ */
+router.post("/claim", customerOnly, claimVehicle);
+
+/**
+ * @swagger
  * /api/vehicles:
  *   post:
  *     summary: Add a new vehicle for the authenticated customer
@@ -195,7 +256,7 @@ router.put("/:id", customerOnly, updateVehicle);
  * @swagger
  * /api/vehicles/{id}:
  *   delete:
- *     summary: Delete a vehicle (must belong to the authenticated customer)
+ *     summary: Detach a vehicle from the authenticated customer's account (reversible until someone else claims it)
  *     tags: [Vehicles]
  *     security:
  *       - cookieAuth: []
@@ -205,12 +266,35 @@ router.put("/:id", customerOnly, updateVehicle);
  *         required: true
  *         schema: { type: integer }
  *     responses:
- *       200: { description: Vehicle deleted }
- *       400: { description: Vehicle has existing bookings }
+ *       200: { description: Vehicle detached }
+ *       400: { description: Vehicle has an upcoming or in-progress booking }
  *       401: { description: Not authenticated }
  *       404: { description: Vehicle not found }
  *       500: { description: Server error }
  */
-router.delete("/:id", customerOnly, deleteVehicle);
+router.delete("/:id", customerOnly, detachVehicle);
+
+/**
+ * @swagger
+ * /api/vehicles/{id}/restore:
+ *   post:
+ *     summary: Restore a vehicle the authenticated customer previously detached, as long as no one else has claimed it yet
+ *     tags: [Vehicles]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Vehicle restored }
+ *       403: { description: Not authorized to restore this vehicle }
+ *       404: { description: Vehicle not found }
+ *       409: { description: Vehicle already claimed by another customer }
+ *       401: { description: Not authenticated }
+ *       500: { description: Server error }
+ */
+router.post("/:id/restore", customerOnly, restoreVehicle);
 
 module.exports = router;

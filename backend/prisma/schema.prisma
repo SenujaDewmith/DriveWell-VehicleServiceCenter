@@ -27,13 +27,16 @@ model User {
   customer Customer?
   staff    Staff?
 
-  vehicles           Vehicle[]                @relation("CustomerVehicles")
-  reservations       Reservation[]            @relation("CustomerReservations")
-  supervised_records ServiceRecord[]          @relation("SupervisorRecords")
-  staff_assignments  ServiceStaffAssignment[]
-  invoices_issued    Invoice[]                @relation("CashierInvoices")
-  feedback_submitted Feedback[]               @relation("CustomerFeedback")
-  activity_logs      ActivityLog[]
+  vehicles                    Vehicle[]                @relation("CustomerVehicles")
+  previously_owned_vehicles   Vehicle[]                @relation("PreviousVehicleOwner")
+  reservations                Reservation[]            @relation("CustomerReservations")
+  supervised_records          ServiceRecord[]          @relation("SupervisorRecords")
+  staff_assignments           ServiceStaffAssignment[]
+  invoices_issued             Invoice[]                @relation("CashierInvoices")
+  feedback_submitted          Feedback[]               @relation("CustomerFeedback")
+  activity_logs               ActivityLog[]
+  transfer_requests_made      VehicleTransferRequest[] @relation("TransferRequestsMade")
+  transfer_requests_reviewed  VehicleTransferRequest[] @relation("TransferRequestsReviewed")
 
   @@map("users")
 }
@@ -72,8 +75,8 @@ model VehicleMake {
 }
 
 model VehicleModel {
-  model_id        Int     @id
-  name            String  @db.VarChar(150)
+  model_id        Int    @id
+  name            String @db.VarChar(150)
   make_id         Int
   start_year      Int?
   end_year        Int?
@@ -97,20 +100,23 @@ model VehicleType {
 }
 
 model Vehicle {
-  vehicle_id      Int      @id @default(autoincrement())
-  customer_id     Int
-  make_id         Int
-  model_id        Int
-  vehicle_type_id Int
-  year            Int?
-  plate_no        String   @unique @db.VarChar(30)
-  created_at      DateTime @default(now())
+  vehicle_id           Int       @id @default(autoincrement())
+  customer_id          Int?
+  previous_customer_id Int?
+  make_id              Int
+  model_id             Int
+  vehicle_type_id      Int
+  year                 Int?
+  plate_no             String    @unique @db.VarChar(30)
+  created_at           DateTime  @default(now())
+  detached_at          DateTime?
 
-  customer     User         @relation("CustomerVehicles", fields: [customer_id], references: [user_id], onDelete: Cascade)
-  make         VehicleMake  @relation(fields: [make_id], references: [make_id])
-  model        VehicleModel @relation(fields: [model_id], references: [model_id])
-  vehicle_type VehicleType  @relation(fields: [vehicle_type_id], references: [type_id])
-  reservations Reservation[]
+  customer          User?         @relation("CustomerVehicles", fields: [customer_id], references: [user_id], onDelete: SetNull)
+  previous_customer User?         @relation("PreviousVehicleOwner", fields: [previous_customer_id], references: [user_id], onDelete: SetNull)
+  make              VehicleMake   @relation(fields: [make_id], references: [make_id])
+  model             VehicleModel  @relation(fields: [model_id], references: [model_id])
+  vehicle_type      VehicleType   @relation(fields: [vehicle_type_id], references: [type_id])
+  reservations      Reservation[]
 
   @@map("vehicles")
 }
@@ -160,16 +166,16 @@ model BlockedTime {
 }
 
 model Reservation {
-  reservation_id Int      @id @default(autoincrement())
-  booking_ref    String?  @unique @db.VarChar(20)
-  customer_id    Int
-  vehicle_id     Int
-  package_id     Int
-  start_time     DateTime @db.Time
-  end_time       DateTime @db.Time
-  service_date   DateTime @db.Date
-  status         String   @default("Booked") @db.VarChar(30)
-  created_at     DateTime @default(now())
+  reservation_id    Int       @id @default(autoincrement())
+  booking_ref       String?   @unique @db.VarChar(20)
+  customer_id       Int
+  vehicle_id        Int
+  package_id        Int
+  start_time        DateTime  @db.Time
+  end_time          DateTime  @db.Time
+  service_date      DateTime  @db.Date
+  status            String    @default("Booked") @db.VarChar(30)
+  created_at        DateTime  @default(now())
   // Clickwrap consent record — which T&C version the customer accepted and when.
   // Nullable because reservations created before this feature carry no acceptance.
   terms_version     String?   @db.VarChar(10)
@@ -200,8 +206,8 @@ model ServiceRecord {
   started_at            DateTime?
   completed_at          DateTime?
 
-  reservation Reservation @relation(fields: [reservation_id], references: [reservation_id], onDelete: Cascade)
-  supervisor  User?                     @relation("SupervisorRecords", fields: [supervisor_id], references: [user_id])
+  reservation Reservation              @relation(fields: [reservation_id], references: [reservation_id], onDelete: Cascade)
+  supervisor  User?                    @relation("SupervisorRecords", fields: [supervisor_id], references: [user_id])
   assignments ServiceStaffAssignment[]
   items       ServiceRecordItem[]
 
@@ -233,7 +239,7 @@ model ChargeCatalogItem {
   created_at      DateTime @default(now())
 
   service_record_items ServiceRecordItem[]
-  invoice_items         InvoiceItem[]
+  invoice_items        InvoiceItem[]
 
   @@map("charge_catalog_items")
 }
@@ -277,13 +283,13 @@ model Invoice {
 // Itemized invoice line — one per additional repair/part charge the cashier applies,
 // priced with the manager's charge catalog as reference (editable per case).
 model InvoiceItem {
-  invoice_item_id Int      @id @default(autoincrement())
+  invoice_item_id Int     @id @default(autoincrement())
   invoice_id      Int
   catalog_item_id Int?
-  description     String   @db.VarChar(255)
-  unit_price      Decimal  @db.Decimal(10, 2)
-  quantity        Int      @default(1)
-  line_total      Decimal  @db.Decimal(10, 2)
+  description     String  @db.VarChar(255)
+  unit_price      Decimal @db.Decimal(10, 2)
+  quantity        Int     @default(1)
+  line_total      Decimal @db.Decimal(10, 2)
 
   invoice      Invoice            @relation(fields: [invoice_id], references: [invoice_id], onDelete: Cascade)
   catalog_item ChargeCatalogItem? @relation(fields: [catalog_item_id], references: [catalog_item_id])

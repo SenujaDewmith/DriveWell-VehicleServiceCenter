@@ -19,6 +19,7 @@ const feedbackRoutes = require("./routes/feedback.routes");
 const reportsRoutes = require("./routes/reports.routes");
 const usersRoutes = require("./routes/users.routes");
 const staffRoutes = require("./routes/staff.routes");
+const vehicleAdminRoutes = require("./routes/vehicle-admin.routes");
 
 const app = express();
 
@@ -71,6 +72,7 @@ app.use("/api/feedback", feedbackRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/staff", staffRoutes);
+app.use("/api/admin/vehicles", vehicleAdminRoutes);
 
 // Health check
 app.get("/", (req, res) =>
