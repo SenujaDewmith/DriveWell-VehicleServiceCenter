@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { authService, ProfileResponse } from "@/services/auth.service";
 import { ASSET_BASE_URL, SESSION_EXPIRED_EVENT } from "@/lib/apiClient";
 
@@ -44,6 +45,17 @@ function mapProfileResponse({ user: u, profile }: ProfileResponse): User {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+
+  // Queries gated with `enabled: !!user` (vehicles, packages, ...) only pause
+  // *new* fetches when the user logs out — React Query keeps serving the last
+  // cached data. Without clearing the cache, a guest who was previously logged
+  // in (or whose session just expired) can still see that stale data, which is
+  // enough to drive the app into calling authenticated-only endpoints as a guest.
+  const clearUser = useCallback(() => {
+    setUser(null);
+    queryClient.clear();
+  }, [queryClient]);
 
   // Verify the session with the backend on load instead of trusting cached client
   // state — a stale cache would otherwise show a "logged in" UI for a session that
@@ -72,10 +84,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // considers us logged in — drop the stale user state so ProtectedRoute
   // redirects to /login instead of leaving a broken "logged in" UI up.
   useEffect(() => {
-    const handleSessionExpired = () => setUser(null);
-    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
-    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
-  }, []);
+    window.addEventListener(SESSION_EXPIRED_EVENT, clearUser);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, clearUser);
+  }, [clearUser]);
 
   const login = async (email: string, password: string, rememberMe = false) => {
     await authService.login(email, password, rememberMe);
@@ -92,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await authService.logout();
     } finally {
-      setUser(null);
+      clearUser();
     }
   };
 

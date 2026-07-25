@@ -49,6 +49,23 @@ export default function BookService() {
     if (!isLoading && !user) setAuthModalOpen(true);
   }, [isLoading, user]);
 
+  // If the session goes away mid-flow (expired cookie, logged out in another tab —
+  // caught here via the same 401 that clears `user`), the wizard's own step/selection
+  // state is plain useState and wouldn't otherwise reset: without this, the user is
+  // left staring at a stale "Date & Time" step whose data just failed to load, with
+  // the sign-in modal stacked on top of it instead of a clean step 1.
+  useEffect(() => {
+    if (!isLoading && !user) {
+      setStep(1);
+      setSelectedVehicleId(null);
+      setSelectedPackageId(null);
+      setSelectedDate("");
+      setSelectedStartTime(null);
+      setSelectedSlotTime("");
+      setTermsAccepted(false);
+    }
+  }, [isLoading, user]);
+
   const vehiclesQuery = useQuery({
     queryKey: ["vehicles"],
     queryFn: () => vehiclesService.getVehicles().then((r) => r.vehicles),
