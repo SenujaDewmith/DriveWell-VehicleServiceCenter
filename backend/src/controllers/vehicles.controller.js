@@ -347,7 +347,15 @@ const listMyTransferRequests = async (req, res) => {
         rejection_reason: true,
         created_at: true,
         reviewed_at: true,
-        vehicle: { select: { plate_no: true, make: { select: { name: true } }, model: { select: { name: true } } } },
+        vehicle: {
+          select: {
+            plate_no: true,
+            custom_make: true,
+            custom_model: true,
+            make: { select: { name: true } },
+            model: { select: { name: true } },
+          },
+        },
       },
       orderBy: { created_at: "desc" },
     });
@@ -359,8 +367,10 @@ const listMyTransferRequests = async (req, res) => {
         created_at: r.created_at,
         reviewed_at: r.reviewed_at,
         plate_no: r.vehicle.plate_no,
-        make: r.vehicle.make.name,
-        model: r.vehicle.model.name,
+        // A vehicle pending catalog review has no make/model row yet — fall back to
+        // the customer-typed value, same pattern as flattenVehicle above.
+        make: r.vehicle.make?.name ?? r.vehicle.custom_make,
+        model: r.vehicle.model?.name ?? r.vehicle.custom_model,
       })),
     });
   } catch (error) {

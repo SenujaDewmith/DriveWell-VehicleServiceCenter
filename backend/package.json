@@ -8,7 +8,10 @@
     "dev": "nodemon server.js",
     "db:seed": "node prisma/seed.js",
     "mailhog:start": "docker start mailhog || docker run -d --name mailhog -p 1025:1025 -p 8025:8025 mailhog/mailhog",
-    "mailhog:stop": "docker stop mailhog"
+    "mailhog:stop": "docker stop mailhog",
+    "test": "jest --runInBand",
+    "test:db:start": "docker start drivewell-test-db || docker run -d --name drivewell-test-db -e POSTGRES_PASSWORD=root -e POSTGRES_DB=vehicle_service_test -p 5433:5432 postgres:16",
+    "test:db:stop": "docker stop drivewell-test-db"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
@@ -33,7 +36,9 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "jest": "^30.4.2",
     "nodemon": "^3.1.14",
-    "prisma": "^5.22.0"
+    "prisma": "^5.22.0",
+    "supertest": "^7.2.2"
   }
 }

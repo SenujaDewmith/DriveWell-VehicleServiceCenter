@@ -22,6 +22,8 @@ backend/uploads/packages/*
 !backend/uploads/packages/.gitkeep
 backend/uploads/transfer-documents/*
 !backend/uploads/transfer-documents/.gitkeep
+backend/uploads/avatars/*
+!backend/uploads/avatars/.gitkeep
 
 # ========================
 # Logs

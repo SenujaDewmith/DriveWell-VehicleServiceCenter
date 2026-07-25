@@ -148,7 +148,14 @@ export default function Feedback() {
                     <label className="block text-sm font-medium mb-3">Rate Your Experience</label>
                     <div className="flex gap-2">
                       {[1, 2, 3, 4, 5].map((r) => (
-                        <button key={r} type="button" onClick={() => setRating(r)} className="group">
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => setRating(r)}
+                          className="group"
+                          aria-label={`${r} star${r !== 1 ? "s" : ""}`}
+                          aria-pressed={r <= rating}
+                        >
                           <Star
                             className={`h-10 w-10 transition-colors ${
                               r <= rating ? "fill-cta text-cta" : "text-muted-foreground group-hover:text-cta"

@@ -106,7 +106,7 @@ function fmtDuration(mins: number) {
 
 type StatusFilter = "All" | "Active" | "Inactive";
 
-function PackagesPage() {
+export function PackagesPage() {
   const [packages, setPackages] = useState<ApiPackage[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [loading, setLoading] = useState(true);

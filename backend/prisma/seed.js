@@ -49,6 +49,15 @@ async function main() {
   });
   console.log(`✅ Vehicle models seeded (${modelRows.length})`);
 
+  // The rows above were inserted with explicit ids from the CSVs, which never advances
+  // Postgres's own auto-increment sequence for these tables — the next INSERT without an
+  // explicit id (e.g. a manager adding a new make/model/type through the app) would collide
+  // with an existing row and fail. Bring each sequence up to date with the actual max id.
+  await prisma.$executeRaw`SELECT setval(pg_get_serial_sequence('vehicle_types', 'type_id'), COALESCE((SELECT MAX(type_id) FROM vehicle_types), 1))`;
+  await prisma.$executeRaw`SELECT setval(pg_get_serial_sequence('vehicle_makes', 'make_id'), COALESCE((SELECT MAX(make_id) FROM vehicle_makes), 1))`;
+  await prisma.$executeRaw`SELECT setval(pg_get_serial_sequence('vehicle_models', 'model_id'), COALESCE((SELECT MAX(model_id) FROM vehicle_models), 1))`;
+  console.log("✅ Vehicle catalog sequences synced");
+
   // Seed roles
   const roles = ["Service Center Manager", "Supervisor", "Cashier", "Service Staff", "Customer"];
   for (const role_name of roles) {

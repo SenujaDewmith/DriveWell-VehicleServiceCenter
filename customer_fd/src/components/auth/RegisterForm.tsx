@@ -89,6 +89,9 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFormProps) 
             </button>
           </div>
           <PasswordHint password={password} />
+          {errors.password && (
+            <p className="text-sm text-destructive">{errors.password.message}</p>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="confirmPassword">Confirm Password</Label>
