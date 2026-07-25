@@ -17,7 +17,7 @@ import { ScrollFade } from "@/components/ScrollFade";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TERMS_VERSION } from "@/lib/terms";
 import { CANCELLATION_CUTOFF_HOURS } from "@/lib/bookingRules";
-import { ASSET_BASE_URL } from "@/lib/apiClient";
+import { fmtDuration, imageSrc } from "@/lib/packageFormat";
 import { Calendar, Car, Clock, CheckCircle, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,16 +25,6 @@ function fmtTime(t: string) {
   const [h, m] = t.split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
   return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
-}
-
-function imageSrc(image_url: string | null) {
-  return image_url ? `${ASSET_BASE_URL}${image_url}` : null;
-}
-
-function fmtDuration(mins: number) {
-  if (mins < 60) return `${mins} min`;
-  const h = Math.floor(mins / 60), m = mins % 60;
-  return m ? `${h}h ${m}min` : `${h}h`;
 }
 
 const STEPS = [

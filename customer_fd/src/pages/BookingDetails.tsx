@@ -19,6 +19,7 @@ import {
 import { bookingsService, type Booking } from "@/services/bookings.service";
 import { feedbackService } from "@/services/feedback.service";
 import { CANCELLATION_CUTOFF_HOURS, canSelfCancel, bookingListTab } from "@/lib/bookingRules";
+import { fmtDuration } from "@/lib/packageFormat";
 import { ArrowLeft, Car, Calendar, Clock, CheckCircle, Loader2, Wrench, FileText, Printer, Gauge } from "lucide-react";
 import { toast } from "sonner";
 
@@ -45,12 +46,6 @@ function fmtTime(t: string) {
   const [h, m] = t.split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
   return `${h % 12 || 12}:${m.toString().padStart(2, "0")} ${ampm}`;
-}
-
-function fmtDuration(mins: number) {
-  if (mins < 60) return `${mins} min`;
-  const h = Math.floor(mins / 60), m = mins % 60;
-  return m ? `${h}h ${m}min` : `${h}h`;
 }
 
 function fmtDateTime(d: string) {
