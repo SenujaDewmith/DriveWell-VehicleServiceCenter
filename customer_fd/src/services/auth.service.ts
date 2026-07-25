@@ -6,7 +6,12 @@ export interface LoginResponse {
 
 export interface ProfileResponse {
   user: { user_id: number; email: string; role_id: number; account_status: string };
-  profile: { full_name: string; phone: string | null; address: string | null } | null;
+  profile: {
+    full_name: string;
+    phone: string | null;
+    address: string | null;
+    avatar_url: string | null;
+  } | null;
 }
 
 export interface RegisterPayload {

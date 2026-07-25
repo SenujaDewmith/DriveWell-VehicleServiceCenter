@@ -42,4 +42,20 @@ export const apiClient = {
 
   delete: <T>(endpoint: string, options?: RequestOptions) =>
     request<T>(endpoint, { method: "DELETE", ...options }),
+
+  // FormData uploads — browser must set its own multipart Content-Type with boundary
+  upload: async <T>(endpoint: string, formData: FormData): Promise<T> => {
+    const response = await fetch(`${BASE_URL}${endpoint}`, {
+      method: "POST",
+      credentials: "include",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: response.statusText }));
+      throw new Error(error.message || "Upload failed");
+    }
+
+    return response.json() as Promise<T>;
+  },
 };

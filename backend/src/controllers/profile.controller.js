@@ -1,8 +1,20 @@
+const fs = require("fs");
+const path = require("path");
 const bcrypt = require("bcryptjs");
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
+const { AVATARS_DIR } = require("../middlewares/upload.middleware");
 
 const CUSTOMER_ROLE_ID = 5;
+
+const deleteAvatarFile = (avatarUrl) => {
+  if (!avatarUrl) return;
+  const filename = path.basename(avatarUrl);
+  const filePath = path.join(AVATARS_DIR, filename);
+  fs.unlink(filePath, (err) => {
+    if (err && err.code !== "ENOENT") logger.error(`Failed to delete avatar file — ${err.message}`);
+  });
+};
 
 const updateProfile = async (req, res) => {
   const { user_id, role_id } = req.user;
@@ -57,4 +69,45 @@ const changePassword = async (req, res) => {
   }
 };
 
-module.exports = { updateProfile, changePassword };
+const uploadAvatar = async (req, res) => {
+  const { user_id, role_id } = req.user;
+  if (!req.file) return res.status(400).json({ message: "No image file uploaded" });
+
+  const model = role_id === CUSTOMER_ROLE_ID ? prisma.customer : prisma.staff;
+  const avatar_url = `/uploads/avatars/${req.file.filename}`;
+
+  try {
+    const existing = await model.findUnique({ where: { user_id }, select: { avatar_url: true } });
+
+    const profile = await model.update({ where: { user_id }, data: { avatar_url } });
+
+    if (existing?.avatar_url) deleteAvatarFile(existing.avatar_url);
+
+    logger.info(`Avatar updated for user_id: ${user_id}`);
+    res.status(200).json({ message: "Avatar updated", profile });
+  } catch (error) {
+    fs.unlink(req.file.path, () => {});
+    logger.error(`uploadAvatar failed for user_id: ${user_id} — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const removeAvatar = async (req, res) => {
+  const { user_id, role_id } = req.user;
+  const model = role_id === CUSTOMER_ROLE_ID ? prisma.customer : prisma.staff;
+
+  try {
+    const existing = await model.findUnique({ where: { user_id }, select: { avatar_url: true } });
+    const profile = await model.update({ where: { user_id }, data: { avatar_url: null } });
+
+    if (existing?.avatar_url) deleteAvatarFile(existing.avatar_url);
+
+    logger.info(`Avatar removed for user_id: ${user_id}`);
+    res.status(200).json({ message: "Avatar removed", profile });
+  } catch (error) {
+    logger.error(`removeAvatar failed for user_id: ${user_id} — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+module.exports = { updateProfile, changePassword, uploadAvatar, removeAvatar };

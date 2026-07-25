@@ -6,6 +6,9 @@ const multer = require("multer");
 const PACKAGES_DIR = path.join(__dirname, "../../uploads/packages");
 fs.mkdirSync(PACKAGES_DIR, { recursive: true });
 
+const AVATARS_DIR = path.join(__dirname, "../../uploads/avatars");
+fs.mkdirSync(AVATARS_DIR, { recursive: true });
+
 const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 const storage = multer.diskStorage({
@@ -30,4 +33,21 @@ const uploadPackageImage = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-module.exports = { uploadPackageImage, PACKAGES_DIR };
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, AVATARS_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    // Keyed on the authenticated user, not the original filename — req.user is
+    // set by verifyToken, which always runs before this middleware in the route chain.
+    const unique = `avatar-${req.user.user_id}-${Date.now()}-${crypto.randomBytes(6).toString("hex")}${ext}`;
+    cb(null, unique);
+  },
+});
+
+const uploadAvatar = multer({
+  storage: avatarStorage,
+  fileFilter,
+  limits: { fileSize: 2 * 1024 * 1024 },
+});
+
+module.exports = { uploadPackageImage, PACKAGES_DIR, uploadAvatar, AVATARS_DIR };

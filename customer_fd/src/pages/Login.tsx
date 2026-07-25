@@ -1,6 +1,7 @@
 import { useNavigate, Link } from "react-router-dom";
 import { LoginForm } from "@/components/auth/LoginForm";
-import { Calendar, Car, Clock, FileText } from "lucide-react";
+import { Calendar, Clock, FileText } from "lucide-react";
+import { Logo } from "@/components/Logo";
 
 const BENEFITS = [
   {
@@ -27,10 +28,7 @@ export default function Login() {
     <div className="grid min-h-[calc(100vh-4rem)] lg:grid-cols-2">
       {/* Brand / context panel — hidden on small screens */}
       <div className="hidden lg:flex flex-col justify-between bg-secondary text-secondary-foreground p-12">
-        <div className="flex items-center gap-2">
-          <Car className="h-8 w-8 text-cta" />
-          <span className="text-2xl font-bold">DriveWell</span>
-        </div>
+        <Logo theme="dark" className="h-9" />
 
         <div className="max-w-md space-y-8">
           <div>
@@ -67,9 +65,8 @@ export default function Login() {
       <div className="flex items-center justify-center bg-muted/30 px-4 py-12">
         <div className="w-full max-w-sm">
           {/* Compact brand for small screens where the side panel is hidden */}
-          <div className="mb-8 flex items-center justify-center gap-2 lg:hidden">
-            <Car className="h-7 w-7 text-cta" />
-            <span className="text-2xl font-bold text-foreground">DriveWell</span>
+          <div className="mb-8 flex justify-center lg:hidden">
+            <Logo className="h-8" />
           </div>
 
           <div className="mb-8 text-center lg:text-left">

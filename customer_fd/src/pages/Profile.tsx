@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -6,6 +6,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Card,
   CardContent,
@@ -14,13 +23,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { authService } from "@/services/auth.service";
+import { profileService } from "@/services/profile.service";
+import { ASSET_BASE_URL } from "@/lib/apiClient";
 import {
   changePasswordSchema,
   ChangePasswordFormData,
 } from "@/lib/schemas/auth";
 import { PasswordHint } from "@/components/auth/PasswordHint";
+import { AvatarEditorDialog } from "@/components/AvatarEditorDialog";
+
+const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
+const ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 export default function Profile() {
   const { user, updateProfile } = useAuth();
@@ -34,6 +49,74 @@ export default function Profile() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [editorImageSrc, setEditorImageSrc] = useState<string | null>(null);
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+  const [isRemoveDialogOpen, setIsRemoveDialogOpen] = useState(false);
+  const [isRemovingAvatar, setIsRemovingAvatar] = useState(false);
+  const [removeAvatarError, setRemoveAvatarError] = useState<string | null>(null);
+
+  // Revoke the selected file's object URL once the editor is done with it, so
+  // we don't leak memory across repeated avatar selections.
+  useEffect(() => {
+    return () => {
+      if (editorImageSrc) URL.revokeObjectURL(editorImageSrc);
+    };
+  }, [editorImageSrc]);
+
+  const handleChangeAvatarClick = () => avatarInputRef.current?.click();
+
+  // Validated as soon as the file is picked — before the editor ever opens —
+  // so the user finds out about a bad file immediately instead of after
+  // cropping it and pressing save.
+  const handleAvatarFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+
+    if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
+      toast.error("Please choose a JPEG, PNG, WEBP, or GIF image");
+      return;
+    }
+    if (file.size > MAX_AVATAR_SIZE) {
+      toast.error("Image must be 2MB or smaller");
+      return;
+    }
+
+    setEditorImageSrc(URL.createObjectURL(file));
+  };
+
+  const handleAvatarEditorSave = async (blob: Blob) => {
+    const file = new File([blob], "avatar.jpg", { type: "image/jpeg" });
+    setIsSavingAvatar(true);
+    try {
+      const { profile } = await profileService.uploadAvatar(file);
+      updateProfile({
+        avatar: profile.avatar_url ? `${ASSET_BASE_URL}${profile.avatar_url}` : undefined,
+      });
+      toast.success("Avatar updated successfully!");
+    } finally {
+      setIsSavingAvatar(false);
+    }
+  };
+
+  const handleConfirmRemoveAvatar = async () => {
+    setIsRemovingAvatar(true);
+    setRemoveAvatarError(null);
+    try {
+      await profileService.removeAvatar();
+      updateProfile({ avatar: undefined });
+      toast.success("Avatar removed");
+      setIsRemoveDialogOpen(false);
+    } catch (error) {
+      setRemoveAvatarError(
+        error instanceof Error ? error.message : "Failed to remove avatar",
+      );
+    } finally {
+      setIsRemovingAvatar(false);
+    }
+  };
 
   const {
     register: registerPasswordField,
@@ -90,8 +173,18 @@ export default function Profile() {
 
         <Card>
           <CardContent className="flex flex-col items-center gap-4 py-4 text-center sm:flex-row sm:text-left">
-            <div className="h-16 w-16 shrink-0 rounded-full bg-cta flex items-center justify-center text-cta-foreground text-2xl font-bold">
-              {user.name.charAt(0)}
+            <div className="relative shrink-0">
+              <Avatar className="h-16 w-16">
+                <AvatarImage src={user.avatar} alt={user.name} />
+                <AvatarFallback className="bg-cta text-cta-foreground text-2xl font-bold">
+                  {user.name.charAt(0)}
+                </AvatarFallback>
+              </Avatar>
+              {isSavingAvatar && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-background/60">
+                  <Loader2 className="h-5 w-5 animate-spin text-foreground" />
+                </div>
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-lg font-semibold truncate">{user.name}</p>
@@ -99,11 +192,85 @@ export default function Profile() {
                 {user.email}
               </p>
             </div>
-            <Button variant="outline" size="sm">
-              Change Avatar
-            </Button>
+            <div className="flex shrink-0 gap-2">
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept={ALLOWED_AVATAR_TYPES.join(",")}
+                className="hidden"
+                onChange={handleAvatarFileSelected}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleChangeAvatarClick}
+                disabled={isSavingAvatar}
+              >
+                Change Avatar
+              </Button>
+              {user.avatar && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsRemoveDialogOpen(true)}
+                  disabled={isSavingAvatar}
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
+
+        <AvatarEditorDialog
+          imageSrc={editorImageSrc}
+          onOpenChange={(open) => {
+            if (!open) {
+              if (editorImageSrc) URL.revokeObjectURL(editorImageSrc);
+              setEditorImageSrc(null);
+            }
+          }}
+          onSave={handleAvatarEditorSave}
+        />
+
+        <AlertDialog
+          open={isRemoveDialogOpen}
+          onOpenChange={(open) => {
+            if (isRemovingAvatar) return;
+            setIsRemoveDialogOpen(open);
+            if (!open) setRemoveAvatarError(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove avatar?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Your profile picture will be removed and you&apos;ll see your
+                initials instead. This can&apos;t be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            {removeAvatarError && (
+              <p className="text-sm text-destructive">{removeAvatarError}</p>
+            )}
+            <AlertDialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsRemoveDialogOpen(false)}
+                disabled={isRemovingAvatar}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleConfirmRemoveAvatar}
+                disabled={isRemovingAvatar}
+              >
+                {isRemovingAvatar && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isRemovingAvatar ? "Removing..." : "Remove"}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Card className="flex flex-col">

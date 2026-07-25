@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { authService, ProfileResponse } from "@/services/auth.service";
+import { ASSET_BASE_URL } from "@/lib/apiClient";
 
 interface User {
   id: string;
@@ -34,6 +35,7 @@ function mapProfileResponse({ user: u, profile }: ProfileResponse): User {
     name: profile?.full_name ?? "",
     email: u.email,
     phone: profile?.phone ?? "",
+    avatar: profile?.avatar_url ? `${ASSET_BASE_URL}${profile.avatar_url}` : undefined,
   };
 }
 

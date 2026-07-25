@@ -16,8 +16,8 @@ import {
   Menu,
   X,
   Wrench,
-  Car,
 } from "lucide-react";
+import { Logo } from "@/components/Logo";
 
 interface NavItem {
   label: string;
@@ -72,11 +72,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
             }`}
           >
             <div className="p-4 border-b border-border">
-              <div className="flex items-center gap-2">
-                <Car className="h-6 w-6 text-accent" />
-                <h2 className="text-xl font-bold text-foreground">DriveWell</h2>
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <Logo className="h-8" />
+              <p className="text-xs text-muted-foreground mt-2">
                 {role} Panel
               </p>
             </div>
@@ -122,10 +119,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
             )}
             {!isManager && (
               <div className="flex items-center gap-2">
-                <Car className="h-6 w-6 text-accent" />
-                <h2 className="text-lg font-bold text-foreground">
-                  DriveWell <span className="text-muted-foreground font-normal">// {role}</span>
-                </h2>
+                <Logo className="h-7" />
+                <span className="text-sm text-muted-foreground">// {role}</span>
               </div>
             )}
           </div>

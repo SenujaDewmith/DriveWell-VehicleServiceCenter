@@ -9,10 +9,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Moon, Sun, Menu, User, LogOut, Car, Calendar, FileText, Star } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { BookNowFab } from "@/components/BookNowFab";
+import { Logo } from "@/components/Logo";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, logout } = useAuth();
@@ -44,9 +46,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between">
-            <Link to="/" className="flex items-center space-x-2">
-              <Car className="h-8 w-8 text-cta" />
-              <span className="text-2xl font-bold text-foreground">DriveWell</span>
+            <Link to="/" className="flex items-center">
+              <Logo className="h-9" />
             </Link>
 
             <nav className="hidden md:flex items-center space-x-6">
@@ -77,9 +78,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="rounded-full">
-                      <div className="h-8 w-8 rounded-full bg-cta flex items-center justify-center text-cta-foreground font-semibold">
-                        {user.name.charAt(0)}
-                      </div>
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={user.avatar} alt={user.name} />
+                        <AvatarFallback className="bg-cta text-cta-foreground font-semibold">
+                          {user.name.charAt(0)}
+                        </AvatarFallback>
+                      </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
@@ -174,9 +178,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="container mx-auto px-4 py-12">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
-              <div className="flex items-center space-x-2 mb-4">
-                <Car className="h-6 w-6 text-cta" />
-                <span className="text-xl font-bold">DriveWell</span>
+              <div className="mb-4">
+                <Logo theme="dark" className="h-8" />
               </div>
               <p className="text-sm text-secondary-foreground/80">
                 Modern vehicle service station with online booking and transparent tracking.

@@ -1,9 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const { updateProfile, changePassword } = require("../controllers/profile.controller");
+const { updateProfile, changePassword, uploadAvatar, removeAvatar } = require("../controllers/profile.controller");
 const { verifyToken } = require("../middlewares/auth.middleware");
 const validate = require("../middlewares/validate.middleware");
 const { changePasswordSchema } = require("../schemas/auth.schema");
+const { uploadAvatar: uploadAvatarMiddleware } = require("../middlewares/upload.middleware");
 
 /**
  * @swagger
@@ -79,5 +80,51 @@ router.put("/", verifyToken, updateProfile);
  *       500: { description: Server error }
  */
 router.put("/change-password", verifyToken, validate(changePasswordSchema), changePassword);
+
+const handleAvatarUpload = (req, res, next) => {
+  uploadAvatarMiddleware.single("avatar")(req, res, (err) => {
+    if (err) return res.status(400).json({ message: err.message || "Avatar upload failed" });
+    next();
+  });
+};
+
+/**
+ * @swagger
+ * /api/profile/avatar:
+ *   post:
+ *     summary: Upload or replace the authenticated user's avatar
+ *     tags: [Profile]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               avatar: { type: string, format: binary }
+ *     responses:
+ *       200: { description: Avatar updated }
+ *       400: { description: Invalid file }
+ *       401: { description: Not authenticated }
+ *       500: { description: Server error }
+ */
+router.post("/avatar", verifyToken, handleAvatarUpload, uploadAvatar);
+
+/**
+ * @swagger
+ * /api/profile/avatar:
+ *   delete:
+ *     summary: Remove the authenticated user's avatar
+ *     tags: [Profile]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200: { description: Avatar removed }
+ *       401: { description: Not authenticated }
+ *       500: { description: Server error }
+ */
+router.delete("/avatar", verifyToken, removeAvatar);
 
 module.exports = router;

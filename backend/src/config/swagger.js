@@ -29,16 +29,18 @@ const options = {
         CustomerProfile: {
           type: "object",
           properties: {
-            full_name: { type: "string", example: "John Doe" },
-            phone:     { type: "string", example: "+94771234567" },
-            address:   { type: "string", example: "42 Main Street, Colombo" },
+            full_name:  { type: "string", example: "John Doe" },
+            phone:      { type: "string", example: "+94771234567" },
+            address:    { type: "string", example: "42 Main Street, Colombo" },
+            avatar_url: { type: "string", nullable: true, example: "/uploads/avatars/avatar-12-169..." },
           },
         },
         StaffProfile: {
           type: "object",
           properties: {
-            full_name: { type: "string", example: "Sarah Perera" },
-            phone_no:  { type: "string", example: "+94712345678" },
+            full_name:  { type: "string", example: "Sarah Perera" },
+            phone_no:   { type: "string", example: "+94712345678" },
+            avatar_url: { type: "string", nullable: true, example: "/uploads/avatars/avatar-7-169..." },
           },
         },
         // ── Vehicles ────────────────────────────────────────────

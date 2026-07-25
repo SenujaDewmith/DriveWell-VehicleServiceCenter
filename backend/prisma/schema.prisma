@@ -39,10 +39,11 @@ model User {
 }
 
 model Customer {
-  user_id   Int     @id
-  full_name String  @db.VarChar(150)
-  phone     String? @db.VarChar(20)
-  address   String?
+  user_id    Int     @id
+  full_name  String  @db.VarChar(150)
+  phone      String? @db.VarChar(20)
+  address    String?
+  avatar_url String? @db.VarChar(500)
 
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 
@@ -50,9 +51,10 @@ model Customer {
 }
 
 model Staff {
-  user_id   Int     @id
-  full_name String  @db.VarChar(150)
-  phone_no  String? @db.VarChar(20)
+  user_id    Int     @id
+  full_name  String  @db.VarChar(150)
+  phone_no   String? @db.VarChar(20)
+  avatar_url String? @db.VarChar(500)
 
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 

@@ -2,8 +2,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Logo } from "@/components/Logo";
 import {
-  Car,
   ClipboardList,
   Eye,
   EyeOff,
@@ -67,10 +67,7 @@ function LoginPage() {
     <div className="min-h-screen flex bg-background">
       {/* Brand / context panel — hidden on small screens */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-secondary text-secondary-foreground p-12">
-        <div className="flex items-center gap-2">
-          <Car className="h-8 w-8 text-accent" />
-          <span className="text-2xl font-bold">DriveWell</span>
-        </div>
+        <Logo theme="dark" className="h-9" />
 
         <div className="space-y-8 max-w-md">
           <div>
@@ -113,9 +110,8 @@ function LoginPage() {
 
         <div className="w-full max-w-sm">
           {/* Compact brand for small screens where the side panel is hidden */}
-          <div className="mb-8 flex items-center gap-2 lg:hidden">
-            <Car className="h-7 w-7 text-accent" />
-            <span className="text-2xl font-bold text-foreground">DriveWell</span>
+          <div className="mb-8 lg:hidden">
+            <Logo className="h-8" />
           </div>
 
           <div className="mb-8">
