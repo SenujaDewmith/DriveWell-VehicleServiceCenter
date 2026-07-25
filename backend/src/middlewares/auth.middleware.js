@@ -10,9 +10,23 @@ const ROLE_MAP = {
   Customer: 5,
 };
 
+// customer_token and staff_token are separate cookies so a customer session
+// and a staff session can coexist in the same browser without one clobbering
+// the other. Routes are shared between portals, so when both cookies are
+// present we need to know which portal actually made the request instead of
+// guessing — each frontend sends its identity via the X-Portal header (see
+// customer_fd/src/lib/apiClient.ts and admin_fd/src/lib/api.ts). Without the
+// header (e.g. Swagger UI), fall back to whichever cookie is present.
+const tokenFromRequest = (req) => {
+  const portal = req.headers["x-portal"];
+  if (portal === "customer") return req.cookies?.customer_token;
+  if (portal === "staff") return req.cookies?.staff_token;
+  return req.cookies?.customer_token || req.cookies?.staff_token;
+};
+
 const verifyToken = (req, res, next) => {
-  // Token comes from HttpOnly cookie — not the Authorization header
-  const token = req.cookies?.token;
+  // Token comes from an HttpOnly cookie — not the Authorization header.
+  const token = tokenFromRequest(req);
   if (!token) {
     logger.warn(
       `Auth failed — no token in cookies | ${req.method} ${req.originalUrl}`,
@@ -44,7 +58,7 @@ const verifyToken = (req, res, next) => {
 // routes that must stay public but still serve extra data to logged-in staff
 // (e.g. package listing: guests see active packages, managers see all).
 const identifyUser = (req, res, next) => {
-  const token = req.cookies?.token;
+  const token = tokenFromRequest(req);
   if (!token) return next();
   try {
     req.user = jwt.verify(token, process.env.JWT_SECRET);

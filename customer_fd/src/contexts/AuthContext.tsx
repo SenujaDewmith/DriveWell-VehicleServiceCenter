@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { authService, ProfileResponse } from "@/services/auth.service";
-import { ASSET_BASE_URL } from "@/lib/apiClient";
+import { ASSET_BASE_URL, SESSION_EXPIRED_EVENT } from "@/lib/apiClient";
 
 interface User {
   id: string;
@@ -66,6 +66,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // A 401 mid-session (expired/invalid cookie) means the server no longer
+  // considers us logged in — drop the stale user state so ProtectedRoute
+  // redirects to /login instead of leaving a broken "logged in" UI up.
+  useEffect(() => {
+    const handleSessionExpired = () => setUser(null);
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
   }, []);
 
   const login = async (email: string, password: string, rememberMe = false) => {

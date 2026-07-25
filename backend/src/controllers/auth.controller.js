@@ -53,7 +53,18 @@ const register = async (req, res) => {
 const CUSTOMER_ROLE_IDS = [5];
 const STAFF_ROLE_IDS = [1, 2, 3, 4];
 
-const authenticate = async (req, res, { allowedRoleIds, wrongPortalMessage }) => {
+// Separate cookie names per portal so a customer login in one tab doesn't
+// clobber a staff session in another tab (and vice versa) on the same host.
+const COOKIE_NAMES = { customer: "customer_token", staff: "staff_token" };
+
+const cookieOptions = (maxAge) => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+  ...(maxAge !== undefined && { maxAge }),
+});
+
+const authenticate = async (req, res, { allowedRoleIds, wrongPortalMessage, cookieName }) => {
   const { email, password, rememberMe = false } = req.body;
 
   try {
@@ -80,12 +91,7 @@ const authenticate = async (req, res, { allowedRoleIds, wrongPortalMessage }) =>
       { expiresIn }
     );
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-      maxAge,
-    });
+    res.cookie(cookieName, token, cookieOptions(maxAge));
 
     logger.info(`Login successful — user_id: ${user.user_id}`);
     res.status(200).json({
@@ -102,20 +108,23 @@ const login = (req, res) =>
   authenticate(req, res, {
     allowedRoleIds: CUSTOMER_ROLE_IDS,
     wrongPortalMessage: "This portal is for customers only. Staff should use the staff login.",
+    cookieName: COOKIE_NAMES.customer,
   });
 
 const staffLogin = (req, res) =>
   authenticate(req, res, {
     allowedRoleIds: STAFF_ROLE_IDS,
     wrongPortalMessage: "This portal is for service center staff only.",
+    cookieName: COOKIE_NAMES.staff,
   });
 
 const logout = (req, res) => {
-  res.clearCookie("token", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-  });
+  res.clearCookie(COOKIE_NAMES.customer, cookieOptions());
+  res.status(200).json({ message: "Logged out successfully" });
+};
+
+const staffLogout = (req, res) => {
+  res.clearCookie(COOKIE_NAMES.staff, cookieOptions());
   res.status(200).json({ message: "Logged out successfully" });
 };
 
@@ -149,4 +158,4 @@ const getProfile = async (req, res) => {
   }
 };
 
-module.exports = { register, login, staffLogin, logout, getProfile };
+module.exports = { register, login, staffLogin, logout, staffLogout, getProfile };

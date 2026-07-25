@@ -2,6 +2,11 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
 // Uploaded files (e.g. package images) are served from the backend root, not under /api
 export const ASSET_BASE_URL = BASE_URL.replace(/\/api\/?$/, "");
 
+// Fired whenever any request comes back 401, so AuthContext can clear stale
+// user state and let the route guard redirect to /login — without apiClient
+// (a plain module, outside React) needing to know about React state.
+export const SESSION_EXPIRED_EVENT = "auth:session-expired";
+
 type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
 };
@@ -12,6 +17,9 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     headers: {
       "Content-Type": "application/json",
+      // Tells the backend which session cookie to trust when both a customer
+      // and a staff session exist in the same browser.
+      "X-Portal": "customer",
       ...headers,
     },
     credentials: "include",
@@ -20,6 +28,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   });
 
   if (!response.ok) {
+    if (response.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
     const error = await response.json().catch(() => ({ message: response.statusText }));
     throw new Error(error.message || "Request failed");
   }
@@ -48,10 +57,12 @@ export const apiClient = {
     const response = await fetch(`${BASE_URL}${endpoint}`, {
       method: "POST",
       credentials: "include",
+      headers: { "X-Portal": "customer" },
       body: formData,
     });
 
     if (!response.ok) {
+      if (response.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
       const error = await response.json().catch(() => ({ message: response.statusText }));
       throw new Error(error.message || "Upload failed");
     }

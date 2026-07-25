@@ -1,9 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const { register, login, staffLogin, logout, getProfile } = require("../controllers/auth.controller");
+const { register, login, staffLogin, logout, staffLogout, getProfile } = require("../controllers/auth.controller");
 const { verifyToken } = require("../middlewares/auth.middleware");
 const validate = require("../middlewares/validate.middleware");
 const { registerSchema, loginSchema } = require("../schemas/auth.schema");
+const { loginLimiter, registerLimiter } = require("../middlewares/rateLimit.middleware");
 
 /**
  * @swagger
@@ -35,7 +36,7 @@ const { registerSchema, loginSchema } = require("../schemas/auth.schema");
  *       400: { description: Validation error or email taken }
  *       500: { description: Server error }
  */
-router.post("/register", validate(registerSchema), register);
+router.post("/register", registerLimiter, validate(registerSchema), register);
 
 /**
  * @swagger
@@ -74,7 +75,7 @@ router.post("/register", validate(registerSchema), register);
  *       403: { description: Account inactive, or account is a staff/management account }
  *       500: { description: Server error }
  */
-router.post("/login", validate(loginSchema), login);
+router.post("/login", loginLimiter, validate(loginSchema), login);
 
 /**
  * @swagger
@@ -114,18 +115,29 @@ router.post("/login", validate(loginSchema), login);
  *       403: { description: Account inactive, or account is a customer account }
  *       500: { description: Server error }
  */
-router.post("/staff/login", validate(loginSchema), staffLogin);
+router.post("/staff/login", loginLimiter, validate(loginSchema), staffLogin);
 
 /**
  * @swagger
  * /api/auth/logout:
  *   post:
- *     summary: Logout and clear the session cookie
+ *     summary: Logout of the customer portal and clear the customer session cookie
  *     tags: [Auth]
  *     responses:
  *       200: { description: Logged out successfully }
  */
 router.post("/logout", logout);
+
+/**
+ * @swagger
+ * /api/auth/staff/logout:
+ *   post:
+ *     summary: Logout of the staff/management portal and clear the staff session cookie
+ *     tags: [Auth]
+ *     responses:
+ *       200: { description: Logged out successfully }
+ */
+router.post("/staff/logout", staffLogout);
 
 /**
  * @swagger
