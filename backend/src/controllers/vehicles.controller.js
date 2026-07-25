@@ -1,7 +1,8 @@
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { logActivity } = require("../lib/activityLogger");
-const { sendVehicleTransferredEmail } = require("../services/email.service");
+const { sendVehicleTransferredEmail, sendTransferRequestNoticeEmail } = require("../services/email.service");
+const { isValidPhone } = require("../lib/phone");
 
 const VEHICLE_INCLUDE = {
   make: { select: { make_id: true, name: true } },
@@ -41,6 +42,23 @@ const notifyPreviousOwner = async (previousCustomerId, { plateNo, reason }) => {
     sendVehicleTransferredEmail(user.email, { customerName: user.customer?.full_name, plateNo, reason });
   } catch (error) {
     logger.error(`notifyPreviousOwner failed — ${error.message}`);
+  }
+};
+
+// Fire-and-forget notification to the CURRENT owner that someone has filed a
+// transfer request against their vehicle — fraud-prevention: nothing has
+// changed yet, but they shouldn't find out about a hand-off after the fact.
+const notifyCurrentOwnerOfRequest = async (currentOwnerId, { plateNo }) => {
+  if (!currentOwnerId) return;
+  try {
+    const user = await prisma.user.findUnique({
+      where: { user_id: currentOwnerId },
+      select: { email: true, customer: { select: { full_name: true } } },
+    });
+    if (!user) return;
+    sendTransferRequestNoticeEmail(user.email, { customerName: user.customer?.full_name, plateNo });
+  } catch (error) {
+    logger.error(`notifyCurrentOwnerOfRequest failed — ${error.message}`);
   }
 };
 
@@ -221,6 +239,112 @@ const claimVehicle = async (req, res) => {
   }
 };
 
+const submitTransferRequest = async (req, res) => {
+  const { user_id } = req.user;
+  const { plate_no, contact_phone } = req.body;
+  const logbookFile = req.files?.logbook_photo?.[0];
+  const nicFile = req.files?.nic_photo?.[0];
+
+  if (!plate_no) return res.status(400).json({ message: "plate_no is required" });
+  if (!contact_phone || !isValidPhone(contact_phone))
+    return res.status(400).json({ message: "A valid contact phone number is required" });
+  if (!logbookFile || !nicFile)
+    return res.status(400).json({ message: "Both a logbook photo and an NIC photo are required" });
+
+  const normalizedPlate = plate_no.trim().toUpperCase();
+  const normalizedPhone = contact_phone.trim();
+
+  try {
+    const vehicle = await prisma.vehicle.findUnique({
+      where: { plate_no: normalizedPlate },
+      select: { vehicle_id: true, customer_id: true },
+    });
+    if (!vehicle) return res.status(404).json({ message: "No vehicle found with that plate number" });
+    if (vehicle.customer_id === null)
+      return res.status(400).json({ message: "This vehicle is unclaimed — use Claim Vehicle instead." });
+    if (vehicle.customer_id === user_id)
+      return res.status(400).json({ message: "You already own this vehicle." });
+
+    const existingPending = await prisma.vehicleTransferRequest.findFirst({
+      where: { vehicle_id: vehicle.vehicle_id, status: "Pending" },
+      select: { request_id: true },
+    });
+    if (existingPending) {
+      return res.status(409).json({ message: "A transfer request for this vehicle is already awaiting review." });
+    }
+
+    const request = await prisma.vehicleTransferRequest.create({
+      data: {
+        vehicle_id: vehicle.vehicle_id,
+        requester_id: user_id,
+        current_owner_id: vehicle.customer_id,
+        contact_phone: normalizedPhone,
+        logbook_photo_path: logbookFile.filename,
+        nic_photo_path: nicFile.filename,
+      },
+    });
+    await logActivity(prisma, {
+      user_id, action: "VEHICLE_TRANSFER_REQUESTED", entity_type: "vehicle_transfer_request", entity_id: request.request_id,
+    });
+
+    notifyCurrentOwnerOfRequest(vehicle.customer_id, { plateNo: normalizedPlate });
+
+    // If this number isn't already on file, save it as a secondary contact
+    // number so the customer doesn't have to retype it next time.
+    let profileUpdated = false;
+    const customer = await prisma.customer.findUnique({
+      where: { user_id },
+      select: { phone: true, secondary_phone: true },
+    });
+    if (customer && customer.phone !== normalizedPhone && customer.secondary_phone !== normalizedPhone) {
+      await prisma.customer.update({ where: { user_id }, data: { secondary_phone: normalizedPhone } });
+      profileUpdated = true;
+    }
+
+    res.status(201).json({
+      message: "Transfer request submitted. You'll be notified once a manager reviews it.",
+      request: { request_id: request.request_id, status: request.status },
+      profile_updated: profileUpdated,
+    });
+  } catch (error) {
+    logger.error(`submitTransferRequest failed for user_id: ${user_id} — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const listMyTransferRequests = async (req, res) => {
+  const { user_id } = req.user;
+  try {
+    const requests = await prisma.vehicleTransferRequest.findMany({
+      where: { requester_id: user_id },
+      select: {
+        request_id: true,
+        status: true,
+        rejection_reason: true,
+        created_at: true,
+        reviewed_at: true,
+        vehicle: { select: { plate_no: true, make: { select: { name: true } }, model: { select: { name: true } } } },
+      },
+      orderBy: { created_at: "desc" },
+    });
+    res.status(200).json({
+      requests: requests.map((r) => ({
+        request_id: r.request_id,
+        status: r.status,
+        rejection_reason: r.rejection_reason,
+        created_at: r.created_at,
+        reviewed_at: r.reviewed_at,
+        plate_no: r.vehicle.plate_no,
+        make: r.vehicle.make.name,
+        model: r.vehicle.model.name,
+      })),
+    });
+  } catch (error) {
+    logger.error(`listMyTransferRequests failed for user_id: ${user_id} — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 const updateVehicle = async (req, res) => {
   const { user_id } = req.user;
   const { id } = req.params;
@@ -338,6 +462,7 @@ const restoreVehicle = async (req, res) => {
 module.exports = {
   listVehicles, addVehicle, updateVehicle, detachVehicle,
   lookupPlate, claimVehicle, listMyDetachedVehicles, restoreVehicle,
+  submitTransferRequest, listMyTransferRequests,
   listMakes, listModels, listVehicleTypes,
   VEHICLE_INCLUDE, flattenVehicle, UNRESOLVED_BOOKING_STATUSES, notifyPreviousOwner,
 };

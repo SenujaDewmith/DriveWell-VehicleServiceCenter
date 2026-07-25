@@ -27,26 +27,27 @@ model User {
   customer Customer?
   staff    Staff?
 
-  vehicles                    Vehicle[]                @relation("CustomerVehicles")
-  previously_owned_vehicles   Vehicle[]                @relation("PreviousVehicleOwner")
-  reservations                Reservation[]            @relation("CustomerReservations")
-  supervised_records          ServiceRecord[]          @relation("SupervisorRecords")
-  staff_assignments           ServiceStaffAssignment[]
-  invoices_issued             Invoice[]                @relation("CashierInvoices")
-  feedback_submitted          Feedback[]               @relation("CustomerFeedback")
-  activity_logs               ActivityLog[]
-  transfer_requests_made      VehicleTransferRequest[] @relation("TransferRequestsMade")
-  transfer_requests_reviewed  VehicleTransferRequest[] @relation("TransferRequestsReviewed")
+  vehicles                   Vehicle[]                @relation("CustomerVehicles")
+  previously_owned_vehicles  Vehicle[]                @relation("PreviousVehicleOwner")
+  reservations               Reservation[]            @relation("CustomerReservations")
+  supervised_records         ServiceRecord[]          @relation("SupervisorRecords")
+  staff_assignments          ServiceStaffAssignment[]
+  invoices_issued            Invoice[]                @relation("CashierInvoices")
+  feedback_submitted         Feedback[]               @relation("CustomerFeedback")
+  activity_logs              ActivityLog[]
+  transfer_requests_made     VehicleTransferRequest[] @relation("TransferRequestsMade")
+  transfer_requests_reviewed VehicleTransferRequest[] @relation("TransferRequestsReviewed")
 
   @@map("users")
 }
 
 model Customer {
-  user_id    Int     @id
-  full_name  String  @db.VarChar(150)
-  phone      String? @db.VarChar(20)
-  address    String?
-  avatar_url String? @db.VarChar(500)
+  user_id         Int     @id
+  full_name       String  @db.VarChar(150)
+  phone           String? @db.VarChar(20)
+  secondary_phone String? @db.VarChar(20)
+  address         String?
+  avatar_url      String? @db.VarChar(500)
 
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
 
@@ -111,14 +112,42 @@ model Vehicle {
   created_at           DateTime  @default(now())
   detached_at          DateTime?
 
-  customer          User?         @relation("CustomerVehicles", fields: [customer_id], references: [user_id], onDelete: SetNull)
-  previous_customer User?         @relation("PreviousVehicleOwner", fields: [previous_customer_id], references: [user_id], onDelete: SetNull)
-  make              VehicleMake   @relation(fields: [make_id], references: [make_id])
-  model             VehicleModel  @relation(fields: [model_id], references: [model_id])
-  vehicle_type      VehicleType   @relation(fields: [vehicle_type_id], references: [type_id])
+  customer          User?                    @relation("CustomerVehicles", fields: [customer_id], references: [user_id], onDelete: SetNull)
+  previous_customer User?                    @relation("PreviousVehicleOwner", fields: [previous_customer_id], references: [user_id], onDelete: SetNull)
+  make              VehicleMake              @relation(fields: [make_id], references: [make_id])
+  model             VehicleModel             @relation(fields: [model_id], references: [model_id])
+  vehicle_type      VehicleType              @relation(fields: [vehicle_type_id], references: [type_id])
   reservations      Reservation[]
+  transfer_requests VehicleTransferRequest[]
 
   @@map("vehicles")
+}
+
+model VehicleTransferRequest {
+  request_id         Int       @id @default(autoincrement())
+  vehicle_id         Int
+  requester_id       Int
+  // Snapshot of who owned the vehicle when the request was filed — plain int,
+  // no relation, since it's only ever used for display/audit, not queried by join.
+  current_owner_id   Int?
+  // Snapshot of the phone number given at submission time — so staff can call
+  // whoever filed the request, even if their profile phone changes later.
+  contact_phone      String    @db.VarChar(20)
+  status             String    @default("Pending") @db.VarChar(20)
+  // Nulled out once resolved (Approved/Rejected) — the actual files are deleted
+  // from disk at that point too. Documents shouldn't outlive their one-time purpose.
+  logbook_photo_path String?   @db.VarChar(500)
+  nic_photo_path     String?   @db.VarChar(500)
+  reviewer_id        Int?
+  reviewed_at        DateTime?
+  rejection_reason   String?   @db.VarChar(500)
+  created_at         DateTime  @default(now())
+
+  vehicle   Vehicle @relation(fields: [vehicle_id], references: [vehicle_id], onDelete: Cascade)
+  requester User    @relation("TransferRequestsMade", fields: [requester_id], references: [user_id], onDelete: Cascade)
+  reviewer  User?   @relation("TransferRequestsReviewed", fields: [reviewer_id], references: [user_id], onDelete: SetNull)
+
+  @@map("vehicle_transfer_requests")
 }
 
 model ServicePackage {

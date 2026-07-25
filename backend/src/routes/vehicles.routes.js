@@ -3,11 +3,20 @@ const router = express.Router();
 const {
   listVehicles, addVehicle, updateVehicle, detachVehicle,
   lookupPlate, claimVehicle, listMyDetachedVehicles, restoreVehicle,
+  submitTransferRequest, listMyTransferRequests,
   listMakes, listModels, listVehicleTypes,
 } = require("../controllers/vehicles.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
+const { uploadTransferDocs } = require("../middlewares/upload.middleware");
 
 const customerOnly = [verifyToken, authorizeRoles("Customer")];
+
+const handleTransferDocsUpload = (req, res, next) => {
+  uploadTransferDocs.fields([{ name: "logbook_photo", maxCount: 1 }, { name: "nic_photo", maxCount: 1 }])(req, res, (err) => {
+    if (err) return res.status(400).json({ message: err.message || "Document upload failed" });
+    next();
+  });
+};
 
 /**
  * @swagger
@@ -191,6 +200,49 @@ router.get("/lookup/:plate_no", customerOnly, lookupPlate);
  *       500: { description: Server error }
  */
 router.post("/claim", customerOnly, claimVehicle);
+
+/**
+ * @swagger
+ * /api/vehicles/transfer-requests/mine:
+ *   get:
+ *     summary: List the authenticated customer's own submitted vehicle transfer requests
+ *     tags: [Vehicles]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200: { description: List of the customer's transfer requests }
+ *       401: { description: Not authenticated }
+ *       500: { description: Server error }
+ */
+router.get("/transfer-requests/mine", customerOnly, listMyTransferRequests);
+
+/**
+ * @swagger
+ * /api/vehicles/transfer-requests:
+ *   post:
+ *     summary: Submit a request to claim a vehicle actively owned by another customer, with logbook + NIC verification photos
+ *     tags: [Vehicles]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               plate_no: { type: string }
+ *               logbook_photo: { type: string, format: binary }
+ *               nic_photo: { type: string, format: binary }
+ *     responses:
+ *       201: { description: Transfer request submitted }
+ *       400: { description: Validation error }
+ *       404: { description: No vehicle found with that plate }
+ *       409: { description: A transfer request for this vehicle is already pending }
+ *       401: { description: Not authenticated }
+ *       500: { description: Server error }
+ */
+router.post("/transfer-requests", customerOnly, handleTransferDocsUpload, submitTransferRequest);
 
 /**
  * @swagger

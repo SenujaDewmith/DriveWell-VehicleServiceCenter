@@ -7,6 +7,7 @@ interface User {
   name: string;
   email: string;
   phone: string;
+  secondaryPhone: string;
   avatar?: string;
 }
 
@@ -35,6 +36,7 @@ function mapProfileResponse({ user: u, profile }: ProfileResponse): User {
     name: profile?.full_name ?? "",
     email: u.email,
     phone: profile?.phone ?? "",
+    secondaryPhone: profile?.secondary_phone ?? "",
     avatar: profile?.avatar_url ? `${ASSET_BASE_URL}${profile.avatar_url}` : undefined,
   };
 }

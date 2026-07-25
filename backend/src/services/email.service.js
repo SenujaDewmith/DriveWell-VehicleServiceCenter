@@ -73,7 +73,28 @@ const sendVehicleTransferredEmail = (to, { customerName, plateNo, reason }) =>
     <p>If you did not expect this change, please contact DriveWell support.</p>
   `);
 
+const sendTransferRequestNoticeEmail = (to, { customerName, plateNo }) =>
+  sendEmail(to, "Someone Requested Your Vehicle – DriveWell", `
+    <h2>Vehicle Transfer Request</h2>
+    <p>Hi ${customerName},</p>
+    <p>Someone has submitted a request to claim your vehicle <strong>${plateNo}</strong> on DriveWell, along with
+    verification documents (logbook and NIC photos).</p>
+    <p>Nothing has changed yet — a DriveWell manager will review the documents before any transfer happens.
+    If you did not sell or give away this vehicle, please contact DriveWell support immediately.</p>
+  `);
+
+const sendTransferRequestDecisionEmail = (to, { customerName, plateNo, approved, reason }) =>
+  sendEmail(to, `Transfer Request ${approved ? "Approved" : "Rejected"} – DriveWell`, `
+    <h2>Transfer Request ${approved ? "Approved" : "Rejected"}</h2>
+    <p>Hi ${customerName},</p>
+    ${approved
+      ? `<p>Your request to claim <strong>${plateNo}</strong> has been approved. It now appears in your DriveWell account along with its service history.</p>`
+      : `<p>Your request to claim <strong>${plateNo}</strong> was not approved.</p>${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}`
+    }
+  `);
+
 module.exports = {
   sendWelcomeEmail, sendBookingConfirmation, sendBookingCancellation, sendStatusUpdate,
   sendVehicleTransferredEmail,
+  sendTransferRequestNoticeEmail, sendTransferRequestDecisionEmail,
 };

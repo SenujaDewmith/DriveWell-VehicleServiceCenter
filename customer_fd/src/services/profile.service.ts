@@ -1,12 +1,25 @@
 import { apiClient } from "@/lib/apiClient";
 
-export interface Profile {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  avatar?: string;
+export interface ProfileData {
+  user_id: number;
+  full_name: string;
+  phone: string | null;
+  secondary_phone: string | null;
+  address: string | null;
+  avatar_url: string | null;
 }
+
+export interface UpdateProfileResponse {
+  message: string;
+  profile: ProfileData;
+}
+
+export type UpdateProfilePayload = Partial<{
+  full_name: string;
+  phone: string;
+  secondary_phone: string;
+  address: string;
+}>;
 
 export interface AvatarResponse {
   message: string;
@@ -14,10 +27,8 @@ export interface AvatarResponse {
 }
 
 export const profileService = {
-  getProfile: () => apiClient.get<Profile>("/profile"),
-
-  updateProfile: (data: Partial<Profile>) =>
-    apiClient.put<Profile>("/profile", data),
+  updateProfile: (data: UpdateProfilePayload) =>
+    apiClient.put<UpdateProfileResponse>("/profile", data),
 
   uploadAvatar: (file: File) => {
     const formData = new FormData();

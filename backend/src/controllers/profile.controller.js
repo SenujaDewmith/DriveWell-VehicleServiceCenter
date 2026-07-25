@@ -4,6 +4,7 @@ const bcrypt = require("bcryptjs");
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { AVATARS_DIR } = require("../middlewares/upload.middleware");
+const { isValidPhone } = require("../lib/phone");
 
 const CUSTOMER_ROLE_ID = 5;
 
@@ -21,13 +22,20 @@ const updateProfile = async (req, res) => {
 
   try {
     if (role_id === CUSTOMER_ROLE_ID) {
-      const { full_name, phone, address } = req.body;
+      const { full_name, phone, address, secondary_phone } = req.body;
       if (!full_name) return res.status(400).json({ message: "full_name is required" });
+      if (secondary_phone && !isValidPhone(secondary_phone))
+        return res.status(400).json({ message: "Enter a valid secondary phone number" });
 
-      const profile = await prisma.customer.update({
-        where: { user_id },
-        data: { full_name: full_name.trim(), phone: phone || null, address: address || null },
-      });
+      // Partial update — only touch fields the caller actually sent. A prior
+      // version always wrote `address`/`phone` (defaulting to null when absent),
+      // which silently wiped them out for any client that doesn't send every field.
+      const data = { full_name: full_name.trim() };
+      if (phone !== undefined) data.phone = phone || null;
+      if (address !== undefined) data.address = address || null;
+      if (secondary_phone !== undefined) data.secondary_phone = secondary_phone || null;
+
+      const profile = await prisma.customer.update({ where: { user_id }, data });
       return res.status(200).json({ message: "Profile updated", profile });
     } else {
       const { full_name, phone_no } = req.body;

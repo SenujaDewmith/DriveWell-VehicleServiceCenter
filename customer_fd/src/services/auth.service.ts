@@ -9,6 +9,7 @@ export interface ProfileResponse {
   profile: {
     full_name: string;
     phone: string | null;
+    secondary_phone: string | null;
     address: string | null;
     avatar_url: string | null;
   } | null;

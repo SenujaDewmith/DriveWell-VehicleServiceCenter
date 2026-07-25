@@ -44,7 +44,9 @@ export default function Profile() {
     name: "",
     email: "",
     phone: "",
+    secondaryPhone: "",
   });
+  const [savingProfile, setSavingProfile] = useState(false);
 
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -149,14 +151,31 @@ export default function Profile() {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        secondaryPhone: user.secondaryPhone,
       });
     }
   }, [user, navigate]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateProfile(formData);
-    toast.success("Profile updated successfully!");
+    setSavingProfile(true);
+    try {
+      const { profile } = await profileService.updateProfile({
+        full_name: formData.name,
+        phone: formData.phone,
+        secondary_phone: formData.secondaryPhone,
+      });
+      updateProfile({
+        name: profile.full_name,
+        phone: profile.phone ?? "",
+        secondaryPhone: profile.secondary_phone ?? "",
+      });
+      toast.success("Profile updated successfully!");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update profile");
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   if (!user) return null;
@@ -320,11 +339,23 @@ export default function Profile() {
                     required
                   />
                 </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="secondary-phone">Secondary Phone Number (optional)</Label>
+                  <Input
+                    id="secondary-phone"
+                    type="tel"
+                    value={formData.secondaryPhone}
+                    onChange={(e) =>
+                      setFormData({ ...formData, secondaryPhone: e.target.value })
+                    }
+                  />
+                </div>
                 <Button
                   type="submit"
+                  disabled={savingProfile}
                   className="mt-auto w-full bg-cta text-cta-foreground hover:bg-cta/90"
                 >
-                  Save Changes
+                  {savingProfile ? "Saving..." : "Save Changes"}
                 </Button>
               </form>
             </CardContent>

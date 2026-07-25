@@ -20,6 +20,8 @@ node_modules/
 # ========================
 backend/uploads/packages/*
 !backend/uploads/packages/.gitkeep
+backend/uploads/transfer-documents/*
+!backend/uploads/transfer-documents/.gitkeep
 
 # ========================
 # Logs

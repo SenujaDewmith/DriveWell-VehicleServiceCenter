@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Combobox } from "@/components/ui/combobox";
+import { Badge } from "@/components/ui/badge";
 import {
   vehiclesService,
   type Vehicle,
@@ -23,9 +24,10 @@ import {
   type VehicleMake,
   type VehicleModel,
   type VehicleTypeOption,
+  type TransferRequestStatus,
 } from "@/services/vehicles.service";
 import { YEAR_OPTIONS } from "@/lib/vehicleYears";
-import { Car, Edit, Trash2, Plus, Loader2, Wrench, ChevronRight, RotateCcw } from "lucide-react";
+import { Car, Edit, Trash2, Plus, Loader2, Wrench, ChevronRight, RotateCcw, FileUp } from "lucide-react";
 import { toast } from "sonner";
 
 interface FormErrors {
@@ -33,6 +35,16 @@ interface FormErrors {
   model_id?: string;
   vehicle_type_id?: string;
   plate_no?: string;
+}
+
+function TransferRequestStatusBadge({ status }: { status: TransferRequestStatus }) {
+  if (status === "Approved") {
+    return <Badge variant="outline" className="text-green-600 border-green-600">Approved</Badge>;
+  }
+  if (status === "Rejected") {
+    return <Badge variant="destructive">Rejected</Badge>;
+  }
+  return <Badge variant="outline" className="text-amber-600 border-amber-600">Pending Review</Badge>;
 }
 
 function validateForm(data: {
@@ -54,7 +66,7 @@ function validateForm(data: {
 }
 
 export default function Vehicles() {
-  const { user } = useAuth();
+  const { user, updateProfile: updateAuthProfile } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const vehiclesQuery = useQuery({
@@ -70,6 +82,12 @@ export default function Vehicles() {
     enabled: !!user,
   });
   const detachedVehicles = detachedQuery.data ?? [];
+  const transferRequestsQuery = useQuery({
+    queryKey: ["vehicles", "transfer-requests", "mine"],
+    queryFn: () => vehiclesService.getMyTransferRequests().then((r) => r.requests),
+    enabled: !!user,
+  });
+  const myTransferRequests = transferRequestsQuery.data ?? [];
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -78,6 +96,15 @@ export default function Vehicles() {
   const [claimPrompt, setClaimPrompt] = useState<Vehicle | null>(null);
   const [claiming, setClaiming] = useState(false);
   const [lookingUpPlate, setLookingUpPlate] = useState(false);
+  const [plateBlockedElsewhere, setPlateBlockedElsewhere] = useState(false);
+  const [transferRequestDialogOpen, setTransferRequestDialogOpen] = useState(false);
+  const [transferRequestPlate, setTransferRequestPlate] = useState("");
+  const [logbookFile, setLogbookFile] = useState<File | null>(null);
+  const [nicFile, setNicFile] = useState<File | null>(null);
+  const [submittingTransferRequest, setSubmittingTransferRequest] = useState(false);
+  const [transferRequestError, setTransferRequestError] = useState("");
+  const [contactPhoneChoice, setContactPhoneChoice] = useState<"primary" | "secondary" | "new">("new");
+  const [newContactPhone, setNewContactPhone] = useState("");
 
   const [makes, setMakes] = useState<VehicleMake[]>([]);
   const [models, setModels] = useState<VehicleModel[]>([]);
@@ -145,6 +172,7 @@ export default function Vehicles() {
     setPlateNo("");
     setFormErrors({});
     setPendingModelId(null);
+    setPlateBlockedElsewhere(false);
   };
 
   const openAdd = () => {
@@ -223,9 +251,11 @@ export default function Vehicles() {
           return;
         }
         if (lookup.found && lookup.status === "active_elsewhere") {
-          setFormErrors({ ...errors, plate_no: "This plate is already registered to another active account. Contact DriveWell staff to arrange a transfer." });
+          setPlateBlockedElsewhere(true);
+          setFormErrors({ ...errors, plate_no: "This plate is already registered to another active account." });
           return;
         }
+        setPlateBlockedElsewhere(false);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to look up plate number");
         return;
@@ -270,6 +300,48 @@ export default function Vehicles() {
       toast.error(err instanceof Error ? err.message : "Failed to claim vehicle");
     } finally {
       setClaiming(false);
+    }
+  };
+
+  const resolvedContactPhone =
+    contactPhoneChoice === "primary"
+      ? user?.phone ?? ""
+      : contactPhoneChoice === "secondary"
+        ? user?.secondaryPhone ?? ""
+        : newContactPhone.trim();
+
+  const submitTransferRequest = async () => {
+    if (!logbookFile || !nicFile) {
+      setTransferRequestError("Both a logbook photo and an NIC photo are required");
+      return;
+    }
+    if (!resolvedContactPhone) {
+      setTransferRequestError("A contact phone number is required");
+      return;
+    }
+    setSubmittingTransferRequest(true);
+    setTransferRequestError("");
+    try {
+      const { profile_updated } = await vehiclesService.submitTransferRequest(
+        transferRequestPlate,
+        logbookFile,
+        nicFile,
+        resolvedContactPhone
+      );
+      toast.success(
+        profile_updated
+          ? "Transfer request submitted — this number was also saved to your profile as a secondary contact number"
+          : "Transfer request submitted — you'll be notified once it's reviewed"
+      );
+      if (profile_updated) updateAuthProfile({ secondaryPhone: resolvedContactPhone });
+      setTransferRequestDialogOpen(false);
+      setDialogOpen(false);
+      resetForm();
+      queryClient.invalidateQueries({ queryKey: ["vehicles", "transfer-requests", "mine"] });
+    } catch (err) {
+      setTransferRequestError(err instanceof Error ? err.message : "Failed to submit transfer request");
+    } finally {
+      setSubmittingTransferRequest(false);
     }
   };
 
@@ -429,6 +501,33 @@ export default function Vehicles() {
         </div>
       )}
 
+      {myTransferRequests.length > 0 && (
+        <div className="mt-10">
+          <h2 className="text-lg font-semibold mb-3">My Transfer Requests</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {myTransferRequests.map((request) => (
+              <Card key={request.request_id}>
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h3 className="font-semibold">{request.make} {request.model}</h3>
+                      <p className="text-sm text-muted-foreground">{request.plate_no}</p>
+                    </div>
+                    <TransferRequestStatusBadge status={request.status} />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Submitted {new Date(request.created_at).toLocaleDateString()}
+                  </p>
+                  {request.status === "Rejected" && request.rejection_reason && (
+                    <p className="text-xs text-destructive mt-1">Reason: {request.rejection_reason}</p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
       <Dialog open={dialogOpen} onOpenChange={closeDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -511,10 +610,31 @@ export default function Vehicles() {
                     onChange={(e) => {
                       setPlateNo(e.target.value);
                       if (formErrors.plate_no) setFormErrors({ ...formErrors, plate_no: undefined });
+                      if (plateBlockedElsewhere) setPlateBlockedElsewhere(false);
                     }}
                     className={formErrors.plate_no ? "border-destructive" : ""}
                   />
                   {formErrors.plate_no && <p className="text-xs text-destructive">{formErrors.plate_no}</p>}
+                  {plateBlockedElsewhere && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-1"
+                      onClick={() => {
+                        setTransferRequestPlate(plateNo.trim());
+                        setLogbookFile(null);
+                        setNicFile(null);
+                        setTransferRequestError("");
+                        setNewContactPhone("");
+                        setContactPhoneChoice(user?.phone ? "primary" : user?.secondaryPhone ? "secondary" : "new");
+                        setTransferRequestDialogOpen(true);
+                      }}
+                    >
+                      <FileUp className="mr-2 h-4 w-4" />
+                      Request Ownership Transfer
+                    </Button>
+                  )}
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-2">
@@ -616,6 +736,116 @@ export default function Vehicles() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={transferRequestDialogOpen}
+        onOpenChange={(open) => {
+          if (submittingTransferRequest) return;
+          setTransferRequestDialogOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Request Ownership Transfer</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {transferRequestPlate} is currently registered to another DriveWell account. Upload your vehicle
+              logbook and NIC as verification — a manager will review them before any transfer happens, and the
+              current owner will be notified that a request was filed.
+            </p>
+            {transferRequestError && (
+              <p className="text-sm text-destructive">{transferRequestError}</p>
+            )}
+
+            <div className="space-y-2">
+              <Label>Contact Phone Number <span className="text-destructive">*</span></Label>
+              <p className="text-xs text-muted-foreground">
+                DriveWell staff will use this number to reach you about this request.
+              </p>
+              <div className="space-y-2">
+                {user?.phone && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="contact_phone_choice"
+                      checked={contactPhoneChoice === "primary"}
+                      onChange={() => setContactPhoneChoice("primary")}
+                    />
+                    Primary: {user.phone}
+                  </label>
+                )}
+                {user?.secondaryPhone && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="contact_phone_choice"
+                      checked={contactPhoneChoice === "secondary"}
+                      onChange={() => setContactPhoneChoice("secondary")}
+                    />
+                    Secondary: {user.secondaryPhone}
+                  </label>
+                )}
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="contact_phone_choice"
+                    checked={contactPhoneChoice === "new"}
+                    onChange={() => setContactPhoneChoice("new")}
+                  />
+                  Use a different number
+                </label>
+                {contactPhoneChoice === "new" && (
+                  <Input
+                    type="tel"
+                    placeholder="e.g. 077-1234567"
+                    value={newContactPhone}
+                    onChange={(e) => setNewContactPhone(e.target.value)}
+                    className="mt-1"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="logbook_photo">Vehicle Logbook Photo <span className="text-destructive">*</span></Label>
+              <Input
+                id="logbook_photo"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={(e) => setLogbookFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="nic_photo">Your NIC Photo <span className="text-destructive">*</span></Label>
+              <Input
+                id="nic_photo"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={(e) => setNicFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submittingTransferRequest}
+              onClick={() => setTransferRequestDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-cta text-cta-foreground hover:bg-cta/90"
+              disabled={submittingTransferRequest}
+              onClick={submitTransferRequest}
+            >
+              {submittingTransferRequest && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {submittingTransferRequest ? "Submitting..." : "Submit Request"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
