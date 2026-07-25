@@ -7,6 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Combobox } from "@/components/ui/combobox";
 import {
   vehiclesService,
@@ -59,6 +67,7 @@ export default function Vehicles() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [vehicleToDelete, setVehicleToDelete] = useState<Vehicle | null>(null);
 
   const [makes, setMakes] = useState<VehicleMake[]>([]);
   const [models, setModels] = useState<VehicleModel[]>([]);
@@ -161,7 +170,9 @@ export default function Vehicles() {
     }
   };
 
-  const handleDelete = async (vehicle: Vehicle) => {
+  const confirmDelete = async () => {
+    if (!vehicleToDelete) return;
+    const vehicle = vehicleToDelete;
     setDeletingId(vehicle.vehicle_id);
     try {
       await vehiclesService.deleteVehicle(vehicle.vehicle_id);
@@ -169,6 +180,7 @@ export default function Vehicles() {
         (prev ?? []).filter((v) => v.vehicle_id !== vehicle.vehicle_id)
       );
       toast.success("Vehicle removed");
+      setVehicleToDelete(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete vehicle");
     } finally {
@@ -273,7 +285,7 @@ export default function Vehicles() {
                       disabled={deletingId === vehicle.vehicle_id}
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDelete(vehicle);
+                        setVehicleToDelete(vehicle);
                       }}
                     >
                       {deletingId === vehicle.vehicle_id ? (
@@ -429,6 +441,43 @@ export default function Vehicles() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={!!vehicleToDelete}
+        onOpenChange={(open) => {
+          if (deletingId) return;
+          if (!open) setVehicleToDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {vehicleToDelete?.make} {vehicleToDelete?.model}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove {vehicleToDelete?.plate_no} from your account. This action cannot
+              be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setVehicleToDelete(null)}
+              disabled={!!deletingId}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={!!deletingId}
+            >
+              {deletingId && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {deletingId ? "Deleting..." : "Delete Vehicle"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

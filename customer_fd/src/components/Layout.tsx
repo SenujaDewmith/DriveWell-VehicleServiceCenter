@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
@@ -16,11 +16,18 @@ import { cn } from "@/lib/utils";
 import { BookNowFab } from "@/components/BookNowFab";
 import { Logo } from "@/components/Logo";
 
+// Auth pages run their own focused layout (brand side panel, no nav/footer)
+// so visitors aren't tempted away from signing in/up.
+const NO_CHROME_ROUTES = ["/login", "/register"];
+
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const showChrome = !NO_CHROME_ROUTES.includes(location.pathname);
 
   const handleLogout = async () => {
     await logout();
@@ -43,6 +50,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
+      {showChrome && (
       <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between">
@@ -169,9 +177,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
           )}
         </div>
       </header>
+      )}
 
       <main className="flex-1">{children}</main>
 
+      {showChrome && (
+      <>
       <BookNowFab />
 
       <footer className="border-t border-border bg-secondary text-secondary-foreground">
@@ -214,6 +225,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </footer>
+      </>
+      )}
     </div>
   );
 }
