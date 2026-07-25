@@ -89,6 +89,48 @@ const submitFeedback = async (req, res) => {
   }
 };
 
+// Public — no auth. Only well-rated, commented feedback is fit for marketing display,
+// and only the customer's first name + last initial is exposed (full name is PII).
+const listPublicTestimonials = async (req, res) => {
+  try {
+    const rows = await prisma.feedback.findMany({
+      where: {
+        rating: { gte: 4 },
+        comment: { not: null },
+      },
+      select: {
+        feedback_id: true,
+        rating: true,
+        comment: true,
+        customer: {
+          select: { customer: { select: { full_name: true } } },
+        },
+      },
+      orderBy: [{ rating: "desc" }, { submitted_at: "desc" }],
+      take: 9,
+    });
+
+    const testimonials = rows
+      .filter((f) => f.comment.trim().length > 0 && f.customer.customer?.full_name)
+      .slice(0, 6)
+      .map((f) => {
+        const [first, ...rest] = f.customer.customer.full_name.trim().split(/\s+/);
+        const lastInitial = rest.length ? `${rest[rest.length - 1][0]}.` : "";
+        return {
+          feedback_id: f.feedback_id,
+          rating: f.rating,
+          comment: f.comment,
+          display_name: [first, lastInitial].filter(Boolean).join(" "),
+        };
+      });
+
+    res.status(200).json({ testimonials });
+  } catch (error) {
+    logger.error(`listPublicTestimonials failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 const getFeedbackByBooking = async (req, res) => {
   const { booking_id } = req.params;
   try {
@@ -108,4 +150,4 @@ const getFeedbackByBooking = async (req, res) => {
   }
 };
 
-module.exports = { listFeedback, submitFeedback, getFeedbackByBooking };
+module.exports = { listFeedback, submitFeedback, getFeedbackByBooking, listPublicTestimonials };

@@ -23,9 +23,19 @@ export interface SubmitFeedbackPayload {
   comment?: string;
 }
 
+export interface Testimonial {
+  feedback_id: number;
+  rating: number;
+  comment: string;
+  display_name: string;
+}
+
 export const feedbackService = {
   getFeedback: () => apiClient.get<{ feedback: Feedback[] }>("/feedback"),
 
   submitFeedback: (data: SubmitFeedbackPayload) =>
     apiClient.post<{ message: string }>("/feedback", data),
+
+  // Public — no auth required, used on the landing page.
+  getPublicTestimonials: () => apiClient.get<{ testimonials: Testimonial[] }>("/feedback/public"),
 };

@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
@@ -37,9 +37,13 @@ export function Navbar() {
   const { user, isLoading, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = getNavLinks(!!user);
+
+  const isActiveLink = (to: string) =>
+    to === "/" ? location.pathname === "/" : location.pathname.startsWith(to);
 
   const handleLogout = async () => {
     await logout();
@@ -67,7 +71,9 @@ export function Navbar() {
                 <Link
                   key={link.to}
                   to={link.to}
-                  className="text-sm font-medium text-foreground hover:text-cta transition-colors"
+                  className={`text-sm font-medium transition-colors hover:text-cta ${
+                    isActiveLink(link.to) ? "text-cta" : "text-foreground"
+                  }`}
                 >
                   {link.label}
                 </Link>
@@ -169,7 +175,9 @@ export function Navbar() {
                     <Link
                       key={link.to}
                       to={link.to}
-                      className="text-sm font-medium text-foreground hover:text-cta transition-colors"
+                      className={`text-sm font-medium transition-colors hover:text-cta ${
+                        isActiveLink(link.to) ? "text-cta" : "text-foreground"
+                      }`}
                       onClick={() => setMobileMenuOpen(false)}
                     >
                       {link.label}

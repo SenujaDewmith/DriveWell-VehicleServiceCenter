@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { listFeedback, submitFeedback, getFeedbackByBooking } = require("../controllers/feedback.controller");
+const { listFeedback, submitFeedback, getFeedbackByBooking, listPublicTestimonials } = require("../controllers/feedback.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
 
 /**
@@ -9,6 +9,33 @@ const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware"
  *   name: Feedback
  *   description: Customer ratings and feedback
  */
+
+/**
+ * @swagger
+ * /api/feedback/public:
+ *   get:
+ *     summary: List a curated set of highly-rated testimonials for public/marketing display (no auth)
+ *     tags: [Feedback]
+ *     responses:
+ *       200:
+ *         description: List of testimonials
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 testimonials:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       feedback_id:  { type: integer, example: 1 }
+ *                       rating:       { type: integer, example: 5 }
+ *                       comment:      { type: string, example: "Great service!" }
+ *                       display_name: { type: string, example: "Sarah J." }
+ *       500: { description: Server error }
+ */
+router.get("/public", listPublicTestimonials);
 
 /**
  * @swagger
