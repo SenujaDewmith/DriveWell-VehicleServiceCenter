@@ -1,4 +1,4 @@
-import { Calendar, Clock, FileText, Users, type LucideIcon } from "lucide-react";
+import { Calendar, Clock, CreditCard, UserPlus, type LucideIcon } from "lucide-react";
 
 type Step = {
   step: string;
@@ -10,27 +10,27 @@ type Step = {
 const STEPS: Step[] = [
   {
     step: "1",
-    icon: Users,
-    title: "Register & Add Vehicles",
-    description: "Create your account and add your vehicle's details in minutes",
+    icon: UserPlus,
+    title: "Create Your Account",
+    description: "Sign up in under a minute and get straight to your dashboard — no verification wait",
   },
   {
     step: "2",
     icon: Calendar,
-    title: "Book Your Service",
-    description: "Pick a package and choose a convenient date and time slot",
+    title: "Book in One Flow",
+    description: "Pick a package, choose a date and time slot, then add or select your vehicle",
   },
   {
     step: "3",
     icon: Clock,
-    title: "Track Progress",
-    description: "Follow your service through each stage, from Started to Completed",
+    title: "Track Your Status",
+    description: "Watch your booking move from Booked to Started to Ready for Pickup on your dashboard",
   },
   {
     step: "4",
-    icon: FileText,
-    title: "Review Invoice & Pick Up",
-    description: "Check your itemized invoice once service is done, then collect your vehicle",
+    icon: CreditCard,
+    title: "Pay & Pick Up",
+    description: "Review your itemized invoice and pay at the service center when you collect your vehicle",
   },
 ];
 
@@ -40,7 +40,7 @@ export function HowItWorksSection() {
       <div className="container mx-auto px-4">
         <h2 className="text-4xl font-bold text-center mb-4">How It Works</h2>
         <p className="text-center text-muted-foreground mb-12 text-lg">
-          Four simple steps to a pristine vehicle
+          From sign-up to pickup, here's what to expect
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {STEPS.map((step) => (

@@ -8,6 +8,7 @@ const VEHICLE_INCLUDE = {
   make: { select: { make_id: true, name: true } },
   model: { select: { model_id: true, name: true } },
   vehicle_type: { select: { type_id: true, name: true } },
+  _count: { select: { reservations: true } },
 };
 
 // Bookings that aren't finished yet — these are the only ones that should
@@ -30,6 +31,7 @@ const flattenVehicle = (v) => ({
   plate_no: v.plate_no,
   created_at: v.created_at,
   detached_at: v.detached_at ?? null,
+  has_booking_history: v._count.reservations > 0,
 });
 
 // Fire-and-forget notification to whoever owned the vehicle before this hand-off —
@@ -427,13 +429,22 @@ const detachVehicle = async (req, res) => {
     });
     if (!vehicle) return res.status(404).json({ message: "Vehicle not found" });
 
-    const unresolvedBookingCount = await prisma.reservation.count({
-      where: { vehicle_id: parseInt(id), status: UNRESOLVED_BOOKING_STATUSES },
-    });
+    const [unresolvedBookingCount, totalBookingCount] = await Promise.all([
+      prisma.reservation.count({ where: { vehicle_id: parseInt(id), status: UNRESOLVED_BOOKING_STATUSES } }),
+      prisma.reservation.count({ where: { vehicle_id: parseInt(id) } }),
+    ]);
     if (unresolvedBookingCount > 0) {
       return res.status(400).json({
         message: "This vehicle has an upcoming or in-progress booking and cannot be removed. Cancel or complete the booking first.",
       });
+    }
+
+    // No booking history at all (e.g. added by mistake) — nothing references this row, so it's
+    // safe to actually delete it instead of leaving an orphaned, indefinitely "claimable" record.
+    if (totalBookingCount === 0) {
+      await prisma.vehicle.delete({ where: { vehicle_id: parseInt(id) } });
+      await logActivity(prisma, { user_id, action: "VEHICLE_DELETED", entity_type: "vehicle", entity_id: parseInt(id) });
+      return res.status(200).json({ message: "Vehicle permanently deleted.", permanent: true });
     }
 
     await prisma.vehicle.update({
@@ -441,7 +452,7 @@ const detachVehicle = async (req, res) => {
       data: { customer_id: null, previous_customer_id: user_id, detached_at: new Date() },
     });
     await logActivity(prisma, { user_id, action: "VEHICLE_DETACHED", entity_type: "vehicle", entity_id: parseInt(id) });
-    res.status(200).json({ message: "Vehicle removed from your account. You can restore it any time before someone else claims it." });
+    res.status(200).json({ message: "Ownership removed. You can restore it any time before someone else claims it.", permanent: false });
   } catch (error) {
     logger.error(`detachVehicle failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });

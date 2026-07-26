@@ -183,6 +183,21 @@ describe("POST /api/users/staff", () => {
     expect(second.body.message).toBe("Email already registered");
   });
 
+  test("stores the email lowercased and rejects a case-variant duplicate", async () => {
+    const agent = await managerAgent();
+    const res = await agent.post("/api/users/staff").set("X-Portal", "staff").send({
+      email: "Mixed.Case@Test.local", password: "Passw0rd!", full_name: "Mixed Case", role_id: 4,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.user.email).toBe("mixed.case@test.local");
+
+    const dupe = await agent.post("/api/users/staff").set("X-Portal", "staff").send({
+      email: "MIXED.CASE@TEST.LOCAL", password: "Passw0rd!", full_name: "Someone Else", role_id: 4,
+    });
+    expect(dupe.status).toBe(400);
+    expect(dupe.body.message).toBe("Email already registered");
+  });
+
   test("rejects a non-manager staff account with 403", async () => {
     const { agent } = await staffAgent("Supervisor", { email: "create.supervisor@test.local" });
     const res = await agent.post("/api/users/staff").set("X-Portal", "staff").send({

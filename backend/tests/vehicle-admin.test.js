@@ -134,6 +134,27 @@ describe("POST /api/admin/vehicles/force-transfer", () => {
     expect(res.body.vehicle.customer_id).toBe(newOwner.user_id);
   });
 
+  test("finds the new owner by email regardless of casing (regression: emails are stored lowercase)", async () => {
+    const { agent } = await managerSession();
+    const oldOwner = await createUser("Customer");
+    const vehicle = await createVehicle(oldOwner.user_id, { plate_no: "FTR-0006" });
+
+    // Registers through the real endpoint (not the createUser test helper) so the email is
+    // actually stored the way a real signup would store it — lowercased by auth.schema.js.
+    const registered = await request(app).post("/api/auth/register").send({
+      name: "Case Test",
+      email: "Case.Test@Example.com",
+      password: "Password@123",
+    });
+    expect(registered.status).toBe(201);
+
+    const res = await agent.post("/api/admin/vehicles/force-transfer").set("X-Portal", "staff").send({
+      plate_no: "FTR-0006", new_owner_email: "CASE.TEST@EXAMPLE.COM",
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.vehicle.customer_id).toBe(registered.body.user.user_id);
+  });
+
   test("400 when plate_no or new_owner_email missing", async () => {
     const { agent } = await managerSession();
     const res = await agent.post("/api/admin/vehicles/force-transfer").set("X-Portal", "staff").send({ plate_no: "X" });

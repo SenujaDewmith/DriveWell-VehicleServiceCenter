@@ -39,6 +39,31 @@ describe("POST /api/auth/register", () => {
     expect(second.body.message).toBe("Email already registered");
   });
 
+  test("stores and returns the email lowercased regardless of input casing", async () => {
+    const res = await request(app)
+      .post("/api/auth/register")
+      .send(validRegisterBody({ email: "Nimal.Perera@Test.local" }));
+
+    expect(res.status).toBe(201);
+    expect(res.body.user.email).toBe("nimal.perera@test.local");
+
+    const user = await prisma.user.findUnique({ where: { user_id: res.body.user.user_id } });
+    expect(user.email).toBe("nimal.perera@test.local");
+  });
+
+  test("rejects a duplicate email that only differs by case", async () => {
+    const first = await request(app)
+      .post("/api/auth/register")
+      .send(validRegisterBody({ email: "case.dupe@test.local" }));
+    expect(first.status).toBe(201);
+
+    const second = await request(app)
+      .post("/api/auth/register")
+      .send(validRegisterBody({ email: "Case.Dupe@Test.local" }));
+    expect(second.status).toBe(400);
+    expect(second.body.message).toBe("Email already registered");
+  });
+
   test("rejects a name shorter than 2 characters", async () => {
     const res = await request(app).post("/api/auth/register").send(validRegisterBody({ name: "N" }));
     expect(res.status).toBe(400);
@@ -69,6 +94,21 @@ describe("POST /api/auth/login", () => {
     expect(res.body.user).toEqual({ id: customer.user_id, email: customer.email, role_id: 5 });
     const cookies = res.headers["set-cookie"];
     expect(cookies.some((c) => c.startsWith("customer_token="))).toBe(true);
+  });
+
+  test("logs in successfully when the email casing differs from how it was registered", async () => {
+    const registered = await request(app)
+      .post("/api/auth/register")
+      .send(validRegisterBody({ email: "Casey.Fernando@Test.local" }));
+    expect(registered.status).toBe(201);
+
+    const res = await request(app)
+      .post("/api/auth/login")
+      .set("X-Portal", "customer")
+      .send({ email: "CASEY.FERNANDO@TEST.LOCAL", password: "Password@123" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.email).toBe("casey.fernando@test.local");
   });
 
   test("rejects an incorrect password with 401", async () => {

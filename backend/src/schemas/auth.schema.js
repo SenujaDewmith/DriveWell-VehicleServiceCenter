@@ -10,14 +10,16 @@ const passwordSchema = z
   .regex(/[^A-Za-z0-9\s]/, "Password must contain at least one special character")
   .refine((value) => !/\s/.test(value), "Password must not contain spaces");
 
+// Email is treated as case-insensitive (standard practice) — lowercased here so every
+// register/login lookup and stored row is consistent, regardless of how it was typed.
 const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").trim(),
-  email: z.string().trim().email("Invalid email format"),
+  email: z.string().trim().toLowerCase().email("Invalid email format"),
   password: passwordSchema,
 });
 
 const loginSchema = z.object({
-  email: z.string().trim().email("Invalid email format"),
+  email: z.string().trim().toLowerCase().email("Invalid email format"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   rememberMe: z.boolean().optional().default(false),
 });

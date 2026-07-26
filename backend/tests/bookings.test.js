@@ -1,8 +1,9 @@
 const request = require("supertest");
 const app = require("./helpers/app");
+const prisma = require("../src/lib/prisma");
 const { resetTransactionalTables, seedPackage } = require("./helpers/db");
 const { createUser, loginAs } = require("./helpers/auth");
-const { nextWorkingDate, createVehicle } = require("./helpers/booking");
+const { nextWorkingDate, createVehicle, createReservation } = require("./helpers/booking");
 
 beforeEach(async () => {
   await resetTransactionalTables();
@@ -337,6 +338,69 @@ describe("GET /api/bookings and /api/bookings/:id", () => {
     const { agent } = await staffAgent("Service Center Manager");
     const res = await withPortal(agent, "staff")("get", "/api/bookings/999999");
     expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /api/bookings?vehicle_id — vehicle-scoped service history", () => {
+  // Simulates a vehicle that's changed hands: previousOwner books and completes a service,
+  // then the vehicle is claimed by newOwner (direct prisma write — same effect as
+  // POST /api/vehicles/claim, without re-exercising that flow here).
+  async function claimedVehicleWithHistory() {
+    const pkg = await seedPackage();
+    const { customer: previousOwner, agent: previousAgent } = await customerAgent({ email: "previous@test.local" });
+    const { customer: newOwner, agent: newAgent } = await customerAgent({ email: "new@test.local" });
+    const vehicle = await createVehicle(previousOwner.user_id);
+    const reservation = await createReservation({
+      customerId: previousOwner.user_id,
+      vehicleId: vehicle.vehicle_id,
+      packageId: pkg.package_id,
+      estimatedDuration: pkg.estimated_duration,
+      status: "Completed",
+    });
+    await prisma.vehicle.update({
+      where: { vehicle_id: vehicle.vehicle_id },
+      data: { customer_id: newOwner.user_id, previous_customer_id: previousOwner.user_id, detached_at: null },
+    });
+    return { previousOwner, previousAgent, newOwner, newAgent, vehicle, reservation };
+  }
+
+  test("current owner sees history from a previous owner, with identity/invoice redacted", async () => {
+    const { newAgent, newOwner, vehicle, reservation } = await claimedVehicleWithHistory();
+    const pkg = await seedPackage();
+    await createReservation({
+      customerId: newOwner.user_id,
+      vehicleId: vehicle.vehicle_id,
+      packageId: pkg.package_id,
+      estimatedDuration: pkg.estimated_duration,
+      status: "Completed",
+    });
+
+    const res = await withPortal(newAgent, "customer")("get", `/api/bookings?vehicle_id=${vehicle.vehicle_id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.bookings).toHaveLength(2);
+
+    const previousOwnerRow = res.body.bookings.find((b) => b.reservation_id === reservation.reservation_id);
+    expect(previousOwnerRow.customer_name).toBeUndefined();
+    expect(previousOwnerRow.customer_email).toBeUndefined();
+
+    const ownRow = res.body.bookings.find((b) => b.reservation_id !== reservation.reservation_id);
+    expect(ownRow.customer_name).toBeTruthy();
+    expect(ownRow.customer_email).toBeTruthy();
+  });
+
+  test("403 when requesting vehicle_id for a vehicle you don't currently own", async () => {
+    const { previousAgent, vehicle } = await claimedVehicleWithHistory();
+    const res = await withPortal(previousAgent, "customer")("get", `/api/bookings?vehicle_id=${vehicle.vehicle_id}`);
+    expect(res.status).toBe(403);
+  });
+
+  test("getBooking redacts identity and invoice for a previous owner's booking, viewed by the current owner", async () => {
+    const { newAgent, reservation } = await claimedVehicleWithHistory();
+    const res = await withPortal(newAgent, "customer")("get", `/api/bookings/${reservation.reservation_id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.booking.customer_name).toBeUndefined();
+    expect(res.body.booking.customer_email).toBeUndefined();
+    expect(res.body.booking.invoice).toBeNull();
   });
 });
 

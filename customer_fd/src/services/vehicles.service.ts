@@ -16,6 +16,7 @@ export interface Vehicle {
   plate_no: string;
   created_at: string;
   detached_at: string | null;
+  has_booking_history: boolean;
 }
 
 export type PlateLookupResult =
@@ -72,7 +73,7 @@ export const vehiclesService = {
   updateVehicle: (id: number, data: CreateVehiclePayload) =>
     apiClient.put<{ message: string; vehicle: Vehicle }>(`/vehicles/${id}`, data),
 
-  deleteVehicle: (id: number) => apiClient.delete<{ message: string }>(`/vehicles/${id}`),
+  deleteVehicle: (id: number) => apiClient.delete<{ message: string; permanent: boolean }>(`/vehicles/${id}`),
 
   lookupPlate: (plate: string) =>
     apiClient.get<PlateLookupResult>(`/vehicles/lookup/${encodeURIComponent(plate.trim().toUpperCase())}`),

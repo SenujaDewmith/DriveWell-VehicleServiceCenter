@@ -127,6 +127,10 @@ router.get("/calendar", verifyToken, getMonthAvailability);
  *       - in: query
  *         name: package_id
  *         schema: { type: integer }
+ *       - in: query
+ *         name: vehicle_id
+ *         schema: { type: integer }
+ *         description: Filter by vehicle. For a customer, only the vehicle's current owner may use this — returns every booking ever made against the vehicle (not just their own), redacting the previous owner's identity and invoice details.
  *     responses:
  *       200:
  *         description: List of bookings

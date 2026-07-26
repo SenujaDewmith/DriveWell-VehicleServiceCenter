@@ -21,7 +21,10 @@ const CANCELLATION_CUTOFF_MINUTES = 24 * 60;
 // T&C text changes so bookings always record which wording the customer actually accepted.
 const CURRENT_TERMS_VERSION = "1.0";
 
-const flattenBooking = (r) => ({
+// `hideCustomerIdentity` is set for rows a customer can see only because they currently own
+// the vehicle, not because they authored the booking (vehicle-scoped service history) — the
+// previous owner's name/email must never leak to whoever owns the vehicle now.
+const flattenBooking = (r, { hideCustomerIdentity = false } = {}) => ({
   reservation_id: r.reservation_id,
   booking_ref: r.booking_ref,
   service_date: fmtDate(r.service_date),
@@ -30,8 +33,8 @@ const flattenBooking = (r) => ({
   customer_id: r.customer_id,
   vehicle_id: r.vehicle_id,
   package_id: r.package_id,
-  customer_name: r.customer_user?.customer?.full_name,
-  customer_email: r.customer_user?.email,
+  customer_name: hideCustomerIdentity ? undefined : r.customer_user?.customer?.full_name,
+  customer_email: hideCustomerIdentity ? undefined : r.customer_user?.email,
   ...flattenVehicleRef(r.vehicle),
   package_name: r.package?.name,
   package_price: r.package?.price,
@@ -73,8 +76,8 @@ const BOOKING_DETAIL_INCLUDE = {
 // `includeServiceItems` gates the supervisor's itemized "additional work found" notes out
 // of the customer payload — same policy as invoices.controller.js's includeSupervisorNotes:
 // remarks are customer-facing, but the structured item list stays internal/staff-only.
-const flattenBookingDetail = (r, { includeServiceItems = false } = {}) => ({
-  ...flattenBooking(r),
+const flattenBookingDetail = (r, { includeServiceItems = false, hideCustomerIdentity = false } = {}) => ({
+  ...flattenBooking(r, { hideCustomerIdentity }),
   service_record: r.service_record
     ? {
         remarks: r.service_record.remarks,
@@ -91,36 +94,57 @@ const flattenBookingDetail = (r, { includeServiceItems = false } = {}) => ({
         }),
       }
     : null,
-  invoice: r.invoice
-    ? {
-        invoice_id: r.invoice.invoice_id,
-        base_amount: r.invoice.base_amount,
-        additional_charges: r.invoice.additional_charges,
-        discount: r.invoice.discount,
-        total_amount: r.invoice.total_amount,
-        payment_status: r.invoice.payment_status,
-        payment_method: r.invoice.payment_method,
-        notes: r.invoice.notes,
-        generated_at: r.invoice.generated_at,
-        items: r.invoice.items.map((it) => ({
-          invoice_item_id: it.invoice_item_id,
-          description: it.description,
-          unit_price: it.unit_price,
-          quantity: it.quantity,
-          line_total: it.line_total,
-        })),
-      }
-    : null,
+  // Financial detail of someone else's transaction — not needed for "what was done to
+  // this vehicle" history, so it's dropped entirely rather than just the identity fields.
+  invoice:
+    !hideCustomerIdentity && r.invoice
+      ? {
+          invoice_id: r.invoice.invoice_id,
+          base_amount: r.invoice.base_amount,
+          additional_charges: r.invoice.additional_charges,
+          discount: r.invoice.discount,
+          total_amount: r.invoice.total_amount,
+          payment_status: r.invoice.payment_status,
+          payment_method: r.invoice.payment_method,
+          notes: r.invoice.notes,
+          generated_at: r.invoice.generated_at,
+          items: r.invoice.items.map((it) => ({
+            invoice_item_id: it.invoice_item_id,
+            description: it.description,
+            unit_price: it.unit_price,
+            quantity: it.quantity,
+            line_total: it.line_total,
+          })),
+        }
+      : null,
 });
 
 const listBookings = async (req, res) => {
   const { user_id, role_id } = req.user;
-  const { status, from, to, customer_id, package_id } = req.query;
+  const { status, from, to, customer_id, package_id, vehicle_id } = req.query;
 
   try {
     const where = {};
-    if (role_id === CUSTOMER_ROLE) where.customer_id = user_id;
-    else if (customer_id) where.customer_id = parseInt(customer_id);
+    if (role_id === CUSTOMER_ROLE) {
+      if (vehicle_id) {
+        // Vehicle-scoped service history: only the vehicle's CURRENT owner may request this,
+        // and when they do they see every booking ever made against it (any author) — matches
+        // the "claiming a vehicle inherits its full service history" promise in claimVehicle.
+        const vehicle = await prisma.vehicle.findUnique({
+          where: { vehicle_id: parseInt(vehicle_id) },
+          select: { customer_id: true },
+        });
+        if (!vehicle || vehicle.customer_id !== user_id) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+        where.vehicle_id = parseInt(vehicle_id);
+      } else {
+        where.customer_id = user_id;
+      }
+    } else {
+      if (customer_id) where.customer_id = parseInt(customer_id);
+      if (vehicle_id) where.vehicle_id = parseInt(vehicle_id);
+    }
     if (status) where.status = status;
     if (from || to) {
       where.service_date = {};
@@ -135,7 +159,11 @@ const listBookings = async (req, res) => {
       orderBy: [{ service_date: "desc" }, { created_at: "desc" }],
     });
 
-    res.status(200).json({ bookings: rows.map(flattenBooking) });
+    res.status(200).json({
+      bookings: rows.map((r) =>
+        flattenBooking(r, { hideCustomerIdentity: role_id === CUSTOMER_ROLE && r.customer_id !== user_id })
+      ),
+    });
   } catch (error) {
     logger.error(`listBookings failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
@@ -150,11 +178,21 @@ const getBooking = async (req, res) => {
       include: BOOKING_DETAIL_INCLUDE,
     });
     if (!row) return res.status(404).json({ message: "Booking not found" });
-    if (role_id === CUSTOMER_ROLE && row.customer_id !== user_id)
-      return res.status(403).json({ message: "Access denied" });
+
+    let hideCustomerIdentity = false;
+    if (role_id === CUSTOMER_ROLE && row.customer_id !== user_id) {
+      // Not the author — only allow a read-only, redacted view if this customer currently
+      // owns the vehicle (service history follows the asset, not whoever booked each visit).
+      const vehicle = await prisma.vehicle.findUnique({
+        where: { vehicle_id: row.vehicle_id },
+        select: { customer_id: true },
+      });
+      if (vehicle?.customer_id !== user_id) return res.status(403).json({ message: "Access denied" });
+      hideCustomerIdentity = true;
+    }
 
     res.status(200).json({
-      booking: flattenBookingDetail(row, { includeServiceItems: role_id !== CUSTOMER_ROLE }),
+      booking: flattenBookingDetail(row, { includeServiceItems: role_id !== CUSTOMER_ROLE, hideCustomerIdentity }),
     });
   } catch (error) {
     logger.error(`getBooking failed — ${error.message}`);

@@ -183,68 +183,62 @@ export default function Bookings() {
     setPastVehicleFilter("all");
   };
 
-  const BookingCard = ({ booking, showCancel }: { booking: Booking; showCancel?: boolean }) => (
-    <Card className="hover:shadow-lg transition-shadow">
-      <CardContent className="p-6">
-        <div className="flex flex-col lg:flex-row gap-6">
-          <div className="flex items-start gap-4 flex-1">
-            <div className={`h-16 w-16 rounded-lg flex items-center justify-center shrink-0 ${showCancel ? "bg-cta/10" : "bg-muted"}`}>
-              <Car className={`h-8 w-8 ${showCancel ? "text-cta" : "text-muted-foreground"}`} />
+  const BookingCard = ({ booking, showCancel }: { booking: Booking; showCancel?: boolean }) => {
+    const hoursUntil = showCancel ? hoursUntilAppointment(booking) : null;
+    const cancelBlocked = showCancel && booking.status === "Booked" && hoursUntil !== null && hoursUntil < CANCELLATION_CUTOFF_HOURS;
+    const cancelAllowed = showCancel && booking.status === "Booked" && !cancelBlocked;
+
+    return (
+      <Card className="hover:shadow-md transition-shadow">
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className={`h-11 w-11 rounded-lg flex items-center justify-center shrink-0 ${showCancel ? "bg-cta/10" : "bg-muted"}`}>
+              <Car className={`h-5 w-5 ${showCancel ? "text-cta" : "text-muted-foreground"}`} />
             </div>
-            <div className="flex-1">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <h3 className="text-xl font-semibold">
-                    {booking.make} {booking.model}
-                  </h3>
-                  <p className="text-muted-foreground">{booking.package_name}</p>
-                  {booking.booking_ref && (
-                    <p className="text-xs text-muted-foreground mt-1">Ref: {booking.booking_ref}</p>
-                  )}
-                </div>
-                <Badge variant="outline" className={STATUS_COLORS[booking.status]}>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-semibold truncate">
+                  {booking.make} {booking.model}
+                </h3>
+                <Badge variant="outline" className={`shrink-0 ${STATUS_COLORS[booking.status]}`}>
                   {booking.status}
                 </Badge>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm mt-4">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Calendar className="h-4 w-4" />
-                  <span>{fmtDate(booking.service_date)}</span>
-                </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground mt-0.5">
+                <span>{booking.package_name}</span>
+                <span className="flex items-center gap-1">
+                  <Calendar className="h-3.5 w-3.5" />
+                  {fmtDate(booking.service_date)}
+                </span>
                 {booking.slot_time && (
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Clock className="h-4 w-4" />
-                    <span>{fmtTime(booking.slot_time)}</span>
-                  </div>
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5" />
+                    {fmtTime(booking.slot_time)}
+                  </span>
                 )}
+                {booking.booking_ref && <span className="text-xs">Ref: {booking.booking_ref}</span>}
               </div>
             </div>
-          </div>
-          <div className="flex flex-col gap-2 lg:w-48">
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => navigate(`/bookings/${booking.reservation_id}`)}
-            >
-              <Eye className="mr-2 h-4 w-4" />
-              View Details
-            </Button>
-            {showCancel && booking.status === "Booked" && (() => {
-              const hoursUntil = hoursUntilAppointment(booking);
-              const withinCutoff = hoursUntil !== null && hoursUntil < CANCELLATION_CUTOFF_HOURS;
-              return withinCutoff ? (
-                <div className="space-y-1">
-                  <Button variant="outline" className="w-full" disabled>
-                    Cancel Booking
-                  </Button>
-                  <p className="text-xs text-muted-foreground text-center">
-                    Cancellations must be made at least {CANCELLATION_CUTOFF_HOURS}h ahead — please call us for urgent changes.
-                  </p>
-                </div>
-              ) : (
+
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(`/bookings/${booking.reservation_id}`)}
+              >
+                <Eye className="mr-2 h-4 w-4" />
+                View Details
+              </Button>
+              {cancelBlocked && (
+                <Button variant="outline" size="sm" disabled>
+                  Cancel Booking
+                </Button>
+              )}
+              {cancelAllowed && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="outline" className="w-full text-destructive hover:text-destructive">
+                    <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
                       Cancel Booking
                     </Button>
                   </AlertDialogTrigger>
@@ -267,13 +261,19 @@ export default function Bookings() {
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
-              );
-            })()}
+              )}
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+
+          {cancelBlocked && (
+            <p className="text-xs text-muted-foreground mt-2 sm:text-right">
+              Cancellations must be made at least {CANCELLATION_CUTOFF_HOURS}h ahead — please call us for urgent changes.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">

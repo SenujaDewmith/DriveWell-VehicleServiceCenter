@@ -61,9 +61,13 @@ const createStaff = async (req, res) => {
   if (password.length < 6)
     return res.status(400).json({ message: "Password must be at least 6 characters" });
 
+  // Email is treated as case-insensitive (same policy as auth.schema.js) — no Zod schema
+  // guards this route, so it's normalized here instead.
+  const normalizedEmail = email.trim().toLowerCase();
+
   try {
     const user = await prisma.$transaction(async (tx) => {
-      const existing = await tx.user.findUnique({ where: { email } });
+      const existing = await tx.user.findUnique({ where: { email: normalizedEmail } });
       if (existing) {
         const err = new Error("Email already registered"); err.status = 400; throw err;
       }
@@ -71,7 +75,7 @@ const createStaff = async (req, res) => {
       const hash = await bcrypt.hash(password, 10);
       return tx.user.create({
         data: {
-          email,
+          email: normalizedEmail,
           password_hash: hash,
           role_id: parseInt(role_id),
           staff: { create: { full_name: full_name.trim(), phone_no: phone_no || null } },
@@ -98,7 +102,7 @@ const updateStaff = async (req, res) => {
   try {
     await prisma.$transaction(async (tx) => {
       if (email) {
-        await tx.user.update({ where: { user_id: parseInt(id) }, data: { email } });
+        await tx.user.update({ where: { user_id: parseInt(id) }, data: { email: email.trim().toLowerCase() } });
       }
       const existing = await tx.staff.findUnique({ where: { user_id: parseInt(id) } });
       if (!existing) {

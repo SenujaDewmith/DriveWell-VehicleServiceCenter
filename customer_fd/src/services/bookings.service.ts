@@ -39,6 +39,9 @@ export interface Booking {
   service_date: string;
   status: "Booked" | "Started" | "In Progress" | "Completed" | "Ready for Pickup" | "Cancelled" | "No-show";
   created_at: string;
+  // Whoever authored the booking — present even when customer_name/customer_email are
+  // withheld (vehicle service history), so the UI can still tell "is this my own booking".
+  customer_id?: number;
   vehicle_id: number;
   package_id: number;
   make?: string;
@@ -96,6 +99,11 @@ export const bookingsService = {
   getBookings: () => apiClient.get<{ bookings: Booking[] }>("/bookings"),
 
   getBooking: (id: number) => apiClient.get<{ booking: Booking }>(`/bookings/${id}`),
+
+  // Full history for a vehicle you currently own, including bookings made by a previous
+  // owner (redacted server-side) — powers the per-vehicle "Service History" page.
+  getVehicleHistory: (vehicleId: number) =>
+    apiClient.get<{ bookings: Booking[] }>(`/bookings?vehicle_id=${vehicleId}`),
 
   createBooking: (data: CreateBookingPayload) =>
     apiClient.post<{ message: string; booking_ref: string; reservation_id: number }>("/bookings", data),

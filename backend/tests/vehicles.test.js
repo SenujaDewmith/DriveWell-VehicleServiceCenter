@@ -582,17 +582,16 @@ describe("PUT /api/vehicles/:id", () => {
 });
 
 describe("DELETE /api/vehicles/:id", () => {
-  test("detaches a vehicle with no unresolved bookings", async () => {
+  test("permanently deletes a vehicle with no booking history at all", async () => {
     const { agent, customer } = await customerSession();
     const vehicle = await createVehicle(customer.user_id, { plate_no: "DEL-0001" });
 
     const res = await agent.delete(`/api/vehicles/${vehicle.vehicle_id}`).set("X-Portal", "customer");
     expect(res.status).toBe(200);
+    expect(res.body.permanent).toBe(true);
 
     const updated = await prisma.vehicle.findUnique({ where: { vehicle_id: vehicle.vehicle_id } });
-    expect(updated.customer_id).toBeNull();
-    expect(updated.previous_customer_id).toBe(customer.user_id);
-    expect(updated.detached_at).not.toBeNull();
+    expect(updated).toBeNull();
   });
 
   test("400 when the vehicle has an upcoming/in-progress booking", async () => {
@@ -608,7 +607,7 @@ describe("DELETE /api/vehicles/:id", () => {
     expect(unchanged.customer_id).toBe(customer.user_id);
   });
 
-  test("completed bookings don't block detach", async () => {
+  test("completed bookings don't block detach, and soft-detach (not delete) the vehicle", async () => {
     const { agent, customer } = await customerSession();
     const vehicle = await createVehicle(customer.user_id, { plate_no: "DEL-0003" });
     const pkg = await seedPackage();
@@ -616,6 +615,12 @@ describe("DELETE /api/vehicles/:id", () => {
 
     const res = await agent.delete(`/api/vehicles/${vehicle.vehicle_id}`).set("X-Portal", "customer");
     expect(res.status).toBe(200);
+    expect(res.body.permanent).toBe(false);
+
+    const updated = await prisma.vehicle.findUnique({ where: { vehicle_id: vehicle.vehicle_id } });
+    expect(updated.customer_id).toBeNull();
+    expect(updated.previous_customer_id).toBe(customer.user_id);
+    expect(updated.detached_at).not.toBeNull();
   });
 
   test("404 when the vehicle doesn't belong to the authenticated customer", async () => {

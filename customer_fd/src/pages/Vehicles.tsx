@@ -279,12 +279,12 @@ export default function Vehicles() {
     const vehicle = vehicleToDelete;
     setDeletingId(vehicle.vehicle_id);
     try {
-      await vehiclesService.deleteVehicle(vehicle.vehicle_id);
+      const { permanent } = await vehiclesService.deleteVehicle(vehicle.vehicle_id);
       queryClient.setQueryData<Vehicle[]>(["vehicles"], (prev) =>
         (prev ?? []).filter((v) => v.vehicle_id !== vehicle.vehicle_id)
       );
       queryClient.invalidateQueries({ queryKey: ["vehicles", "detached"] });
-      toast.success("Vehicle removed");
+      toast.success(permanent ? "Vehicle permanently deleted" : "Ownership removed");
       setVehicleToDelete(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete vehicle");
@@ -473,7 +473,7 @@ export default function Vehicles() {
             <Card
               key={vehicle.vehicle_id}
               className="hover:shadow-lg transition-shadow cursor-pointer"
-              onClick={() => navigate(`/bookings?vehicle=${vehicle.vehicle_id}`)}
+              onClick={() => navigate(`/vehicles/${vehicle.vehicle_id}/history`)}
             >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
@@ -812,11 +812,14 @@ export default function Vehicles() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Remove {vehicleToDelete?.make} {vehicleToDelete?.model}?
+              {vehicleToDelete?.has_booking_history
+                ? `Remove ${vehicleToDelete?.make} ${vehicleToDelete?.model}?`
+                : `Permanently delete ${vehicleToDelete?.make} ${vehicleToDelete?.model}?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove {vehicleToDelete?.plate_no} from your account. It won't be deleted — you can
-              restore it from Recently Removed any time before someone else claims it.
+              {vehicleToDelete?.has_booking_history
+                ? `This will remove your ownership of ${vehicleToDelete?.plate_no}. It won't be deleted — you can restore it from Recently Removed any time before someone else claims it.`
+                : `${vehicleToDelete?.plate_no} has no service history, so this will permanently delete it. This action cannot be undone.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -833,7 +836,11 @@ export default function Vehicles() {
               disabled={!!deletingId}
             >
               {deletingId && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {deletingId ? "Removing..." : "Remove Vehicle"}
+              {deletingId
+                ? "Removing..."
+                : vehicleToDelete?.has_booking_history
+                  ? "Remove Ownership"
+                  : "Delete Permanently"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -3,8 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -147,7 +148,14 @@ export default function BookingDetails() {
 
   const invoice = booking.invoice;
   const serviceRecord = booking.service_record;
-  const backToBookings = () => navigate(`/bookings?tab=${bookingListTab(booking.status)}`);
+  // Cross-owner bookings only ever reach this page via a vehicle's Service History (the
+  // backend only allows viewing another customer's booking when you currently own its
+  // vehicle) — "Back" should return there, since it won't appear in "My Bookings" at all.
+  const isOwnBooking = booking.customer_id === undefined || String(booking.customer_id) === user.id;
+  const backToBookings = () =>
+    isOwnBooking
+      ? navigate(`/bookings?tab=${bookingListTab(booking.status)}`)
+      : navigate(`/vehicles/${booking.vehicle_id}/history`);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
@@ -164,265 +172,262 @@ export default function BookingDetails() {
           </Badge>
         </div>
         <p className="text-muted-foreground">Ref: {booking.booking_ref}</p>
+        {!isOwnBooking && (
+          <p className="text-sm text-muted-foreground mt-2">
+            This service was recorded before you owned this vehicle.
+          </p>
+        )}
       </div>
 
       <div className="space-y-6">
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Car className="h-5 w-5" />
-              Vehicle Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Vehicle</p>
-                <p className="font-semibold">{booking.make} {booking.model}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Plate Number</p>
-                <p className="font-semibold">{booking.plate_no ?? "—"}</p>
-              </div>
-              {booking.vehicle_type && (
+          <CardContent className="p-6 space-y-6">
+            <section>
+              <h2 className="flex items-center gap-2 font-semibold mb-4">
+                <Car className="h-5 w-5 text-cta" />
+                Vehicle Information
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Vehicle Type</p>
-                  <p className="font-semibold">{booking.vehicle_type}</p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Service Package</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <p className="text-xl font-semibold mb-1">{booking.package_name}</p>
-                {booking.estimated_duration && (
-                  <p className="text-muted-foreground">Duration: {fmtDuration(booking.estimated_duration)}</p>
-                )}
-              </div>
-              {booking.package_price && (
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-cta">
-                    LKR {parseFloat(booking.package_price).toLocaleString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Upwards — see invoice for final amount</p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Appointment Details
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 bg-cta/10 rounded-lg flex items-center justify-center">
-                  <Calendar className="h-5 w-5 text-cta" />
+                  <p className="text-sm text-muted-foreground mb-1">Vehicle</p>
+                  <p className="font-semibold">{booking.make} {booking.model}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Service Date</p>
-                  <p className="font-semibold">{fmtDate(booking.service_date)}</p>
+                  <p className="text-sm text-muted-foreground mb-1">Plate Number</p>
+                  <p className="font-semibold">{booking.plate_no ?? "—"}</p>
                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 bg-cta/10 rounded-lg flex items-center justify-center">
-                  <Clock className="h-5 w-5 text-cta" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Time Slot</p>
-                  <p className="font-semibold">
-                    {booking.slot_time
-                      ? `${fmtTime(booking.slot_time)}${booking.slot_end_time ? ` - ${fmtTime(booking.slot_end_time)}` : ""}`
-                      : "To be confirmed"}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {serviceRecord && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Wrench className="h-5 w-5" />
-                Service Progress
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap items-center gap-6 text-sm">
-                {serviceRecord.started_at && (
+                {booking.vehicle_type && (
                   <div>
-                    <p className="text-xs text-muted-foreground mb-0.5">Started</p>
-                    <p className="font-medium">{fmtDateTime(serviceRecord.started_at)}</p>
+                    <p className="text-sm text-muted-foreground mb-1">Vehicle Type</p>
+                    <p className="font-semibold">{booking.vehicle_type}</p>
                   </div>
                 )}
-                {serviceRecord.completed_at && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-0.5">Completed</p>
-                    <p className="font-medium">{fmtDateTime(serviceRecord.completed_at)}</p>
+              </div>
+            </section>
+
+            <Separator />
+
+            <section>
+              <h2 className="font-semibold mb-4">Service Package</h2>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xl font-semibold mb-1">{booking.package_name}</p>
+                  {booking.estimated_duration && (
+                    <p className="text-muted-foreground">Duration: {fmtDuration(booking.estimated_duration)}</p>
+                  )}
+                </div>
+                {booking.package_price && (
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-cta">
+                      LKR {parseFloat(booking.package_price).toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Upwards — see invoice for final amount</p>
                   </div>
                 )}
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Quality Check</p>
-                  <p className={`font-medium flex items-center gap-1 ${serviceRecord.quality_checked ? "text-cta" : "text-muted-foreground"}`}>
-                    {serviceRecord.quality_checked ? (
-                      <>
-                        <CheckCircle className="h-4 w-4" /> Passed
-                      </>
-                    ) : (
-                      "Pending"
-                    )}
-                  </p>
+              </div>
+            </section>
+
+            <Separator />
+
+            <section>
+              <h2 className="flex items-center gap-2 font-semibold mb-4">
+                <Calendar className="h-5 w-5 text-cta" />
+                Appointment Details
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 bg-cta/10 rounded-lg flex items-center justify-center">
+                    <Calendar className="h-5 w-5 text-cta" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Service Date</p>
+                    <p className="font-semibold">{fmtDate(booking.service_date)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 bg-cta/10 rounded-lg flex items-center justify-center">
+                    <Clock className="h-5 w-5 text-cta" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Time Slot</p>
+                    <p className="font-semibold">
+                      {booking.slot_time
+                        ? `${fmtTime(booking.slot_time)}${booking.slot_end_time ? ` - ${fmtTime(booking.slot_end_time)}` : ""}`
+                        : "To be confirmed"}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        )}
+            </section>
 
-        {serviceRecord?.remarks && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Supervisor's Remarks
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm">{serviceRecord.remarks}</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {serviceRecord?.has_oil_change && (() => {
-          const dueDate = serviceRecord.completed_at
-            ? addMonths(serviceRecord.completed_at, SERVICE_DUE_MONTHS)
-            : null;
-          return (
-            <Card className="border-2 border-cta/20 bg-cta/5">
-              <CardContent className="flex items-start gap-3 py-4">
-                <Gauge className="h-5 w-5 text-cta shrink-0 mt-0.5" />
-                <div className="text-sm space-y-1">
-                  <p>
-                    Odometer at this service:{" "}
-                    <span className="font-medium">{serviceRecord.current_odometer?.toLocaleString() ?? "—"} km</span>
-                  </p>
-                  <p>
-                    Next service due at{" "}
-                    <span className="font-semibold text-cta">
-                      {serviceRecord.next_service_odometer?.toLocaleString() ?? "—"} km
-                    </span>
-                    {dueDate && (
-                      <>
-                        {" "}or by <span className="font-semibold text-cta">{fmtDate(dueDate)}</span>
-                      </>
+            {serviceRecord && (
+              <>
+                <Separator />
+                <section>
+                  <h2 className="flex items-center gap-2 font-semibold mb-4">
+                    <Wrench className="h-5 w-5 text-cta" />
+                    Service Progress
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-6 text-sm">
+                    {serviceRecord.started_at && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-0.5">Started</p>
+                        <p className="font-medium">{fmtDateTime(serviceRecord.started_at)}</p>
+                      </div>
                     )}
-                    {" "}— whichever comes first.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })()}
+                    {serviceRecord.completed_at && (
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-0.5">Completed</p>
+                        <p className="font-medium">{fmtDateTime(serviceRecord.completed_at)}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-0.5">Quality Check</p>
+                      <p className={`font-medium flex items-center gap-1 ${serviceRecord.quality_checked ? "text-cta" : "text-muted-foreground"}`}>
+                        {serviceRecord.quality_checked ? (
+                          <>
+                            <CheckCircle className="h-4 w-4" /> Passed
+                          </>
+                        ) : (
+                          "Pending"
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </section>
+              </>
+            )}
 
-        {invoice && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Invoice
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Badge
-                  variant="outline"
-                  className={
-                    invoice.payment_status === "Paid"
-                      ? "bg-status-completed/10 text-status-completed border-status-completed/20"
-                      : "bg-status-booked/10 text-status-booked border-status-booked/20"
-                  }
-                >
-                  {invoice.payment_status}
+            {serviceRecord?.remarks && (
+              <>
+                <Separator />
+                <section>
+                  <h2 className="flex items-center gap-2 font-semibold mb-4">
+                    <FileText className="h-5 w-5 text-cta" />
+                    Supervisor's Remarks
+                  </h2>
+                  <p className="text-sm">{serviceRecord.remarks}</p>
+                </section>
+              </>
+            )}
+
+            {serviceRecord?.has_oil_change && (() => {
+              const dueDate = serviceRecord.completed_at
+                ? addMonths(serviceRecord.completed_at, SERVICE_DUE_MONTHS)
+                : null;
+              return (
+                <>
+                  <Separator />
+                  <section className="flex items-start gap-3 rounded-lg border border-cta/20 bg-cta/5 p-4">
+                    <Gauge className="h-5 w-5 text-cta shrink-0 mt-0.5" />
+                    <div className="text-sm space-y-1">
+                      <p>
+                        Odometer at this service:{" "}
+                        <span className="font-medium">{serviceRecord.current_odometer?.toLocaleString() ?? "—"} km</span>
+                      </p>
+                      <p>
+                        Next service due at{" "}
+                        <span className="font-semibold text-cta">
+                          {serviceRecord.next_service_odometer?.toLocaleString() ?? "—"} km
+                        </span>
+                        {dueDate && (
+                          <>
+                            {" "}or by <span className="font-semibold text-cta">{fmtDate(dueDate)}</span>
+                          </>
+                        )}
+                        {" "}— whichever comes first.
+                      </p>
+                    </div>
+                  </section>
+                </>
+              );
+            })()}
+
+            {invoice && (
+              <>
+                <Separator />
+                <section>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="flex items-center gap-2 font-semibold">
+                      <FileText className="h-5 w-5 text-cta" />
+                      Invoice
+                    </h2>
+                    <Badge
+                      variant="outline"
+                      className={
+                        invoice.payment_status === "Paid"
+                          ? "bg-status-completed/10 text-status-completed border-status-completed/20"
+                          : "bg-status-booked/10 text-status-booked border-status-booked/20"
+                      }
+                    >
+                      {invoice.payment_status}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    {new Date(invoice.generated_at).toLocaleDateString("en-LK")}
+                  </p>
+
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">{booking.package_name}</span>
+                      <span className="font-medium">LKR {parseFloat(invoice.base_amount).toLocaleString()}</span>
+                    </div>
+                    {invoice.items.map((item) => (
+                      <div key={item.invoice_item_id} className="flex justify-between">
+                        <span className="text-muted-foreground">
+                          {item.description}{item.quantity > 1 ? ` ×${item.quantity}` : ""}
+                        </span>
+                        <span className="font-medium">LKR {parseFloat(item.line_total).toLocaleString()}</span>
+                      </div>
+                    ))}
+                    {parseFloat(invoice.discount) > 0 && (
+                      <div className="flex justify-between text-cta">
+                        <span>Discount</span>
+                        <span>-LKR {parseFloat(invoice.discount).toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-between text-base font-bold pt-3 mt-3 border-t">
+                    <span>Total</span>
+                    <span className="text-cta">LKR {parseFloat(invoice.total_amount).toLocaleString()}</span>
+                  </div>
+
+                  {invoice.payment_method && (
+                    <p className="text-xs text-muted-foreground mt-3">Paid via {invoice.payment_method}</p>
+                  )}
+                  {invoice.notes && (
+                    <p className="text-xs text-muted-foreground pt-3 mt-3 border-t">{invoice.notes}</p>
+                  )}
+
+                  <Button variant="outline" className="w-full mt-4" onClick={() => window.print()}>
+                    <Printer className="mr-2 h-4 w-4" />
+                    Print Invoice
+                  </Button>
+                </section>
+              </>
+            )}
+
+            <Separator />
+
+            <section>
+              <h2 className="flex items-center gap-2 font-semibold mb-4">
+                <CheckCircle className="h-5 w-5 text-cta" />
+                Current Status
+              </h2>
+              <div className="flex items-center gap-3">
+                <Badge variant="outline" className={`text-base py-1 px-3 ${STATUS_COLORS[booking.status]}`}>
+                  {booking.status}
                 </Badge>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(invoice.generated_at).toLocaleDateString("en-LK")}
-                </span>
+                <p className="text-sm text-muted-foreground">
+                  Booked on {new Date(booking.created_at).toLocaleDateString("en-LK")}
+                </p>
               </div>
-
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">{booking.package_name}</span>
-                  <span className="font-medium">LKR {parseFloat(invoice.base_amount).toLocaleString()}</span>
-                </div>
-                {invoice.items.map((item) => (
-                  <div key={item.invoice_item_id} className="flex justify-between">
-                    <span className="text-muted-foreground">
-                      {item.description}{item.quantity > 1 ? ` ×${item.quantity}` : ""}
-                    </span>
-                    <span className="font-medium">LKR {parseFloat(item.line_total).toLocaleString()}</span>
-                  </div>
-                ))}
-                {parseFloat(invoice.discount) > 0 && (
-                  <div className="flex justify-between text-cta">
-                    <span>Discount</span>
-                    <span>-LKR {parseFloat(invoice.discount).toLocaleString()}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-between text-base font-bold pt-3 border-t">
-                <span>Total</span>
-                <span className="text-cta">LKR {parseFloat(invoice.total_amount).toLocaleString()}</span>
-              </div>
-
-              {invoice.payment_method && (
-                <p className="text-xs text-muted-foreground">Paid via {invoice.payment_method}</p>
-              )}
-              {invoice.notes && (
-                <p className="text-xs text-muted-foreground pt-3 border-t">{invoice.notes}</p>
-              )}
-
-              <Button variant="outline" className="w-full" onClick={() => window.print()}>
-                <Printer className="mr-2 h-4 w-4" />
-                Print Invoice
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-cta" />
-              Current Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-3">
-              <Badge variant="outline" className={`text-base py-1 px-3 ${STATUS_COLORS[booking.status]}`}>
-                {booking.status}
-              </Badge>
-              <p className="text-sm text-muted-foreground">
-                Booked on {new Date(booking.created_at).toLocaleDateString("en-LK")}
-              </p>
-            </div>
+            </section>
           </CardContent>
         </Card>
 
-        {booking.status === "Booked" && (
+        {isOwnBooking && booking.status === "Booked" && (
           canSelfCancel(booking) ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -471,7 +476,7 @@ export default function BookingDetails() {
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back
               </Button>
-              {!hasFeedback && (
+              {isOwnBooking && !hasFeedback && (
                 <Button
                   className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90"
                   onClick={() => navigate(`/feedback?booking=${booking.reservation_id}`)}

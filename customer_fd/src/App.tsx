@@ -16,6 +16,7 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 import Vehicles from "./pages/Vehicles";
+import VehicleServiceHistory from "./pages/VehicleServiceHistory";
 import Services from "./pages/Services";
 import BookService from "./pages/BookService";
 import Bookings from "./pages/Bookings";
@@ -91,6 +92,7 @@ const App = () => (
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
                 <Route path="/vehicles" element={<ProtectedRoute><Vehicles /></ProtectedRoute>} />
+                <Route path="/vehicles/:id/history" element={<ProtectedRoute><VehicleServiceHistory /></ProtectedRoute>} />
                 {/* Not wrapped in ProtectedRoute — BookService gates itself with an inline
                     AuthModal so an unauthenticated visitor keeps their in-progress selection
                     (e.g. ?package=) instead of being redirected away to /login. */}
