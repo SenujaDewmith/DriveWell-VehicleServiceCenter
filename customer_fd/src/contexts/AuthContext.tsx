@@ -52,9 +52,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // cached data. Without clearing the cache, a guest who was previously logged
   // in (or whose session just expired) can still see that stale data, which is
   // enough to drive the app into calling authenticated-only endpoints as a guest.
+  //
+  // Only clear when we were actually logged in: the initial session check on
+  // load also 401s for a plain guest (no cookie yet), and that's not a "session
+  // expired" event — clearing then would wipe unrelated public queries (e.g.
+  // the landing page's packages fetch) that were resolving at the same time.
   const clearUser = useCallback(() => {
-    setUser(null);
-    queryClient.clear();
+    setUser((prev) => {
+      if (prev) queryClient.clear();
+      return null;
+    });
   }, [queryClient]);
 
   // Verify the session with the backend on load instead of trusting cached client
