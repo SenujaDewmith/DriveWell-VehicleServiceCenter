@@ -43,6 +43,23 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return user ? <>{children}</> : <Navigate to="/login" />;
 }
 
+// Inverse of ProtectedRoute — keeps an already-authenticated user off /login
+// and /register (e.g. hitting the URL directly or the back button after
+// logging in) instead of showing them an auth form there's no reason to fill in.
+function GuestRoute({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center py-24">
+        <Loader2 className="h-8 w-8 animate-spin text-cta" />
+      </div>
+    );
+  }
+
+  return user ? <Navigate to="/dashboard" replace /> : <>{children}</>;
+}
+
 // Plain BrowserRouter (not the data-router API) doesn't reset scroll on navigation —
 // without this, going from a scrolled-down list to a details page (or back) lands
 // wherever the browser last left the viewport instead of the top of the new page.
@@ -66,8 +83,8 @@ const App = () => (
             <Layout>
               <Routes>
                 <Route path="/" element={<Landing />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/register" element={<Register />} />
+                <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
+                <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
                 <Route path="/services" element={<Services />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/faq" element={<FAQ />} />

@@ -232,7 +232,18 @@ export default function Dashboard() {
                         <div className="h-3 w-3 rounded-full bg-cta" />
                         {idx !== recentActivity.length - 1 && <div className="w-0.5 h-full bg-border mt-1" />}
                       </div>
-                      <div className="flex-1 pb-4">
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="flex-1 pb-4 -m-2 p-2 rounded-lg cursor-pointer hover:bg-muted/30 transition-colors"
+                        onClick={() => navigate(`/bookings/${booking.reservation_id}`)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            navigate(`/bookings/${booking.reservation_id}`);
+                          }
+                        }}
+                      >
                         <p className="text-sm font-medium">
                           {booking.make} {booking.model} — {booking.status}
                         </p>

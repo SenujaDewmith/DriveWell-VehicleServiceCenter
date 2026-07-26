@@ -13,6 +13,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Moon, Sun, Menu, User, LogOut, Car, Calendar, FileText, Star } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Logo } from "@/components/Logo";
 
 type NavLink = { to: string; label: string };
@@ -48,6 +49,7 @@ export function Navbar() {
   const handleLogout = async () => {
     await logout();
     navigate("/");
+    toast.success("Logged out successfully");
   };
 
   return (
