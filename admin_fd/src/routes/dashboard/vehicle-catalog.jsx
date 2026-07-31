@@ -18,6 +18,16 @@ import {
 const inputClass = (hasError) =>
   `w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${hasError ? "border-destructive" : "border-border"}`;
 
+// Fast client-side pre-check so a duplicate name is caught immediately, without a round
+// trip — the backend still enforces this authoritatively (case-insensitively, and via a
+// DB unique constraint as a backstop), so a stale/incomplete client list can't let a real
+// duplicate through, it just means this pre-check occasionally misses one and the save
+// request comes back with the same error instead.
+const isDuplicateName = (items, name, idField, excludeId) =>
+  items.some(
+    (item) => item.name.toLowerCase() === name.toLowerCase() && item[idField] !== excludeId,
+  );
+
 // ---- Makes tab --------------------------------------------------------------
 
 function MakesTab() {
@@ -58,17 +68,22 @@ function MakesTab() {
   };
 
   const save = async () => {
-    if (!name.trim()) {
+    const trimmed = name.trim();
+    if (!trimmed) {
       setNameError("Name is required");
+      return;
+    }
+    if (isDuplicateName(makes, trimmed, "make_id", editing?.make_id)) {
+      setNameError("A make with this name already exists");
       return;
     }
     setSaving(true);
     setPageError("");
     try {
       if (editing) {
-        await api.put(`/api/admin/vehicle-catalog/makes/${editing.make_id}`, { name: name.trim() });
+        await api.put(`/api/admin/vehicle-catalog/makes/${editing.make_id}`, { name: trimmed });
       } else {
-        await api.post("/api/admin/vehicle-catalog/makes", { name: name.trim() });
+        await api.post("/api/admin/vehicle-catalog/makes", { name: trimmed });
       }
       setShowForm(false);
       load();
@@ -269,17 +284,22 @@ function TypesTab() {
   };
 
   const save = async () => {
-    if (!name.trim()) {
+    const trimmed = name.trim();
+    if (!trimmed) {
       setNameError("Name is required");
+      return;
+    }
+    if (isDuplicateName(types, trimmed, "type_id", editing?.type_id)) {
+      setNameError("A type with this name already exists");
       return;
     }
     setSaving(true);
     setPageError("");
     try {
       if (editing) {
-        await api.put(`/api/admin/vehicle-catalog/types/${editing.type_id}`, { name: name.trim() });
+        await api.put(`/api/admin/vehicle-catalog/types/${editing.type_id}`, { name: trimmed });
       } else {
-        await api.post("/api/admin/vehicle-catalog/types", { name: name.trim() });
+        await api.post("/api/admin/vehicle-catalog/types", { name: trimmed });
       }
       setShowForm(false);
       load();
@@ -461,6 +481,7 @@ function ModelsTab() {
   const [form, setForm] = useState(EMPTY_MODEL_FORM);
   const [nameError, setNameError] = useState("");
   const [makeError, setMakeError] = useState("");
+  const [yearError, setYearError] = useState("");
   const [saving, setSaving] = useState(false);
   const [pageError, setPageError] = useState("");
 
@@ -497,6 +518,7 @@ function ModelsTab() {
     setForm({ ...EMPTY_MODEL_FORM, make_id: makeFilter });
     setNameError("");
     setMakeError("");
+    setYearError("");
     setShowForm(true);
     setPageError("");
   };
@@ -512,18 +534,34 @@ function ModelsTab() {
     });
     setNameError("");
     setMakeError("");
+    setYearError("");
     setShowForm(true);
     setPageError("");
   };
 
   const save = async () => {
     let hasError = false;
-    if (!form.name.trim()) {
+    const trimmedName = form.name.trim();
+    if (!trimmedName) {
       setNameError("Name is required");
+      hasError = true;
+    } else if (
+      isDuplicateName(
+        models.filter((m) => m.make_id === parseInt(form.make_id)),
+        trimmedName,
+        "model_id",
+        editing?.model_id,
+      )
+    ) {
+      setNameError("A model with this name already exists for this make");
       hasError = true;
     }
     if (!form.make_id) {
       setMakeError("Make is required");
+      hasError = true;
+    }
+    if (form.start_year && form.end_year && parseInt(form.start_year) > parseInt(form.end_year)) {
+      setYearError("Start year must be before or equal to end year");
       hasError = true;
     }
     if (hasError) return;
@@ -531,7 +569,7 @@ function ModelsTab() {
     setSaving(true);
     setPageError("");
     const payload = {
-      name: form.name.trim(),
+      name: trimmedName,
       make_id: parseInt(form.make_id),
       vehicle_type_id: form.vehicle_type_id ? parseInt(form.vehicle_type_id) : null,
       start_year: form.start_year ? parseInt(form.start_year) : null,
@@ -659,22 +697,31 @@ function ModelsTab() {
                 <label className="text-sm font-medium text-muted-foreground">Start Year</label>
                 <input
                   type="number"
+                  min="1900"
                   placeholder="e.g. 2018"
                   value={form.start_year}
-                  onChange={(e) => setForm({ ...form, start_year: e.target.value })}
-                  className={inputClass()}
+                  onChange={(e) => {
+                    setForm({ ...form, start_year: e.target.value });
+                    if (yearError) setYearError("");
+                  }}
+                  className={inputClass(!!yearError)}
                 />
               </div>
               <div className="space-y-1">
                 <label className="text-sm font-medium text-muted-foreground">End Year</label>
                 <input
                   type="number"
+                  min="1900"
                   placeholder="e.g. 2023"
                   value={form.end_year}
-                  onChange={(e) => setForm({ ...form, end_year: e.target.value })}
-                  className={inputClass()}
+                  onChange={(e) => {
+                    setForm({ ...form, end_year: e.target.value });
+                    if (yearError) setYearError("");
+                  }}
+                  className={inputClass(!!yearError)}
                 />
               </div>
+              {yearError && <p className="col-span-2 text-sm text-destructive">{yearError}</p>}
             </div>
           </div>
 
@@ -789,6 +836,7 @@ function groupPending(submissions) {
       existing.vehicleIds.push(s.vehicle_id);
       existing.plates.push(s.plate_no);
       if (!existing.customers.includes(customerLabel)) existing.customers.push(customerLabel);
+      if (s.year != null) existing.years.push(s.year);
     } else {
       groups.set(key, {
         key,
@@ -796,6 +844,12 @@ function groupPending(submissions) {
         makeName: s.make_name,
         customMake: s.custom_make,
         customModel: s.custom_model ?? "",
+        // Vehicle type is a required field on every vehicle submission (never
+        // custom-typed), so we can carry it straight through to a new model —
+        // it's the type the customer already picked, not a guess.
+        vehicleTypeId: s.vehicle_type_id,
+        vehicleTypeName: s.vehicle_type,
+        years: s.year != null ? [s.year] : [],
         vehicleIds: [s.vehicle_id],
         plates: [s.plate_no],
         customers: [customerLabel],
@@ -845,9 +899,14 @@ function PendingGroupCard({ group, makes, onMakeCreated, onResolved }) {
     if (!selectedMakeId) return;
     setError("");
     try {
+      // Carry over the type/year the customer already supplied on their vehicle
+      // submission, instead of leaving a freshly-created model blank.
       const { model } = await api.post("/api/admin/vehicle-catalog/models", {
         name: label,
         make_id: parseInt(selectedMakeId),
+        vehicle_type_id: group.vehicleTypeId ?? null,
+        start_year: group.years.length ? Math.min(...group.years) : null,
+        end_year: group.years.length ? Math.max(...group.years) : null,
       });
       setModels((prev) => [...prev, model]);
       setSelectedModelId(model.model_id.toString());
@@ -886,7 +945,18 @@ function PendingGroupCard({ group, makes, onMakeCreated, onResolved }) {
             {group.plates.join(", ")}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Submitted by {group.customers.join(", ")}
+            Submitted by {group.customers.join(", ")} • Type: {group.vehicleTypeName}
+            {group.years.length > 0 && (
+              <>
+                {" "}
+                • Year: {Math.min(...group.years)}
+                {Math.max(...group.years) !== Math.min(...group.years) &&
+                  `–${Math.max(...group.years)}`}
+              </>
+            )}
+          </p>
+          <p className="text-xs text-muted-foreground/70">
+            Applied automatically if a new model is created below
           </p>
         </div>
       </div>

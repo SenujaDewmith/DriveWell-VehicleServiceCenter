@@ -74,7 +74,10 @@ model Staff {
 
 model VehicleMake {
   make_id Int    @id @default(autoincrement())
-  name    String @db.VarChar(100)
+  // Case-insensitive duplicate checking happens in the controller (Postgres
+  // ILIKE via Prisma's `mode: "insensitive"`) — this exact-case constraint is
+  // just the DB-level backstop against races or writes that skip that check.
+  name    String @unique @db.VarChar(100)
 
   models   VehicleModel[]
   vehicles Vehicle[]
@@ -94,12 +97,15 @@ model VehicleModel {
   vehicle_type VehicleType? @relation(fields: [vehicle_type_id], references: [type_id])
   vehicles     Vehicle[]
 
+  // Same model name can exist under different makes (e.g. two different
+  // makes both selling a "GT"), so uniqueness is scoped to (name, make_id).
+  @@unique([name, make_id])
   @@map("vehicle_models")
 }
 
 model VehicleType {
   type_id Int    @id @default(autoincrement())
-  name    String @db.VarChar(50)
+  name    String @unique @db.VarChar(50)
 
   models   VehicleModel[]
   vehicles Vehicle[]

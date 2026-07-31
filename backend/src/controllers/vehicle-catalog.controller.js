@@ -2,6 +2,12 @@ const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { logActivity } = require("../lib/activityLogger");
 
+// Case-insensitive existence check, scoped and excluding the row being edited (if any) —
+// the DB @@unique constraints are exact-case and only a last-resort backstop, so this is
+// the actual guard against "Toyota" vs "toyota" duplicates.
+const findDuplicate = (model, where, excludeId, idField) =>
+  model.findFirst({ where: { ...where, ...(excludeId ? { [idField]: { not: excludeId } } : {}) } });
+
 // ---- Makes ----------------------------------------------------------------
 
 const listMakesAdmin = async (req, res) => {
@@ -27,10 +33,14 @@ const listMakesAdmin = async (req, res) => {
 const createMake = async (req, res) => {
   const { name } = req.body;
   try {
+    const duplicate = await findDuplicate(prisma.vehicleMake, { name: { equals: name, mode: "insensitive" } });
+    if (duplicate) return res.status(409).json({ message: `A make named "${name}" already exists` });
+
     const make = await prisma.vehicleMake.create({ data: { name } });
     logActivity(prisma, { user_id: req.user.user_id, action: "VEHICLE_MAKE_CREATED", entity_type: "vehicle_make", entity_id: make.make_id });
     res.status(201).json({ message: "Make created", make });
   } catch (error) {
+    if (error.code === "P2002") return res.status(409).json({ message: `A make named "${name}" already exists` });
     logger.error(`createMake failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -38,15 +48,17 @@ const createMake = async (req, res) => {
 
 const updateMake = async (req, res) => {
   const { name } = req.body;
+  const make_id = parseInt(req.params.id);
   try {
-    const make = await prisma.vehicleMake.update({
-      where: { make_id: parseInt(req.params.id) },
-      data: { name },
-    });
+    const duplicate = await findDuplicate(prisma.vehicleMake, { name: { equals: name, mode: "insensitive" } }, make_id, "make_id");
+    if (duplicate) return res.status(409).json({ message: `A make named "${name}" already exists` });
+
+    const make = await prisma.vehicleMake.update({ where: { make_id }, data: { name } });
     logActivity(prisma, { user_id: req.user.user_id, action: "VEHICLE_MAKE_UPDATED", entity_type: "vehicle_make", entity_id: make.make_id });
     res.status(200).json({ message: "Make updated", make });
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ message: "Make not found" });
+    if (error.code === "P2002") return res.status(409).json({ message: `A make named "${name}" already exists` });
     logger.error(`updateMake failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -106,6 +118,9 @@ const listModelsAdmin = async (req, res) => {
 const createModel = async (req, res) => {
   const { name, make_id, vehicle_type_id, start_year, end_year } = req.body;
   try {
+    const duplicate = await findDuplicate(prisma.vehicleModel, { name: { equals: name, mode: "insensitive" }, make_id });
+    if (duplicate) return res.status(409).json({ message: `A model named "${name}" already exists for this make` });
+
     const model = await prisma.vehicleModel.create({
       data: { name, make_id, vehicle_type_id: vehicle_type_id || null, start_year: start_year || null, end_year: end_year || null },
     });
@@ -113,6 +128,7 @@ const createModel = async (req, res) => {
     res.status(201).json({ message: "Model created", model });
   } catch (error) {
     if (error.code === "P2003") return res.status(400).json({ message: "Invalid make_id or vehicle_type_id" });
+    if (error.code === "P2002") return res.status(409).json({ message: `A model named "${name}" already exists for this make` });
     logger.error(`createModel failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -120,9 +136,13 @@ const createModel = async (req, res) => {
 
 const updateModel = async (req, res) => {
   const { name, make_id, vehicle_type_id, start_year, end_year } = req.body;
+  const model_id = parseInt(req.params.id);
   try {
+    const duplicate = await findDuplicate(prisma.vehicleModel, { name: { equals: name, mode: "insensitive" }, make_id }, model_id, "model_id");
+    if (duplicate) return res.status(409).json({ message: `A model named "${name}" already exists for this make` });
+
     const model = await prisma.vehicleModel.update({
-      where: { model_id: parseInt(req.params.id) },
+      where: { model_id },
       data: { name, make_id, vehicle_type_id: vehicle_type_id || null, start_year: start_year || null, end_year: end_year || null },
     });
     logActivity(prisma, { user_id: req.user.user_id, action: "VEHICLE_MODEL_UPDATED", entity_type: "vehicle_model", entity_id: model.model_id });
@@ -130,6 +150,7 @@ const updateModel = async (req, res) => {
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ message: "Model not found" });
     if (error.code === "P2003") return res.status(400).json({ message: "Invalid make_id or vehicle_type_id" });
+    if (error.code === "P2002") return res.status(409).json({ message: `A model named "${name}" already exists for this make` });
     logger.error(`updateModel failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -177,10 +198,14 @@ const listTypesAdmin = async (req, res) => {
 const createType = async (req, res) => {
   const { name } = req.body;
   try {
+    const duplicate = await findDuplicate(prisma.vehicleType, { name: { equals: name, mode: "insensitive" } });
+    if (duplicate) return res.status(409).json({ message: `A type named "${name}" already exists` });
+
     const type = await prisma.vehicleType.create({ data: { name } });
     logActivity(prisma, { user_id: req.user.user_id, action: "VEHICLE_TYPE_CREATED", entity_type: "vehicle_type", entity_id: type.type_id });
     res.status(201).json({ message: "Type created", type });
   } catch (error) {
+    if (error.code === "P2002") return res.status(409).json({ message: `A type named "${name}" already exists` });
     logger.error(`createType failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -188,15 +213,17 @@ const createType = async (req, res) => {
 
 const updateType = async (req, res) => {
   const { name } = req.body;
+  const type_id = parseInt(req.params.id);
   try {
-    const type = await prisma.vehicleType.update({
-      where: { type_id: parseInt(req.params.id) },
-      data: { name },
-    });
+    const duplicate = await findDuplicate(prisma.vehicleType, { name: { equals: name, mode: "insensitive" } }, type_id, "type_id");
+    if (duplicate) return res.status(409).json({ message: `A type named "${name}" already exists` });
+
+    const type = await prisma.vehicleType.update({ where: { type_id }, data: { name } });
     logActivity(prisma, { user_id: req.user.user_id, action: "VEHICLE_TYPE_UPDATED", entity_type: "vehicle_type", entity_id: type.type_id });
     res.status(200).json({ message: "Type updated", type });
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ message: "Type not found" });
+    if (error.code === "P2002") return res.status(409).json({ message: `A type named "${name}" already exists` });
     logger.error(`updateType failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -245,6 +272,7 @@ const listPendingSubmissions = async (req, res) => {
         make_name: v.make?.name ?? null,
         custom_make: v.custom_make,
         custom_model: v.custom_model,
+        vehicle_type_id: v.vehicle_type_id,
         vehicle_type: v.vehicle_type.name,
         year: v.year,
         customer_name: v.customer?.customer?.full_name ?? null,
