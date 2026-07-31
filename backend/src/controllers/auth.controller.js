@@ -1,9 +1,13 @@
+const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
-const { sendWelcomeEmail } = require("../services/email.service");
+const { sendWelcomeEmail, sendPasswordResetEmail } = require("../services/email.service");
 require("dotenv").config();
+
+const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
+const hashResetToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
 
 const register = async (req, res) => {
   const { name, email, password } = req.body;
@@ -158,4 +162,70 @@ const getProfile = async (req, res) => {
   }
 };
 
-module.exports = { register, login, staffLogin, logout, staffLogout, getProfile };
+// Same response whether or not the account exists, so this endpoint can't be
+// used to probe which emails are registered.
+const FORGOT_PASSWORD_RESPONSE = {
+  message: "If an account exists for that email, a password reset link has been sent.",
+};
+
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: { customer: true, staff: true },
+    });
+
+    if (!user) return res.status(200).json(FORGOT_PASSWORD_RESPONSE);
+
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    await prisma.user.update({
+      where: { user_id: user.user_id },
+      data: {
+        reset_token_hash: hashResetToken(rawToken),
+        reset_token_expires_at: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+      },
+    });
+
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${rawToken}`;
+    const customerName = user.customer?.full_name ?? user.staff?.full_name ?? "there";
+    sendPasswordResetEmail(user.email, { customerName, resetUrl });
+
+    logger.info(`Password reset requested — user_id: ${user.user_id}`);
+    res.status(200).json(FORGOT_PASSWORD_RESPONSE);
+  } catch (error) {
+    logger.error(`forgotPassword failed for ${email} — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const resetPassword = async (req, res) => {
+  const { token, new_password } = req.body;
+
+  try {
+    const user = await prisma.user.findFirst({
+      where: { reset_token_hash: hashResetToken(token), reset_token_expires_at: { gt: new Date() } },
+    });
+
+    if (!user) return res.status(400).json({ message: "This reset link is invalid or has expired." });
+
+    const newHash = await bcrypt.hash(new_password, 10);
+    await prisma.user.update({
+      where: { user_id: user.user_id },
+      // Cleared here so the same link can't be replayed after it's been used once.
+      data: { password_hash: newHash, reset_token_hash: null, reset_token_expires_at: null },
+    });
+
+    logger.info(`Password reset completed — user_id: ${user.user_id}`);
+    res.status(200).json({ message: "Password reset successfully. You can now log in." });
+  } catch (error) {
+    logger.error(`resetPassword failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+module.exports = {
+  register, login, staffLogin, logout, staffLogout, getProfile,
+  forgotPassword, resetPassword,
+};

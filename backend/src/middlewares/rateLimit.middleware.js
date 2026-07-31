@@ -25,4 +25,15 @@ const registerLimiter = rateLimit({
   message: { message: "Too many registration attempts. Please try again later." },
 });
 
-module.exports = { loginLimiter, registerLimiter };
+// Forgot-password is an email-enumeration and mailbomb vector (each request sends
+// an email), so it gets its own tight, per-IP limit independent of login attempts.
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip,
+  message: { message: "Too many password reset requests. Please try again in 15 minutes." },
+});
+
+module.exports = { loginLimiter, registerLimiter, forgotPasswordLimiter };

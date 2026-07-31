@@ -12,6 +12,8 @@ import About from "./pages/About";
 import FAQ from "./pages/FAQ";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/Profile";
 import Vehicles from "./pages/Vehicles";
@@ -69,6 +71,8 @@ const App = () => (<ThemeProvider>
                 <Route path="/" element={<Landing />}/>
                 <Route path="/login" element={<GuestRoute><Login /></GuestRoute>}/>
                 <Route path="/register" element={<GuestRoute><Register /></GuestRoute>}/>
+                <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>}/>
+                <Route path="/reset-password" element={<GuestRoute><ResetPassword /></GuestRoute>}/>
                 <Route path="/services" element={<Services />}/>
                 <Route path="/about" element={<About />}/>
                 <Route path="/faq" element={<FAQ />}/>

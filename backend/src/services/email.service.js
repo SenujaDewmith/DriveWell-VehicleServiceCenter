@@ -63,6 +63,16 @@ const sendStatusUpdate = (to, { customerName, bookingRef, status }) =>
     <p>Thank you for your patience.</p>
   `);
 
+const sendPasswordResetEmail = (to, { customerName, resetUrl }) =>
+  sendEmail(to, "Reset Your Password – DriveWell", `
+    <h2>Password Reset Request</h2>
+    <p>Hi ${customerName},</p>
+    <p>We received a request to reset your DriveWell password. Click the link below to choose a new one:</p>
+    <p><a href="${resetUrl}">${resetUrl}</a></p>
+    <p>This link expires in 30 minutes and can only be used once.</p>
+    <p>If you didn't request this, you can safely ignore this email — your password will stay unchanged.</p>
+  `);
+
 const sendVehicleTransferredEmail = (to, { customerName, plateNo, reason }) =>
   sendEmail(to, "Your Vehicle Has Changed Hands – DriveWell", `
     <h2>Vehicle Ownership Update</h2>
@@ -95,6 +105,6 @@ const sendTransferRequestDecisionEmail = (to, { customerName, plateNo, approved,
 
 module.exports = {
   sendWelcomeEmail, sendBookingConfirmation, sendBookingCancellation, sendStatusUpdate,
-  sendVehicleTransferredEmail,
+  sendVehicleTransferredEmail, sendPasswordResetEmail,
   sendTransferRequestNoticeEmail, sendTransferRequestDecisionEmail,
 };

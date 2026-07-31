@@ -4,7 +4,7 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 // Auth pages run their own focused layout (brand side panel, no nav/footer)
 // so visitors aren't tempted away from signing in/up.
-const NO_CHROME_ROUTES = ["/login", "/register"];
+const NO_CHROME_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password"];
 export function Layout({ children }) {
     const location = useLocation();
     const showChrome = !NO_CHROME_ROUTES.includes(location.pathname);

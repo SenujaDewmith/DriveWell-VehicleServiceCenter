@@ -23,6 +23,12 @@ model User {
   account_status String   @default("active") @db.VarChar(30)
   created_at     DateTime @default(now())
 
+  // Set on "forgot password" request, cleared once used or expired. We store a
+  // sha256 hash (not the raw token that goes out in the email) so a DB leak
+  // alone can't be replayed into a valid reset link.
+  reset_token_hash       String?   @db.VarChar(64)
+  reset_token_expires_at DateTime?
+
   role     Role      @relation(fields: [role_id], references: [role_id])
   customer Customer?
   staff    Staff?
@@ -38,6 +44,7 @@ model User {
   transfer_requests_made     VehicleTransferRequest[] @relation("TransferRequestsMade")
   transfer_requests_reviewed VehicleTransferRequest[] @relation("TransferRequestsReviewed")
 
+  @@index([reset_token_hash])
   @@map("users")
 }
 

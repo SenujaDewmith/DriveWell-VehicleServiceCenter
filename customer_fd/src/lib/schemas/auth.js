@@ -37,3 +37,15 @@ export const changePasswordSchema = z
     message: "New password must be different from the current password",
     path: ["newPassword"],
 });
+export const forgotPasswordSchema = z.object({
+    email: z.string().trim().email("Invalid email address"),
+});
+export const resetPasswordSchema = z
+    .object({
+    newPassword: passwordSchema,
+    confirmNewPassword: z.string(),
+})
+    .refine((data) => data.newPassword === data.confirmNewPassword, {
+    message: "Passwords do not match",
+    path: ["confirmNewPassword"],
+});

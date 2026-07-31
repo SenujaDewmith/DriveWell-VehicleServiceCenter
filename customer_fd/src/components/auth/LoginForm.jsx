@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,9 +50,9 @@ export function LoginForm({ onSuccess, onSwitchToRegister }) {
             <input type="checkbox" className="rounded" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)}/>
             <span>Remember me</span>
           </label>
-          <a href="#" className="text-cta hover:underline">
+          <Link to="/forgot-password" className="text-cta hover:underline">
             Forgot password?
-          </a>
+          </Link>
         </div>
         <Button type="submit" className="w-full bg-cta text-cta-foreground hover:bg-cta/90" disabled={isSubmitting}>
           {isSubmitting ? "Signing in..." : "Sign In"}

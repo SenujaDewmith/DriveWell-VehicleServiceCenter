@@ -34,4 +34,16 @@ const changePasswordSchema = z
     path: ["new_password"],
   });
 
-module.exports = { registerSchema, loginSchema, changePasswordSchema };
+const forgotPasswordSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Invalid email format"),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Reset token is required"),
+  new_password: passwordSchema,
+});
+
+module.exports = {
+  registerSchema, loginSchema, changePasswordSchema,
+  forgotPasswordSchema, resetPasswordSchema,
+};
