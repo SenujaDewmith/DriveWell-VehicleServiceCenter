@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
 import { Plus, Pencil, Trash2, X } from "lucide-react";
 import { api } from "@/lib/api";
@@ -16,9 +15,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-export const Route = createFileRoute("/dashboard/vehicle-catalog")({
-  component: VehicleCatalogPage,
-});
 
 interface ApiMake {
   make_id: number;
@@ -984,7 +980,7 @@ function PendingSubmissionsTab() {
 
 // ---- Page ---------------------------------------------------------------
 
-function VehicleCatalogPage() {
+export function VehicleCatalogPage() {
   return (
     <div className="space-y-6">
       <div>

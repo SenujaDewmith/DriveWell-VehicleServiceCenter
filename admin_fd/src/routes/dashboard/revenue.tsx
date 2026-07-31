@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { DateRangeFilter } from "@/components/reports/DateRangeFilter";
@@ -15,9 +14,6 @@ import {
   Line,
 } from "recharts";
 
-export const Route = createFileRoute("/dashboard/revenue")({
-  component: RevenuePage,
-});
 
 interface RevenueSummary {
   total_revenue: string;
@@ -51,7 +47,7 @@ function aggregateToMonthly(byDate: RevenueByDate[]) {
   return MONTHS.filter((m) => map[m]).map((m) => ({ month: m, revenue: map[m].revenue, services: map[m].services }));
 }
 
-function RevenuePage() {
+export function RevenuePage() {
   const [summary, setSummary] = useState<RevenueSummary | null>(null);
   const [byPackage, setByPackage] = useState<RevenueByPackage[]>([]);
   const [chartData, setChartData] = useState<{ month: string; revenue: number; services: number }[]>([]);

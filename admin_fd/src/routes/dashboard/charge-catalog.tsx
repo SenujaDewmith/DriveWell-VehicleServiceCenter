@@ -1,11 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { Plus, Pencil, ToggleLeft, ToggleRight, X } from "lucide-react";
 import { api } from "@/lib/api";
 
-export const Route = createFileRoute("/dashboard/charge-catalog")({
-  component: ChargeCatalogPage,
-});
 
 interface ApiChargeItem {
   catalog_item_id: number;
@@ -39,7 +35,7 @@ function validate(form: ItemForm): FormErrors {
   return errors;
 }
 
-function ChargeCatalogPage() {
+export function ChargeCatalogPage() {
   const [items, setItems] = useState<ApiChargeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<ApiChargeItem | null>(null);

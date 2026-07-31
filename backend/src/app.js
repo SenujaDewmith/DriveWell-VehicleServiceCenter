@@ -27,10 +27,8 @@ const app = express();
 // CORS — in development allow any localhost port; in production lock to explicit origins
 const productionOrigins = [
   "http://localhost:3000",
-  "http://localhost:8080",
-  "http://localhost:8081",
-  "http://localhost:3001",
   "http://localhost:5173",
+  "http://localhost:5174",
 ];
 app.use(
   cors({

@@ -1,12 +1,8 @@
-import { createFileRoute, Outlet, Navigate } from "@tanstack/react-router";
+import { Outlet, Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { DashboardLayout } from "@/components/DashboardLayout";
 
-export const Route = createFileRoute("/dashboard")({
-  component: DashboardRoute,
-});
-
-function DashboardRoute() {
+export function DashboardRoute() {
   const { isAuthenticated, isLoading } = useAuth();
 
   // Wait for the session check against the backend to finish before deciding

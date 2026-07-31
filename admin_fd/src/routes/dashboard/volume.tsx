@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { DateRangeFilter } from "@/components/reports/DateRangeFilter";
@@ -15,9 +14,6 @@ import {
   Pie,
 } from "recharts";
 
-export const Route = createFileRoute("/dashboard/volume")({
-  component: VolumePage,
-});
 
 const COLORS = ["#A7D129", "#616F39", "#3E432E", "#8B9D4A", "#D4E157"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -28,7 +24,7 @@ interface VolumeData {
   by_date: { service_date: string; count: string }[];
 }
 
-function VolumePage() {
+export function VolumePage() {
   const [data, setData] = useState<VolumeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

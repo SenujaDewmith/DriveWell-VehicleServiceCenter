@@ -7,8 +7,8 @@ import { api } from "@/lib/api";
 
 const navigateMock = vi.fn();
 
-vi.mock("@tanstack/react-router", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@tanstack/react-router")>();
+vi.mock("react-router-dom", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router-dom")>();
   return { ...actual, useNavigate: () => navigateMock };
 });
 
@@ -75,7 +75,7 @@ describe("LoginPage", () => {
       });
     });
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith({ to: "/dashboard" });
+      expect(navigateMock).toHaveBeenCalledWith("/dashboard");
     });
   });
 

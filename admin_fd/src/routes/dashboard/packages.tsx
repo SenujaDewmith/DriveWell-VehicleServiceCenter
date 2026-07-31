@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
 import { Plus, Pencil, ToggleLeft, ToggleRight, Star, X, ImagePlus, Trash2, Car } from "lucide-react";
 import { api, BASE } from "@/lib/api";
@@ -14,9 +13,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-export const Route = createFileRoute("/dashboard/packages")({
-  component: PackagesPage,
-});
 
 interface ApiPackage {
   package_id: number;

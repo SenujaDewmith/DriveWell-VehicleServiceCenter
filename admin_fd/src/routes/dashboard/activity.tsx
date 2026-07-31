@@ -1,12 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { DateRangeFilter } from "@/components/reports/DateRangeFilter";
 import { DownloadPdfButton } from "@/components/reports/DownloadPdfButton";
 
-export const Route = createFileRoute("/dashboard/activity")({
-  component: ActivityPage,
-});
 
 const actionColors: Record<string, string> = {
   BOOKING_CREATED: "text-accent",
@@ -30,7 +26,7 @@ interface ActivityLog {
   email: string | null;
 }
 
-function ActivityPage() {
+export function ActivityPage() {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

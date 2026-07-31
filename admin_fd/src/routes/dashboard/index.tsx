@@ -1,15 +1,11 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { ManagerOverview } from "@/components/manager/ManagerOverview";
 import { SupervisorDashboard } from "@/components/supervisor/SupervisorDashboard";
 import { CashierDashboard } from "@/components/cashier/CashierDashboard";
 import { StaffDashboard } from "@/components/staff/StaffDashboard";
 
-export const Route = createFileRoute("/dashboard/")({
-  component: DashboardIndex,
-});
-
-function DashboardIndex() {
+export function DashboardIndex() {
   const { role } = useAuth();
 
   switch (role) {

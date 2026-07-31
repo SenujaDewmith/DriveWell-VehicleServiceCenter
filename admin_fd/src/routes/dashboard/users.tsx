@@ -1,11 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { Plus, Pencil, UserX, UserCheck } from "lucide-react";
 import { api } from "@/lib/api";
 
-export const Route = createFileRoute("/dashboard/users")({
-  component: UsersPage,
-});
 
 interface ApiStaff {
   user_id: number;
@@ -32,7 +28,7 @@ const ROLE_OPTIONS = [
   { id: 4, label: "Service Staff" },
 ];
 
-function UsersPage() {
+export function UsersPage() {
   const [members, setMembers] = useState<ApiStaff[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);

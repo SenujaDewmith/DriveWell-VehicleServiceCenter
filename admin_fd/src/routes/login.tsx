@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -12,10 +12,6 @@ import {
   UserCog,
   Wrench,
 } from "lucide-react";
-
-export const Route = createFileRoute("/login")({
-  component: LoginPage,
-});
 
 const ROLES = [
   {
@@ -55,7 +51,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate({ to: "/dashboard" });
+      navigate("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { DateRangeFilter } from "@/components/reports/DateRangeFilter";
@@ -6,9 +5,6 @@ import { DownloadPdfButton } from "@/components/reports/DownloadPdfButton";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Star } from "lucide-react";
 
-export const Route = createFileRoute("/dashboard/performance")({
-  component: PerformancePage,
-});
 
 interface StaffPerf {
   staff_id: number;
@@ -19,7 +15,7 @@ interface StaffPerf {
   feedback_count: string;
 }
 
-function PerformancePage() {
+export function PerformancePage() {
   const [data, setData] = useState<StaffPerf[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

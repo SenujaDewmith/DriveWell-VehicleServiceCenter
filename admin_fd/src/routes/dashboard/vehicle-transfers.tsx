@@ -1,4 +1,4 @@
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { ArrowLeftRight, Search } from "lucide-react";
 import { api, BASE } from "@/lib/api";
@@ -22,10 +22,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { PlateNumberInput } from "@/components/PlateNumberInput";
 import { isValidSriLankanPlate } from "@/lib/plateNumber";
-
-export const Route = createFileRoute("/dashboard/vehicle-transfers")({
-  component: VehicleTransfersPage,
-});
 
 interface DetachedVehicle {
   vehicle_id: number;
@@ -107,7 +103,7 @@ function DocumentImage({ url, alt }: { url: string; alt: string }) {
   );
 }
 
-function VehicleTransfersPage() {
+export function VehicleTransfersPage() {
   const { role } = useAuth();
   const [vehicles, setVehicles] = useState<DetachedVehicle[]>([]);
   const [loading, setLoading] = useState(true);

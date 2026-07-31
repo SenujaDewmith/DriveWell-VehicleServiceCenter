@@ -1,11 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { Plus, Trash2, CalendarOff } from "lucide-react";
 import { api } from "@/lib/api";
 
-export const Route = createFileRoute("/dashboard/schedule")({
-  component: SchedulePage,
-});
 
 const ALL_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DAY_TO_NUM: Record<string, number> = {
@@ -58,7 +54,7 @@ function isHoliday(b: ApiBlockedTime) {
   return b.date !== null && toHHMM(b.start_time) === "00:00" && toHHMM(b.end_time) === "23:59";
 }
 
-function SchedulePage() {
+export function SchedulePage() {
   const [workingDays, setWorkingDays] = useState<string[]>([]);
   const [dayStart, setDayStart] = useState("");
   const [dayEnd, setDayEnd] = useState("");

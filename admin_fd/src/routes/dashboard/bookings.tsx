@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { StatusBadge } from "@/components/manager/ManagerOverview";
@@ -25,9 +24,6 @@ interface ApiBooking {
   slot_time: string | null;
 }
 
-export const Route = createFileRoute("/dashboard/bookings")({
-  component: BookingsPage,
-});
 
 const statuses: BookingStatus[] = [
   "Booked",
@@ -39,7 +35,7 @@ const statuses: BookingStatus[] = [
   "No-show",
 ];
 
-function BookingsPage() {
+export function BookingsPage() {
   const [bookings, setBookings] = useState<ApiBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
