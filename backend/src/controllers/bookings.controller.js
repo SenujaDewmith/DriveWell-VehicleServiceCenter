@@ -1,7 +1,7 @@
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { fmtDate, fmtTime } = require("../lib/format");
-const { sendBookingConfirmation, sendBookingCancellation } = require("../services/email.service");
+const { sendBookingConfirmation, sendBookingCancellation, sendNoShowNotice } = require("../services/email.service");
 const { logActivity } = require("../lib/activityLogger");
 const { VEHICLE_SELECT, flattenVehicleRef } = require("../lib/vehicleFlatten");
 const {
@@ -16,6 +16,12 @@ const MANAGER_ROLE = 1;
 // Customers may self-cancel only up to this many minutes before the appointment
 // (staff/manager cancellations are exempt — this is a self-service guardrail, not a hard business rule)
 const CANCELLATION_CUTOFF_MINUTES = 24 * 60;
+
+// A booking can only be marked No-show once its scheduled start time is at least this
+// far in the past — long enough that "customer is just running a few minutes behind"
+// isn't mistaken for a no-show, short enough that staff aren't blocked from clearing
+// the slot for same-day walk-ins.
+const NO_SHOW_GRACE_MINUTES = 15;
 
 // Must match TERMS_VERSION in customer_fd/src/lib/terms.ts — bump both together when the
 // T&C text changes so bookings always record which wording the customer actually accepted.
@@ -119,6 +125,20 @@ const flattenBookingDetail = (r, { includeServiceItems = false, hideCustomerIden
       : null,
 });
 
+// Computed on demand rather than stored as a counter column — a stored counter would need
+// careful decrementing if a manager ever corrects a mistaken No-show back to another status,
+// and this table is small enough that a grouped count is cheap.
+const getNoShowCounts = async (customerIds) => {
+  const uniqueIds = [...new Set(customerIds)];
+  if (uniqueIds.length === 0) return {};
+  const grouped = await prisma.reservation.groupBy({
+    by: ["customer_id"],
+    where: { customer_id: { in: uniqueIds }, status: "No-show" },
+    _count: { _all: true },
+  });
+  return Object.fromEntries(grouped.map((g) => [g.customer_id, g._count._all]));
+};
+
 const listBookings = async (req, res) => {
   const { user_id, role_id } = req.user;
   const { status, from, to, customer_id, package_id, vehicle_id } = req.query;
@@ -159,10 +179,15 @@ const listBookings = async (req, res) => {
       orderBy: [{ service_date: "desc" }, { created_at: "desc" }],
     });
 
+    // No-show history is decision support for staff (e.g. "this is their 3rd —
+    // ask for a deposit"), not something a customer needs to see about themselves.
+    const noShowCounts = role_id === CUSTOMER_ROLE ? {} : await getNoShowCounts(rows.map((r) => r.customer_id));
+
     res.status(200).json({
-      bookings: rows.map((r) =>
-        flattenBooking(r, { hideCustomerIdentity: role_id === CUSTOMER_ROLE && r.customer_id !== user_id })
-      ),
+      bookings: rows.map((r) => ({
+        ...flattenBooking(r, { hideCustomerIdentity: role_id === CUSTOMER_ROLE && r.customer_id !== user_id }),
+        ...(role_id !== CUSTOMER_ROLE && { customer_no_show_count: noShowCounts[r.customer_id] ?? 0 }),
+      })),
     });
   } catch (error) {
     logger.error(`listBookings failed — ${error.message}`);
@@ -191,8 +216,13 @@ const getBooking = async (req, res) => {
       hideCustomerIdentity = true;
     }
 
+    const noShowCounts = role_id === CUSTOMER_ROLE ? {} : await getNoShowCounts([row.customer_id]);
+
     res.status(200).json({
-      booking: flattenBookingDetail(row, { includeServiceItems: role_id !== CUSTOMER_ROLE, hideCustomerIdentity }),
+      booking: {
+        ...flattenBookingDetail(row, { includeServiceItems: role_id !== CUSTOMER_ROLE, hideCustomerIdentity }),
+        ...(role_id !== CUSTOMER_ROLE && { customer_no_show_count: noShowCounts[row.customer_id] ?? 0 }),
+      },
     });
   } catch (error) {
     logger.error(`getBooking failed — ${error.message}`);
@@ -391,12 +421,45 @@ const overrideStatus = async (req, res) => {
     return res.status(400).json({ message: `status must be one of: ${valid.join(", ")}` });
 
   try {
-    const booking = await prisma.reservation.update({
+    const booking = await prisma.reservation.findUnique({
+      where: { reservation_id: parseInt(id) },
+      include: {
+        customer_user: { select: { email: true, customer: { select: { full_name: true } } } },
+      },
+    });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+
+    if (status === "No-show") {
+      // Mirrors cancelBooking's status guard — a no-show only makes sense from "Booked"
+      // (can't no-show something already completed, cancelled, or in progress).
+      if (booking.status !== "Booked")
+        return res.status(400).json({ message: `Cannot mark as No-show — booking is already "${booking.status}"` });
+
+      const { todayKey, nowMinutes } = getLocalNow();
+      const daysUntil = Math.round((new Date(fmtDate(booking.service_date)) - new Date(todayKey)) / 86400000);
+      const minutesSinceStart = -(daysUntil * 1440 + (dateColToMinutes(booking.start_time) - nowMinutes));
+      if (minutesSinceStart < NO_SHOW_GRACE_MINUTES) {
+        return res.status(400).json({
+          message: `Cannot mark as No-show until ${NO_SHOW_GRACE_MINUTES} minutes after the scheduled appointment time`,
+        });
+      }
+    }
+
+    const updated = await prisma.reservation.update({
       where: { reservation_id: parseInt(id) },
       data: { status },
     });
+
+    if (status === "No-show") {
+      sendNoShowNotice(booking.customer_user.email, {
+        customerName: booking.customer_user.customer?.full_name,
+        bookingRef: booking.booking_ref,
+        serviceDate: fmtDate(booking.service_date),
+      });
+    }
+
     logActivity(prisma, { user_id: req.user.user_id, action: "STATUS_CHANGED", entity_type: "reservation", entity_id: parseInt(id) });
-    res.status(200).json({ message: "Status updated", booking });
+    res.status(200).json({ message: "Status updated", booking: updated });
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ message: "Booking not found" });
     logger.error(`overrideStatus failed — ${error.message}`);

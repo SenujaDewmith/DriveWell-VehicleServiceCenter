@@ -236,6 +236,11 @@ router.patch("/:id/cancel", verifyToken, cancelBooking);
  * /api/bookings/{id}/status:
  *   patch:
  *     summary: Override booking status (Manager only)
+ *     description: >
+ *       Setting status to "No-show" additionally requires the booking to currently be "Booked"
+ *       and its scheduled start time to be at least 15 minutes in the past — this rejects
+ *       marking a future or already-resolved booking as a no-show. On success, the customer
+ *       is emailed that their appointment was missed.
  *     tags: [Bookings]
  *     security:
  *       - cookieAuth: []

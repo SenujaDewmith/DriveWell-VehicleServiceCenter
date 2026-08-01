@@ -147,7 +147,7 @@ export default function BookingDetails() {
     // vehicle) — "Back" should return there, since it won't appear in "My Bookings" at all.
     const isOwnBooking = booking.customer_id === undefined || String(booking.customer_id) === user.id;
     const backToBookings = () => isOwnBooking
-        ? navigate(`/bookings?tab=${bookingListTab(booking.status)}`)
+        ? navigate(`/bookings?tab=${bookingListTab(booking)}`)
         : navigate(`/vehicles/${booking.vehicle_id}/history`);
     return (<div className="container mx-auto px-4 py-8 max-w-5xl">
       <Button variant="ghost" onClick={backToBookings} className="mb-6">

@@ -6,9 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { bookingsService } from "@/services/bookings.service";
 import { vehiclesService } from "@/services/vehicles.service";
-import { Car, Calendar, FileText, Clock, ArrowRight, Loader2 } from "lucide-react";
+import { ACTIVE_SERVICE_STATUSES, isUpcomingBooking } from "@/lib/bookingRules";
+import { Car, Calendar, FileText, Clock, ArrowRight, Loader2, Wrench } from "lucide-react";
 import { toast } from "sonner";
-const UPCOMING = ["Booked", "Started", "In Progress", "Ready for Pickup"];
 const STATUS_COLORS = {
     Booked: "bg-status-booked/10 text-status-booked border-status-booked/20",
     Started: "bg-status-inProgress/10 text-status-inProgress border-status-inProgress/20",
@@ -23,6 +23,31 @@ function fmtDate(d) {
 }
 function fmtDateTime(d) {
     return new Date(d).toLocaleString("en-LK", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+// Shared row layout for the Active Service and Upcoming Bookings cards below.
+function BookingRow({ booking, navigate }) {
+    return (<div className="flex items-center justify-between gap-4 p-4 border border-border rounded-lg hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => navigate(`/bookings/${booking.reservation_id}`)}>
+      <div className="flex items-center gap-4 flex-1 min-w-0">
+        <div className="h-12 w-12 bg-cta/10 rounded-lg flex items-center justify-center shrink-0">
+          <Car className="h-6 w-6 text-cta"/>
+        </div>
+        <div className="min-w-0">
+          <p className="font-semibold truncate">
+            {booking.make} {booking.model}
+          </p>
+          <p className="text-sm text-muted-foreground truncate">{booking.package_name}</p>
+        </div>
+      </div>
+      <div className="text-right w-28 shrink-0">
+        <p className="text-sm font-medium">{fmtDate(booking.service_date)}</p>
+        <p className="text-sm text-muted-foreground">
+          {booking.slot_time ? booking.slot_time.slice(0, 5) : "To be confirmed"}
+        </p>
+      </div>
+      <Badge variant="outline" className={`shrink-0 w-28 justify-center ${STATUS_COLORS[booking.status]}`}>
+        {booking.status}
+      </Badge>
+    </div>);
 }
 export default function Dashboard() {
     const { user } = useAuth();
@@ -63,7 +88,10 @@ export default function Dashboard() {
     if (!user)
         return null;
     const upcomingBookings = bookings
-        .filter((b) => UPCOMING.includes(b.status))
+        .filter(isUpcomingBooking)
+        .sort((a, b) => new Date(a.service_date).getTime() - new Date(b.service_date).getTime());
+    const activeServiceBookings = bookings
+        .filter((b) => ACTIVE_SERVICE_STATUSES.includes(b.status))
         .sort((a, b) => new Date(a.service_date).getTime() - new Date(b.service_date).getTime());
     const lastService = bookings
         .filter((b) => b.status === "Completed")
@@ -149,6 +177,24 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
+          {/* Active Service — vehicle is physically at the shop right now, so this
+              takes priority over merely-scheduled upcoming appointments below. */}
+          {activeServiceBookings.length > 0 && (<Card className="mb-8">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Wrench className="h-4 w-4 text-cta"/> Active Service
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => navigate("/bookings")}>
+                  View All <ArrowRight className="ml-2 h-4 w-4"/>
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {activeServiceBookings.slice(0, 5).map((booking) => (<BookingRow key={booking.reservation_id} booking={booking} navigate={navigate}/>))}
+                </div>
+              </CardContent>
+            </Card>)}
+
           {/* Upcoming Bookings */}
           {upcomingBookings.length > 0 && (<Card className="mb-8">
               <CardHeader className="flex flex-row items-center justify-between">
@@ -159,28 +205,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {upcomingBookings.slice(0, 5).map((booking) => (<div key={booking.reservation_id} className="flex items-center justify-between gap-4 p-4 border border-border rounded-lg hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => navigate(`/bookings/${booking.reservation_id}`)}>
-                      <div className="flex items-center gap-4 flex-1 min-w-0">
-                        <div className="h-12 w-12 bg-cta/10 rounded-lg flex items-center justify-center shrink-0">
-                          <Car className="h-6 w-6 text-cta"/>
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold truncate">
-                            {booking.make} {booking.model}
-                          </p>
-                          <p className="text-sm text-muted-foreground truncate">{booking.package_name}</p>
-                        </div>
-                      </div>
-                      <div className="text-right w-28 shrink-0">
-                        <p className="text-sm font-medium">{fmtDate(booking.service_date)}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {booking.slot_time ? booking.slot_time.slice(0, 5) : "To be confirmed"}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className={`shrink-0 w-28 justify-center ${STATUS_COLORS[booking.status]}`}>
-                        {booking.status}
-                      </Badge>
-                    </div>))}
+                  {upcomingBookings.slice(0, 5).map((booking) => (<BookingRow key={booking.reservation_id} booking={booking} navigate={navigate}/>))}
                 </div>
               </CardContent>
             </Card>)}

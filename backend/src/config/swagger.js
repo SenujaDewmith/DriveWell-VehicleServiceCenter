@@ -131,6 +131,7 @@ const options = {
             service_date:   { type: "string",  format: "date", example: "2025-06-15" },
             status:         { type: "string",  example: "Booked", enum: ["Booked", "Started", "In Progress", "Completed", "Ready for Pickup", "Cancelled", "No-show"] },
             created_at:     { type: "string",  format: "date-time" },
+            customer_no_show_count: { type: "integer", example: 0, description: "This customer's total No-show count, across all bookings — staff/manager views only" },
           },
         },
         ReservationInput: {

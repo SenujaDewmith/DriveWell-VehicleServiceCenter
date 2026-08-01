@@ -12,8 +12,8 @@ import { Calendar as DatePickerCalendar } from "@/components/ui/calendar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, } from "@/components/ui/alert-dialog";
 import { bookingsService } from "@/services/bookings.service";
 import { toDateKey } from "@/components/BookingCalendar";
-import { CANCELLATION_CUTOFF_HOURS, hoursUntilAppointment, UPCOMING_STATUSES, PAST_STATUSES } from "@/lib/bookingRules";
-import { Calendar, Car, Clock, Eye, Loader2 } from "lucide-react";
+import { CANCELLATION_CUTOFF_HOURS, hoursUntilAppointment, ACTIVE_SERVICE_STATUSES, isUpcomingBooking } from "@/lib/bookingRules";
+import { Calendar, Car, Clock, Eye, Loader2, Wrench } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 const STATUS_COLORS = {
@@ -25,8 +25,14 @@ const STATUS_COLORS = {
     Cancelled: "bg-status-cancelled/10 text-status-cancelled border-status-cancelled/20",
     "No-show": "bg-status-cancelled/10 text-status-cancelled border-status-cancelled/20",
 };
-const UPCOMING = UPCOMING_STATUSES;
-const PAST = PAST_STATUSES;
+// The statuses that normally land in the Past tab — deliberately not including "Booked" here
+// even though an overdue-but-unresolved booking technically can too (see pastBookings below);
+// that's a rare edge case, not something worth a filter option of its own.
+const PAST_STATUS_OPTIONS = [
+    { value: "Completed", label: "Completed" },
+    { value: "Cancelled", label: "Cancelled" },
+    { value: "No-show", label: "No-show" },
+];
 // Inverse of toDateKey — builds a local-midnight Date from a "YYYY-MM-DD" key so it
 // round-trips safely regardless of the browser's timezone offset.
 function parseDateKey(key) {
@@ -52,9 +58,10 @@ export default function Bookings() {
     // Tab lives in the URL (not just component state) so "Back to Bookings" from a
     // booking's detail page can land on the tab that booking actually belongs to,
     // and so the tab survives a refresh or a shared link.
-    const activeTab = searchParams.get("tab") === "past" ? "past" : "upcoming";
+    const tabParam = searchParams.get("tab");
+    const activeTab = tabParam === "past" ? "past" : tabParam === "active" ? "active" : "upcoming";
     const setActiveTab = (tab) => {
-        setSearchParams(tab === "past" ? { tab: "past" } : {}, { replace: true });
+        setSearchParams(tab === "upcoming" ? {} : { tab }, { replace: true });
     };
     // Seeded once from ?vehicle= (e.g. arriving from a vehicle card's "Service History" link)
     // so both tabs open already scoped to that vehicle — read via initializer, not effect, so
@@ -65,6 +72,7 @@ export default function Bookings() {
     const [pastVehicleFilter, setPastVehicleFilter] = useState(() => searchParams.get("vehicle") ?? "all");
     const [upcomingPackageFilter, setUpcomingPackageFilter] = useState("all");
     const [pastPackageFilter, setPastPackageFilter] = useState("all");
+    const [pastStatusFilter, setPastStatusFilter] = useState("all");
     const [fromPickerOpen, setFromPickerOpen] = useState(false);
     const [toPickerOpen, setToPickerOpen] = useState(false);
     const [bookings, setBookings] = useState([]);
@@ -108,8 +116,12 @@ export default function Bookings() {
     };
     if (!user)
         return null;
-    const upcomingBookings = bookings.filter((b) => UPCOMING.includes(b.status));
-    const pastBookings = bookings.filter((b) => PAST.includes(b.status));
+    const activeServiceBookings = bookings.filter((b) => ACTIVE_SERVICE_STATUSES.includes(b.status));
+    const upcomingBookings = bookings.filter(isUpcomingBooking);
+    // Complement of the other two — guarantees every booking has exactly one tab, including a
+    // "Booked" appointment whose time has already passed (no longer upcoming, not yet resolved
+    // by staff into Completed/Cancelled/No-show) instead of it silently vanishing from the page.
+    const pastBookings = bookings.filter((b) => !ACTIVE_SERVICE_STATUSES.includes(b.status) && !isUpcomingBooking(b));
     // Vehicle options are drawn from the full set of the logged-in user's own bookings
     // (the /bookings API is already scoped server-side to the authenticated user), so the
     // same dropdown works whether a plate's bookings currently sit in Upcoming, Past, or both.
@@ -134,7 +146,7 @@ export default function Bookings() {
     const activeVehicleFilter = activeTab === "past" ? pastVehicleFilter : upcomingVehicleFilter;
     const filteredVehicleLabel = vehicleOptions.find((v) => v.value === activeVehicleFilter)?.label;
     const upcomingFiltersActive = upcomingVehicleFilter !== "all" || upcomingPackageFilter !== "all";
-    const filtersActive = pastPackageFilter !== "all" || !!dateFrom || !!dateTo || pastVehicleFilter !== "all";
+    const filtersActive = pastPackageFilter !== "all" || !!dateFrom || !!dateTo || pastVehicleFilter !== "all" || pastStatusFilter !== "all";
     const filteredUpcomingBookings = upcomingBookings.filter((b) => {
         if (upcomingVehicleFilter !== "all" && String(b.vehicle_id) !== upcomingVehicleFilter)
             return false;
@@ -151,6 +163,8 @@ export default function Bookings() {
             return false;
         if (pastVehicleFilter !== "all" && String(b.vehicle_id) !== pastVehicleFilter)
             return false;
+        if (pastStatusFilter !== "all" && b.status !== pastStatusFilter)
+            return false;
         return true;
     });
     const clearUpcomingFilters = () => {
@@ -162,6 +176,7 @@ export default function Bookings() {
         setDateFrom("");
         setDateTo("");
         setPastVehicleFilter("all");
+        setPastStatusFilter("all");
     };
     const BookingCard = ({ booking, showCancel }) => {
         const hoursUntil = showCancel ? hoursUntilAppointment(booking) : null;
@@ -258,9 +273,22 @@ export default function Bookings() {
           <Loader2 className="h-8 w-8 animate-spin text-cta"/>
         </div>) : (<Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6">
+            <TabsTrigger value="active">Active Service ({activeServiceBookings.length})</TabsTrigger>
             <TabsTrigger value="upcoming">Upcoming ({upcomingBookings.length})</TabsTrigger>
             <TabsTrigger value="past">Past ({pastBookings.length})</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="active">
+            {activeServiceBookings.length === 0 ? (<Card className="text-center py-12">
+                <CardContent>
+                  <Wrench className="h-16 w-16 text-muted-foreground mx-auto mb-4"/>
+                  <h3 className="text-xl font-semibold mb-2">No active service</h3>
+                  <p className="text-muted-foreground">Nothing of yours is currently at the shop</p>
+                </CardContent>
+              </Card>) : (<div className="space-y-4">
+                {activeServiceBookings.map((b) => (<BookingCard key={b.reservation_id} booking={b}/>))}
+              </div>)}
+          </TabsContent>
 
           <TabsContent value="upcoming">
             {upcomingBookings.length === 0 ? (<Card className="text-center py-12">
@@ -321,6 +349,10 @@ export default function Bookings() {
                     <div className="flex-1 space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Package</Label>
                       <Combobox options={packageOptions} value={pastPackageFilter === "all" ? "" : pastPackageFilter} onValueChange={(v) => setPastPackageFilter(v || "all")} placeholder="All Packages" searchPlaceholder="Search package..." emptyText="No matching package."/>
+                    </div>
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Status</Label>
+                      <Combobox options={PAST_STATUS_OPTIONS} value={pastStatusFilter === "all" ? "" : pastStatusFilter} onValueChange={(v) => setPastStatusFilter(v || "all")} placeholder="All Statuses" searchPlaceholder="Search status..." emptyText="No matching status."/>
                     </div>
                     <div className="flex-1 space-y-1.5">
                       <Label className="text-xs text-muted-foreground">From</Label>

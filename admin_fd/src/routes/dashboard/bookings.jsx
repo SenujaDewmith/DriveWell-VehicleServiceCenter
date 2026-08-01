@@ -2,7 +2,18 @@ import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
 import { StatusBadge } from "@/components/manager/ManagerOverview";
 import { InvoiceViewModal } from "@/components/invoices/InvoiceView";
-import { Eye, X } from "lucide-react";
+import { Eye, X, AlertTriangle } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const statuses = [
   "Booked",
@@ -13,6 +24,18 @@ const statuses = [
   "Cancelled",
   "No-show",
 ];
+
+// Must match NO_SHOW_GRACE_MINUTES in backend/src/controllers/bookings.controller.js — kept
+// in sync so the button is only ever enabled when the backend will actually accept the call.
+const NO_SHOW_GRACE_MINUTES = 15;
+
+// service_date + slot_time are business-local (see getLocalNow() on the backend), and this
+// parses them the same way — as browser-local time, not UTC — which only lines up correctly
+// if staff are in the same timezone as the business. True everywhere else in this admin app.
+const minutesSinceStart = (b) => {
+  const appointment = new Date(`${b.service_date}T${b.slot_time}`);
+  return (Date.now() - appointment.getTime()) / 60000;
+};
 
 export function BookingsPage() {
   const [bookings, setBookings] = useState([]);
@@ -25,6 +48,23 @@ export function BookingsPage() {
   // without a separate fetch per row.
   const [invoicesByReservation, setInvoicesByReservation] = useState({});
   const [viewInvoice, setViewInvoice] = useState(null);
+  const [actionError, setActionError] = useState("");
+  const [markingId, setMarkingId] = useState(null);
+
+  const markNoShow = async (reservationId) => {
+    setActionError("");
+    setMarkingId(reservationId);
+    try {
+      await api.patch(`/api/bookings/${reservationId}/status`, { status: "No-show" });
+      setBookings((prev) =>
+        prev.map((b) => (b.reservation_id === reservationId ? { ...b, status: "No-show" } : b)),
+      );
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to mark as No-show");
+    } finally {
+      setMarkingId(null);
+    }
+  };
 
   useEffect(() => {
     api
@@ -78,6 +118,11 @@ export function BookingsPage() {
       {error && (
         <p className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md px-3 py-2">
           {error}
+        </p>
+      )}
+      {actionError && (
+        <p className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md px-3 py-2">
+          {actionError}
         </p>
       )}
 
@@ -138,11 +183,14 @@ export function BookingsPage() {
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Package</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Status</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Invoice</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((b) => {
                 const invoice = invoicesByReservation[b.reservation_id];
+                const isOverdue =
+                  b.status === "Booked" && minutesSinceStart(b) >= NO_SHOW_GRACE_MINUTES;
                 return (
                   <tr key={b.reservation_id} className="border-b border-border last:border-0">
                     <td className="py-2 px-3 text-muted-foreground">
@@ -152,11 +200,33 @@ export function BookingsPage() {
                     <td className="py-2 px-3 text-foreground">
                       {b.slot_time ? b.slot_time.slice(0, 5) : "—"}
                     </td>
-                    <td className="py-2 px-3 text-foreground">{b.customer_name}</td>
+                    <td className="py-2 px-3 text-foreground">
+                      <div className="flex items-center gap-1.5">
+                        {b.customer_name}
+                        {b.customer_no_show_count > 0 && (
+                          <span
+                            title={`${b.customer_no_show_count} previous no-show${b.customer_no_show_count > 1 ? "s" : ""}`}
+                            className="flex items-center gap-0.5 rounded-full bg-destructive/10 px-1.5 py-0.5 text-xs font-medium text-destructive"
+                          >
+                            <AlertTriangle className="h-3 w-3" /> {b.customer_no_show_count}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-2 px-3 text-foreground">{b.plate_no}</td>
                     <td className="py-2 px-3 text-foreground">{b.package_name}</td>
                     <td className="py-2 px-3">
-                      <StatusBadge status={b.status} />
+                      <div className="flex items-center gap-1.5">
+                        <StatusBadge status={b.status} />
+                        {isOverdue && (
+                          <span
+                            title="Past its scheduled time and still marked Booked"
+                            className="rounded-full bg-status-cancelled/10 px-1.5 py-0.5 text-xs font-medium text-status-cancelled"
+                          >
+                            Overdue
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-2 px-3">
                       {invoice ? (
@@ -170,12 +240,45 @@ export function BookingsPage() {
                         <span className="text-muted-foreground">—</span>
                       )}
                     </td>
+                    <td className="py-2 px-3">
+                      {isOverdue ? (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <button
+                              disabled={markingId === b.reservation_id}
+                              className="rounded-md border border-destructive/30 px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/5 transition-colors disabled:opacity-50"
+                            >
+                              {markingId === b.reservation_id ? "Marking..." : "Mark No-show"}
+                            </button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                Mark {b.booking_ref ?? `#${b.reservation_id}`} as No-show?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This frees up the slot and emails {b.customer_name} that they missed
+                                their appointment.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => markNoShow(b.reservation_id)}>
+                                Mark No-show
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="py-8 text-center text-muted-foreground">
                     No bookings match filter
                   </td>
                 </tr>
