@@ -11,7 +11,7 @@ import { feedbackService } from "@/services/feedback.service";
 import { CANCELLATION_CUTOFF_HOURS, canSelfCancel, bookingListTab } from "@/lib/bookingRules";
 import { fmtDuration } from "@/lib/packageFormat";
 import { fmtTime } from "@/lib/time";
-import { ArrowLeft, Car, Calendar, Clock, CheckCircle, Loader2, Wrench, FileText, Printer, Gauge } from "lucide-react";
+import { ArrowLeft, Car, Calendar, Clock, CheckCircle, Loader2, Wrench, FileText, Printer, Gauge, Copy } from "lucide-react";
 import { toast } from "sonner";
 function fmtDate(d) {
     return new Date(d).toLocaleDateString("en-LK", {
@@ -107,6 +107,12 @@ export default function BookingDetails() {
         };
     }, [user]);
     const hasFeedback = feedback.some((f) => f.reservation_id === reservationId);
+    const copyBookingRef = () => {
+        navigator.clipboard
+            .writeText(booking.booking_ref)
+            .then(() => toast.success("Booking reference copied"))
+            .catch(() => toast.error("Couldn't copy — please copy it manually"));
+    };
     const handleCancel = async () => {
         if (!booking)
             return;
@@ -162,7 +168,13 @@ export default function BookingDetails() {
             {booking.status}
           </Badge>
         </div>
-        <p className="text-muted-foreground">Ref: {booking.booking_ref}</p>
+        {booking.booking_ref && (<div className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5">
+            <span className="text-xs text-muted-foreground">Ref</span>
+            <span className="font-mono text-sm font-semibold tracking-wide text-foreground">{booking.booking_ref}</span>
+            <button type="button" onClick={copyBookingRef} aria-label="Copy booking reference" className="text-muted-foreground hover:text-foreground transition-colors">
+              <Copy className="h-3.5 w-3.5"/>
+            </button>
+          </div>)}
         {!isOwnBooking && (<p className="text-sm text-muted-foreground mt-2">
             This service was recorded before you owned this vehicle.
           </p>)}

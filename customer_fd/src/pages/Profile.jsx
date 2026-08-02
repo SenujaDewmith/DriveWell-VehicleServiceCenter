@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -14,21 +14,15 @@ import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { authService } from "@/services/auth.service";
 import { profileService } from "@/services/profile.service";
 import { ASSET_BASE_URL } from "@/lib/apiClient";
-import { changePasswordSchema, } from "@/lib/schemas/auth";
+import { changePasswordSchema, profileSchema, } from "@/lib/schemas/auth";
 import { PasswordHint } from "@/components/auth/PasswordHint";
+import { PhoneNumberInput } from "@/components/ui/phone-number-input";
 import { AvatarEditorDialog } from "@/components/AvatarEditorDialog";
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
 const ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 export default function Profile() {
     const { user, updateProfile } = useAuth();
     const navigate = useNavigate();
-    const [formData, setFormData] = useState({
-        name: "",
-        email: "",
-        phone: "",
-        secondaryPhone: "",
-    });
-    const [savingProfile, setSavingProfile] = useState(false);
     const [showCurrentPassword, setShowCurrentPassword] = useState(false);
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
@@ -95,7 +89,7 @@ export default function Profile() {
             setIsRemovingAvatar(false);
         }
     };
-    const { register: registerPasswordField, handleSubmit: handlePasswordSubmit, reset: resetPasswordForm, watch: watchPasswordField, formState: { errors: passwordErrors, isSubmitting: isChangingPassword }, } = useForm({
+    const { register: registerPasswordField, handleSubmit: handlePasswordSubmit, reset: resetPasswordForm, watch: watchPasswordField, formState: { errors: passwordErrors, isSubmitting: isChangingPassword, isDirty: isPasswordFormDirty }, } = useForm({
         resolver: zodResolver(changePasswordSchema),
     });
     const newPassword = watchPasswordField("newPassword", "");
@@ -109,30 +103,37 @@ export default function Profile() {
             toast.error(error instanceof Error ? error.message : "Failed to change password");
         }
     };
+    const { register: registerProfileField, handleSubmit: handleProfileSubmit, reset: resetProfileForm, control: profileControl, formState: { errors: profileErrors, isSubmitting: savingProfile, isDirty: isProfileDirty }, } = useForm({
+        resolver: zodResolver(profileSchema),
+    });
     useEffect(() => {
         if (!user) {
             navigate("/login");
         }
         else {
-            setFormData({
+            resetProfileForm({
                 name: user.name,
                 email: user.email,
                 phone: user.phone,
                 secondaryPhone: user.secondaryPhone,
             });
         }
-    }, [user, navigate]);
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setSavingProfile(true);
+    }, [user, navigate, resetProfileForm]);
+    const onSubmitProfile = async (data) => {
         try {
             const { profile } = await profileService.updateProfile({
-                full_name: formData.name,
-                phone: formData.phone,
-                secondary_phone: formData.secondaryPhone,
+                full_name: data.name,
+                phone: data.phone,
+                secondary_phone: data.secondaryPhone,
             });
             updateProfile({
                 name: profile.full_name,
+                phone: profile.phone ?? "",
+                secondaryPhone: profile.secondary_phone ?? "",
+            });
+            resetProfileForm({
+                name: profile.full_name,
+                email: user.email,
                 phone: profile.phone ?? "",
                 secondaryPhone: profile.secondary_phone ?? "",
             });
@@ -140,9 +141,6 @@ export default function Profile() {
         }
         catch (err) {
             toast.error(err instanceof Error ? err.message : "Failed to update profile");
-        }
-        finally {
-            setSavingProfile(false);
         }
     };
     if (!user)
@@ -232,24 +230,28 @@ export default function Profile() {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-1 flex-col">
-              <form onSubmit={handleSubmit} className="flex flex-1 flex-col space-y-3">
+              <form onSubmit={handleProfileSubmit(onSubmitProfile)} className="flex flex-1 flex-col space-y-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="name">Full Name</Label>
-                  <Input id="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required/>
+                  <Input id="name" {...registerProfileField("name")}/>
+                  {profileErrors.name && (<p className="text-sm text-destructive">{profileErrors.name.message}</p>)}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required/>
+                  <Input id="email" type="email" {...registerProfileField("email")}/>
+                  {profileErrors.email && (<p className="text-sm text-destructive">{profileErrors.email.message}</p>)}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" type="tel" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} required/>
+                  <Controller name="phone" control={profileControl} render={({ field, fieldState }) => (<PhoneNumberInput id="phone" value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={!!fieldState.error}/>)}/>
+                  {profileErrors.phone && (<p className="text-sm text-destructive">{profileErrors.phone.message}</p>)}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="secondary-phone">Secondary Phone Number (optional)</Label>
-                  <Input id="secondary-phone" type="tel" value={formData.secondaryPhone} onChange={(e) => setFormData({ ...formData, secondaryPhone: e.target.value })}/>
+                  <Controller name="secondaryPhone" control={profileControl} render={({ field, fieldState }) => (<PhoneNumberInput id="secondary-phone" value={field.value} onChange={field.onChange} onBlur={field.onBlur} error={!!fieldState.error}/>)}/>
+                  {profileErrors.secondaryPhone && (<p className="text-sm text-destructive">{profileErrors.secondaryPhone.message}</p>)}
                 </div>
-                <Button type="submit" disabled={savingProfile} className="mt-auto w-full bg-cta text-cta-foreground hover:bg-cta/90">
+                <Button type="submit" disabled={savingProfile || !isProfileDirty} className="mt-auto w-full bg-cta text-cta-foreground hover:bg-cta/90">
                   {savingProfile ? "Saving..." : "Save Changes"}
                 </Button>
               </form>
@@ -301,7 +303,7 @@ export default function Profile() {
                       {passwordErrors.confirmNewPassword.message}
                     </p>)}
                 </div>
-                <Button type="submit" variant="outline" className="mt-auto w-full" disabled={isChangingPassword}>
+                <Button type="submit" variant="outline" className="mt-auto w-full" disabled={isChangingPassword || !isPasswordFormDirty}>
                   {isChangingPassword ? "Updating..." : "Update Password"}
                 </Button>
               </form>

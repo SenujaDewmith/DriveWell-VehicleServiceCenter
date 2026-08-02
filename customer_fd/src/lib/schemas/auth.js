@@ -37,6 +37,26 @@ export const changePasswordSchema = z
     message: "New password must be different from the current password",
     path: ["newPassword"],
 });
+// Sri Lankan mobile in international form only — e.g. +94771234567. Fixed "+94"
+// prefix plus exactly 9 local digits, nothing else. The prefix is locked in the UI
+// (PhoneNumberInput) rather than typed, so this is the backstop, not the primary guard.
+const SL_PHONE_REGEX = /^\+94\d{9}$/;
+const phoneSchema = z
+    .string()
+    .trim()
+    .regex(SL_PHONE_REGEX, "Enter a valid 9-digit number after +94");
+const optionalPhoneSchema = z
+    .string()
+    .trim()
+    .regex(SL_PHONE_REGEX, "Enter a valid 9-digit number after +94")
+    .optional()
+    .or(z.literal(""));
+export const profileSchema = z.object({
+    name: z.string().trim().min(2, "Name must be at least 2 characters"),
+    email: z.string().trim().email("Invalid email address"),
+    phone: phoneSchema,
+    secondaryPhone: optionalPhoneSchema,
+});
 export const forgotPasswordSchema = z.object({
     email: z.string().trim().email("Invalid email address"),
 });
