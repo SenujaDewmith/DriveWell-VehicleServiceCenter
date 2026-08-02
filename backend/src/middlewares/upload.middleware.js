@@ -50,7 +50,7 @@ const uploadAvatar = multer({
   limits: { fileSize: 2 * 1024 * 1024 },
 });
 
-// Vehicle-transfer-request evidence photos (logbook + NIC) — never served through the
+// Vehicle-transfer-request evidence photos (registration book + NIC) — never served through the
 // public /uploads static mount (app.js); only readable via the manager-only, auth-gated
 // document route, and deleted from disk as soon as a request is resolved.
 const TRANSFER_DOCS_DIR = path.join(__dirname, "../../uploads/transfer-documents");

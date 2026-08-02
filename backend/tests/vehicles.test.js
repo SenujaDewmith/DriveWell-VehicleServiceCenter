@@ -267,7 +267,7 @@ describe("GET /api/vehicles/transfer-requests/mine", () => {
         requester_id: customer.user_id,
         current_owner_id: owner.user_id,
         contact_phone: "0771234567",
-        logbook_photo_path: "fake-logbook.jpg",
+        registration_book_photo_path: "fake-registration-book.jpg",
         nic_photo_path: "fake-nic.jpg",
       },
     });
@@ -298,7 +298,7 @@ describe("POST /api/vehicles/transfer-requests", () => {
       .set("X-Portal", "customer")
       .field("plate_no", "TRQ-0001")
       .field("contact_phone", "0771234567")
-      .attach("logbook_photo", Buffer.from("fake-logbook-bytes"), "logbook.jpg")
+      .attach("registration_book_photo", Buffer.from("fake-registration-book-bytes"), "registration-book.jpg")
       .attach("nic_photo", Buffer.from("fake-nic-bytes"), "nic.jpg");
 
     expect(res.status).toBe(201);
@@ -306,7 +306,7 @@ describe("POST /api/vehicles/transfer-requests", () => {
 
     const stored = await prisma.vehicleTransferRequest.findFirst({ where: { requester_id: customer.user_id } });
     expect(stored).not.toBeNull();
-    expect(stored.logbook_photo_path).toBeTruthy();
+    expect(stored.registration_book_photo_path).toBeTruthy();
     expect(stored.nic_photo_path).toBeTruthy();
   });
 
@@ -320,7 +320,7 @@ describe("POST /api/vehicles/transfer-requests", () => {
       .set("X-Portal", "customer")
       .field("plate_no", "TRQ-0002")
       .field("contact_phone", "0719999999")
-      .attach("logbook_photo", Buffer.from("a"), "logbook.jpg")
+      .attach("registration_book_photo", Buffer.from("a"), "registration-book.jpg")
       .attach("nic_photo", Buffer.from("b"), "nic.jpg");
 
     expect(res.status).toBe(201);
@@ -335,7 +335,7 @@ describe("POST /api/vehicles/transfer-requests", () => {
       .post("/api/vehicles/transfer-requests")
       .set("X-Portal", "customer")
       .field("contact_phone", "0771234567")
-      .attach("logbook_photo", Buffer.from("a"), "logbook.jpg")
+      .attach("registration_book_photo", Buffer.from("a"), "registration-book.jpg")
       .attach("nic_photo", Buffer.from("b"), "nic.jpg");
     expect(res.status).toBe(400);
   });
@@ -349,7 +349,7 @@ describe("POST /api/vehicles/transfer-requests", () => {
       .set("X-Portal", "customer")
       .field("plate_no", "TRQ-0003")
       .field("contact_phone", "abc")
-      .attach("logbook_photo", Buffer.from("a"), "logbook.jpg")
+      .attach("registration_book_photo", Buffer.from("a"), "registration-book.jpg")
       .attach("nic_photo", Buffer.from("b"), "nic.jpg");
     expect(res.status).toBe(400);
   });
@@ -373,7 +373,7 @@ describe("POST /api/vehicles/transfer-requests", () => {
       .set("X-Portal", "customer")
       .field("plate_no", "NOPE-0002")
       .field("contact_phone", "0771234567")
-      .attach("logbook_photo", Buffer.from("a"), "logbook.jpg")
+      .attach("registration_book_photo", Buffer.from("a"), "registration-book.jpg")
       .attach("nic_photo", Buffer.from("b"), "nic.jpg");
     expect(res.status).toBe(404);
   });
@@ -387,7 +387,7 @@ describe("POST /api/vehicles/transfer-requests", () => {
       .set("X-Portal", "customer")
       .field("plate_no", "TRQ-0005")
       .field("contact_phone", "0771234567")
-      .attach("logbook_photo", Buffer.from("a"), "logbook.jpg")
+      .attach("registration_book_photo", Buffer.from("a"), "registration-book.jpg")
       .attach("nic_photo", Buffer.from("b"), "nic.jpg");
     expect(res.status).toBe(400);
   });
@@ -400,7 +400,7 @@ describe("POST /api/vehicles/transfer-requests", () => {
       .set("X-Portal", "customer")
       .field("plate_no", "TRQ-0006")
       .field("contact_phone", "0771234567")
-      .attach("logbook_photo", Buffer.from("a"), "logbook.jpg")
+      .attach("registration_book_photo", Buffer.from("a"), "registration-book.jpg")
       .attach("nic_photo", Buffer.from("b"), "nic.jpg");
     expect(res.status).toBe(400);
   });
@@ -415,7 +415,7 @@ describe("POST /api/vehicles/transfer-requests", () => {
         requester_id: (await createUser("Customer")).user_id,
         current_owner_id: owner.user_id,
         contact_phone: "0771234567",
-        logbook_photo_path: "x.jpg",
+        registration_book_photo_path: "x.jpg",
         nic_photo_path: "y.jpg",
       },
     });
@@ -425,7 +425,7 @@ describe("POST /api/vehicles/transfer-requests", () => {
       .set("X-Portal", "customer")
       .field("plate_no", "TRQ-0007")
       .field("contact_phone", "0771234567")
-      .attach("logbook_photo", Buffer.from("a"), "logbook.jpg")
+      .attach("registration_book_photo", Buffer.from("a"), "registration-book.jpg")
       .attach("nic_photo", Buffer.from("b"), "nic.jpg");
     expect(res.status).toBe(409);
   });

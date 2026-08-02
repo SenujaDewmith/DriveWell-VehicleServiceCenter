@@ -86,7 +86,7 @@ router.get("/transfer-requests", managerOnly, listTransferRequests);
  * @swagger
  * /api/admin/vehicles/transfer-requests/{id}/documents/{type}:
  *   get:
- *     summary: Stream a transfer request's verification photo (logbook or nic) — auth-gated, never public
+ *     summary: Stream a transfer request's verification photo (registration_book or nic) — auth-gated, never public
  *     tags: [VehicleAdmin]
  *     security:
  *       - cookieAuth: []
@@ -98,7 +98,7 @@ router.get("/transfer-requests", managerOnly, listTransferRequests);
  *       - in: path
  *         name: type
  *         required: true
- *         schema: { type: string, enum: [logbook, nic] }
+ *         schema: { type: string, enum: [registration_book, nic] }
  *     responses:
  *       200: { description: Image file }
  *       404: { description: Request or document not found }

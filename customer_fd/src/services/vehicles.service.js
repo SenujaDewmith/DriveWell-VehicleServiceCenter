@@ -8,11 +8,11 @@ export const vehiclesService = {
     claimVehicle: (plate_no) => apiClient.post("/vehicles/claim", { plate_no }),
     getDetachedVehicles: () => apiClient.get("/vehicles/detached"),
     restoreVehicle: (id) => apiClient.post(`/vehicles/${id}/restore`, {}),
-    submitTransferRequest: (plate_no, logbookPhoto, nicPhoto, contactPhone) => {
+    submitTransferRequest: (plate_no, registrationBookPhoto, nicPhoto, contactPhone) => {
         const formData = new FormData();
         formData.append("plate_no", plate_no);
         formData.append("contact_phone", contactPhone);
-        formData.append("logbook_photo", logbookPhoto);
+        formData.append("registration_book_photo", registrationBookPhoto);
         formData.append("nic_photo", nicPhoto);
         return apiClient.upload("/vehicles/transfer-requests", formData);
     },

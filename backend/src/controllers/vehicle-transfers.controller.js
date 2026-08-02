@@ -178,16 +178,16 @@ const listTransferRequests = async (req, res) => {
 
 const getTransferRequestDocument = async (req, res) => {
   const { id, type } = req.params;
-  if (!["logbook", "nic"].includes(type)) return res.status(400).json({ message: "Invalid document type" });
+  if (!["registration_book", "nic"].includes(type)) return res.status(400).json({ message: "Invalid document type" });
 
   try {
     const request = await prisma.vehicleTransferRequest.findUnique({
       where: { request_id: parseInt(id) },
-      select: { logbook_photo_path: true, nic_photo_path: true },
+      select: { registration_book_photo_path: true, nic_photo_path: true },
     });
     if (!request) return res.status(404).json({ message: "Transfer request not found" });
 
-    const filename = type === "logbook" ? request.logbook_photo_path : request.nic_photo_path;
+    const filename = type === "registration_book" ? request.registration_book_photo_path : request.nic_photo_path;
     if (!filename) return res.status(404).json({ message: "Document not available (request already resolved)" });
 
     // root option keeps this scoped to TRANSFER_DOCS_DIR regardless of filename content.
@@ -251,13 +251,13 @@ const approveTransferRequest = async (req, res) => {
           status: "Approved",
           reviewer_id: staffUserId,
           reviewed_at: new Date(),
-          logbook_photo_path: null,
+          registration_book_photo_path: null,
           nic_photo_path: null,
         },
       });
     });
 
-    deleteTransferDocs(request.logbook_photo_path, request.nic_photo_path);
+    deleteTransferDocs(request.registration_book_photo_path, request.nic_photo_path);
 
     if (oldOwnerId) notifyPreviousOwner(oldOwnerId, { plateNo: vehicle.plate_no, reason: "transferred" });
 
@@ -297,7 +297,7 @@ const rejectTransferRequest = async (req, res) => {
           reviewer_id: staffUserId,
           reviewed_at: new Date(),
           rejection_reason: reason || null,
-          logbook_photo_path: null,
+          registration_book_photo_path: null,
           nic_photo_path: null,
         },
       });
@@ -306,7 +306,7 @@ const rejectTransferRequest = async (req, res) => {
       });
     });
 
-    deleteTransferDocs(request.logbook_photo_path, request.nic_photo_path);
+    deleteTransferDocs(request.registration_book_photo_path, request.nic_photo_path);
 
     const [requester, vehicle] = await Promise.all([
       prisma.user.findUnique({ where: { user_id: request.requester_id }, select: { email: true, customer: { select: { full_name: true } } } }),

@@ -70,7 +70,7 @@ export default function Vehicles() {
     const [plateBlockedElsewhere, setPlateBlockedElsewhere] = useState(false);
     const [transferRequestDialogOpen, setTransferRequestDialogOpen] = useState(false);
     const [transferRequestPlate, setTransferRequestPlate] = useState("");
-    const [logbookFile, setLogbookFile] = useState(null);
+    const [registrationBookFile, setRegistrationBookFile] = useState(null);
     const [nicFile, setNicFile] = useState(null);
     const [submittingTransferRequest, setSubmittingTransferRequest] = useState(false);
     const [transferRequestError, setTransferRequestError] = useState("");
@@ -355,8 +355,8 @@ export default function Vehicles() {
             ? user?.secondaryPhone ?? ""
             : newContactPhone.trim();
     const submitTransferRequest = async () => {
-        if (!logbookFile || !nicFile) {
-            setTransferRequestError("Both a logbook photo and an NIC photo are required");
+        if (!registrationBookFile || !nicFile) {
+            setTransferRequestError("Both a vehicle's registration book photo and an NIC photo are required");
             return;
         }
         if (!resolvedContactPhone) {
@@ -366,7 +366,7 @@ export default function Vehicles() {
         setSubmittingTransferRequest(true);
         setTransferRequestError("");
         try {
-            const { profile_updated } = await vehiclesService.submitTransferRequest(transferRequestPlate, logbookFile, nicFile, resolvedContactPhone);
+            const { profile_updated } = await vehiclesService.submitTransferRequest(transferRequestPlate, registrationBookFile, nicFile, resolvedContactPhone);
             toast.success(profile_updated
                 ? "Transfer request submitted — this number was also saved to your profile as a secondary contact number"
                 : "Transfer request submitted — you'll be notified once it's reviewed");
@@ -595,9 +595,12 @@ export default function Vehicles() {
                 }
             }} error={!!formErrors.plate_no}/>
                   {formErrors.plate_no ? (<p className="text-xs text-destructive">{formErrors.plate_no}</p>) : (<p className="text-xs text-muted-foreground">Format: 2-3 letters/digits, then 4 digits (e.g. KA-1234, CAB-1234)</p>)}
+                  {plateBlockedElsewhere && (<p className="text-xs text-muted-foreground mt-1">
+                      If this is your vehicle (e.g. you recently bought it), you can verify ownership below.
+                    </p>)}
                   {plateBlockedElsewhere && (<Button type="button" variant="outline" size="sm" className="mt-1" onClick={() => {
                     setTransferRequestPlate(plateNo.trim());
-                    setLogbookFile(null);
+                    setRegistrationBookFile(null);
                     setNicFile(null);
                     setTransferRequestError("");
                     setNewContactPhone("");
@@ -695,8 +698,8 @@ export default function Vehicles() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              {transferRequestPlate} is currently registered to another DriveWell account. Upload your vehicle
-              logbook and NIC as verification — a manager will review them before any transfer happens, and the
+              {transferRequestPlate} is currently registered to another DriveWell account. Upload your vehicle's
+              registration book and NIC as verification — a manager will review them before any transfer happens, and the
               current owner will be notified that a request was filed.
             </p>
             {transferRequestError && (<p className="text-sm text-destructive">{transferRequestError}</p>)}
@@ -724,8 +727,8 @@ export default function Vehicles() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="logbook_photo">Vehicle Logbook Photo <span className="text-destructive">*</span></Label>
-              <Input id="logbook_photo" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => setLogbookFile(e.target.files?.[0] ?? null)}/>
+              <Label htmlFor="registration_book_photo">Vehicle's Registration Book Photo <span className="text-destructive">*</span></Label>
+              <Input id="registration_book_photo" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => setRegistrationBookFile(e.target.files?.[0] ?? null)}/>
             </div>
             <div className="space-y-2">
               <Label htmlFor="nic_photo">Your NIC Photo <span className="text-destructive">*</span></Label>

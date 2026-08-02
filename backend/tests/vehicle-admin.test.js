@@ -47,10 +47,10 @@ function writeFakeDoc(filename) {
 }
 
 async function createTransferRequest({ vehicle, requesterId, currentOwnerId, status = "Pending", withDocs = true }) {
-  const logbook_photo_path = withDocs ? `test-logbook-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg` : null;
+  const registration_book_photo_path = withDocs ? `test-registration-book-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg` : null;
   const nic_photo_path = withDocs ? `test-nic-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg` : null;
   if (withDocs) {
-    writeFakeDoc(logbook_photo_path);
+    writeFakeDoc(registration_book_photo_path);
     writeFakeDoc(nic_photo_path);
   }
   return prisma.vehicleTransferRequest.create({
@@ -60,7 +60,7 @@ async function createTransferRequest({ vehicle, requesterId, currentOwnerId, sta
       current_owner_id: currentOwnerId,
       contact_phone: "0771234567",
       status,
-      logbook_photo_path,
+      registration_book_photo_path,
       nic_photo_path,
     },
   });
@@ -255,15 +255,15 @@ describe("GET /api/admin/vehicles/transfer-requests", () => {
 });
 
 describe("GET /api/admin/vehicles/transfer-requests/:id/documents/:type", () => {
-  test("streams the logbook and nic photos for a manager", async () => {
+  test("streams the registration book and nic photos for a manager", async () => {
     const { agent } = await managerSession();
     const owner = await createUser("Customer");
     const requester = await createUser("Customer");
     const vehicle = await createVehicle(owner.user_id, { plate_no: "DOC-0001" });
     const req_ = await createTransferRequest({ vehicle, requesterId: requester.user_id, currentOwnerId: owner.user_id });
 
-    const logbookRes = await agent.get(`/api/admin/vehicles/transfer-requests/${req_.request_id}/documents/logbook`).set("X-Portal", "staff");
-    expect(logbookRes.status).toBe(200);
+    const registrationBookRes = await agent.get(`/api/admin/vehicles/transfer-requests/${req_.request_id}/documents/registration_book`).set("X-Portal", "staff");
+    expect(registrationBookRes.status).toBe(200);
     const nicRes = await agent.get(`/api/admin/vehicles/transfer-requests/${req_.request_id}/documents/nic`).set("X-Portal", "staff");
     expect(nicRes.status).toBe(200);
   });
@@ -281,7 +281,7 @@ describe("GET /api/admin/vehicles/transfer-requests/:id/documents/:type", () => 
 
   test("404 when the request doesn't exist", async () => {
     const { agent } = await managerSession();
-    const res = await agent.get("/api/admin/vehicles/transfer-requests/999999/documents/logbook").set("X-Portal", "staff");
+    const res = await agent.get("/api/admin/vehicles/transfer-requests/999999/documents/registration_book").set("X-Portal", "staff");
     expect(res.status).toBe(404);
   });
 
@@ -292,15 +292,15 @@ describe("GET /api/admin/vehicles/transfer-requests/:id/documents/:type", () => 
     const vehicle = await createVehicle(owner.user_id, { plate_no: "DOC-0003" });
     const req_ = await createTransferRequest({ vehicle, requesterId: requester.user_id, currentOwnerId: owner.user_id, status: "Rejected", withDocs: false });
 
-    const res = await agent.get(`/api/admin/vehicles/transfer-requests/${req_.request_id}/documents/logbook`).set("X-Portal", "staff");
+    const res = await agent.get(`/api/admin/vehicles/transfer-requests/${req_.request_id}/documents/registration_book`).set("X-Portal", "staff");
     expect(res.status).toBe(404);
   });
 
   test("no token -> 401, non-manager -> 403", async () => {
-    const noAuth = await request(app).get("/api/admin/vehicles/transfer-requests/1/documents/logbook").set("X-Portal", "staff");
+    const noAuth = await request(app).get("/api/admin/vehicles/transfer-requests/1/documents/registration_book").set("X-Portal", "staff");
     expect(noAuth.status).toBe(401);
     const { agent } = await customerSession();
-    const wrongRole = await agent.get("/api/admin/vehicles/transfer-requests/1/documents/logbook").set("X-Portal", "customer");
+    const wrongRole = await agent.get("/api/admin/vehicles/transfer-requests/1/documents/registration_book").set("X-Portal", "customer");
     expect(wrongRole.status).toBe(403);
   });
 });
@@ -322,7 +322,7 @@ describe("POST /api/admin/vehicles/transfer-requests/:id/approve", () => {
 
     const updatedRequest = await prisma.vehicleTransferRequest.findUnique({ where: { request_id: req_.request_id } });
     expect(updatedRequest.status).toBe("Approved");
-    expect(updatedRequest.logbook_photo_path).toBeNull();
+    expect(updatedRequest.registration_book_photo_path).toBeNull();
     expect(updatedRequest.nic_photo_path).toBeNull();
   });
 
@@ -397,7 +397,7 @@ describe("POST /api/admin/vehicles/transfer-requests/:id/reject", () => {
     const updatedRequest = await prisma.vehicleTransferRequest.findUnique({ where: { request_id: req_.request_id } });
     expect(updatedRequest.status).toBe("Rejected");
     expect(updatedRequest.rejection_reason).toBe("Documents illegible");
-    expect(updatedRequest.logbook_photo_path).toBeNull();
+    expect(updatedRequest.registration_book_photo_path).toBeNull();
 
     // Ownership must not have changed.
     const unchangedVehicle = await prisma.vehicle.findUnique({ where: { vehicle_id: vehicle.vehicle_id } });

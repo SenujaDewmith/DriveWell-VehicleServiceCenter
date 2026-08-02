@@ -96,7 +96,7 @@ const sendTransferRequestNoticeEmail = (to, { customerName, plateNo }) =>
     <h2>Vehicle Transfer Request</h2>
     <p>Hi ${customerName},</p>
     <p>Someone has submitted a request to claim your vehicle <strong>${plateNo}</strong> on DriveWell, along with
-    verification documents (logbook and NIC photos).</p>
+    verification documents (registration book and NIC photos).</p>
     <p>Nothing has changed yet — a DriveWell manager will review the documents before any transfer happens.
     If you did not sell or give away this vehicle, please contact DriveWell support immediately.</p>
   `);

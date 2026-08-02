@@ -143,24 +143,24 @@ model Vehicle {
 }
 
 model VehicleTransferRequest {
-  request_id         Int       @id @default(autoincrement())
-  vehicle_id         Int
-  requester_id       Int
+  request_id                   Int       @id @default(autoincrement())
+  vehicle_id                   Int
+  requester_id                 Int
   // Snapshot of who owned the vehicle when the request was filed — plain int,
   // no relation, since it's only ever used for display/audit, not queried by join.
-  current_owner_id   Int?
+  current_owner_id             Int?
   // Snapshot of the phone number given at submission time — so staff can call
   // whoever filed the request, even if their profile phone changes later.
-  contact_phone      String    @db.VarChar(20)
-  status             String    @default("Pending") @db.VarChar(20)
+  contact_phone                String    @db.VarChar(20)
+  status                       String    @default("Pending") @db.VarChar(20)
   // Nulled out once resolved (Approved/Rejected) — the actual files are deleted
   // from disk at that point too. Documents shouldn't outlive their one-time purpose.
-  logbook_photo_path String?   @db.VarChar(500)
-  nic_photo_path     String?   @db.VarChar(500)
-  reviewer_id        Int?
-  reviewed_at        DateTime?
-  rejection_reason   String?   @db.VarChar(500)
-  created_at         DateTime  @default(now())
+  registration_book_photo_path String?   @db.VarChar(500)
+  nic_photo_path               String?   @db.VarChar(500)
+  reviewer_id                  Int?
+  reviewed_at                  DateTime?
+  rejection_reason             String?   @db.VarChar(500)
+  created_at                   DateTime  @default(now())
 
   vehicle   Vehicle @relation(fields: [vehicle_id], references: [vehicle_id], onDelete: Cascade)
   requester User    @relation("TransferRequestsMade", fields: [requester_id], references: [user_id], onDelete: Cascade)

@@ -492,10 +492,12 @@ export function VehicleTransfersPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">Logbook Photo</p>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">
+                    Registration Book Photo
+                  </p>
                   <DocumentImage
-                    url={`${BASE}/api/admin/vehicles/transfer-requests/${reviewRequest.request_id}/documents/logbook`}
-                    alt="Vehicle logbook"
+                    url={`${BASE}/api/admin/vehicles/transfer-requests/${reviewRequest.request_id}/documents/registration_book`}
+                    alt="Vehicle's registration book"
                   />
                 </div>
                 <div>

@@ -6,20 +6,20 @@ import { Logo } from "@/components/Logo";
  * logo instead.
  */
 export function AuthSidePanel({ title, description, features, className }) {
-    return (<div className={cn("relative hidden lg:flex flex-col justify-between overflow-hidden bg-gradient-to-b from-secondary to-black text-secondary-foreground p-12", className)}>
+    return (<div className={cn("relative hidden lg:flex flex-col justify-between overflow-x-hidden overflow-y-auto bg-gradient-to-b from-secondary to-black text-secondary-foreground p-[clamp(1.5rem,5vh,3rem)]", className)}>
       <div className="pointer-events-none absolute left-1/2 top-1/3 h-[28rem] w-[28rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-cta/10 blur-[100px]"/>
 
-      <div className="relative inline-flex w-fit rounded-3xl  p-5 backdrop-blur-sm">
-        <Logo variant="icon" theme="dark" className="h-60 w-auto"/>
+      <div className="relative inline-flex w-fit shrink-0 rounded-3xl  p-5 backdrop-blur-sm">
+        <Logo variant="icon" theme="dark" className="h-[clamp(4rem,24vh,15rem)] w-auto"/>
       </div>
 
-      <div className="relative max-w-md space-y-10">
+      <div className="relative max-w-md shrink-0 space-y-[clamp(1.25rem,4vh,2.5rem)]">
         <div>
           <h1 className="text-3xl font-bold leading-tight">{title}</h1>
           <p className="mt-3 text-sm text-secondary-foreground/70">{description}</p>
         </div>
 
-        <ul className="flex flex-col gap-3">
+        <ul className="flex flex-col gap-[clamp(0.5rem,1.5vh,0.75rem)]">
           {features.map(({ icon: FeatureIcon, label }) => (<li key={label} className="flex items-center gap-3.5 rounded-2xl bg-white/[0.04] px-4 py-3.5 ring-1 ring-white/10">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cta/15">
                 <FeatureIcon className="h-4 w-4 text-cta" strokeWidth={2}/>
@@ -29,7 +29,7 @@ export function AuthSidePanel({ title, description, features, className }) {
         </ul>
       </div>
 
-      <p className="relative text-xs text-secondary-foreground/50">
+      <p className="relative shrink-0 text-xs text-secondary-foreground/50">
         &copy; {new Date().getFullYear()} DriveWell. Premium vehicle care, simplified.
       </p>
     </div>);

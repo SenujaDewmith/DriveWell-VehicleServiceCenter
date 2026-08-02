@@ -268,14 +268,14 @@ const claimVehicle = async (req, res) => {
 const submitTransferRequest = async (req, res) => {
   const { user_id } = req.user;
   const { plate_no, contact_phone } = req.body;
-  const logbookFile = req.files?.logbook_photo?.[0];
+  const registrationBookFile = req.files?.registration_book_photo?.[0];
   const nicFile = req.files?.nic_photo?.[0];
 
   if (!plate_no) return res.status(400).json({ message: "plate_no is required" });
   if (!contact_phone || !isValidPhone(contact_phone))
     return res.status(400).json({ message: "A valid contact phone number is required" });
-  if (!logbookFile || !nicFile)
-    return res.status(400).json({ message: "Both a logbook photo and an NIC photo are required" });
+  if (!registrationBookFile || !nicFile)
+    return res.status(400).json({ message: "Both a vehicle's registration book photo and an NIC photo are required" });
 
   const normalizedPlate = plate_no.trim().toUpperCase();
   const normalizedPhone = contact_phone.trim();
@@ -305,7 +305,7 @@ const submitTransferRequest = async (req, res) => {
         requester_id: user_id,
         current_owner_id: vehicle.customer_id,
         contact_phone: normalizedPhone,
-        logbook_photo_path: logbookFile.filename,
+        registration_book_photo_path: registrationBookFile.filename,
         nic_photo_path: nicFile.filename,
       },
     });

@@ -58,15 +58,12 @@ describe("POST /api/admin/vehicle-catalog/makes", () => {
     expect(res.body.make.name).toBe("TestMake Alpha");
   });
 
-  // VehicleMake has no unique constraint on name — the schema allows duplicates,
-  // there's just no dedup safety net at this layer.
-  test("allows a duplicate name (no uniqueness constraint in the schema)", async () => {
+  test("rejects a case-insensitive duplicate name with 409", async () => {
     const { agent } = await managerSession();
     const first = await agent.post("/api/admin/vehicle-catalog/makes").set("X-Portal", "staff").send({ name: "TestMake Dup" });
-    const second = await agent.post("/api/admin/vehicle-catalog/makes").set("X-Portal", "staff").send({ name: "TestMake Dup" });
+    const second = await agent.post("/api/admin/vehicle-catalog/makes").set("X-Portal", "staff").send({ name: "testmake dup" });
     expect(first.status).toBe(201);
-    expect(second.status).toBe(201);
-    expect(first.body.make.make_id).not.toBe(second.body.make.make_id);
+    expect(second.status).toBe(409);
   });
 
   test("400 when name is missing/empty", async () => {

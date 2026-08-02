@@ -41,7 +41,7 @@ This checklist is for what those tests can't show a panel — the actual UI work
       be detached
 - [ ] **Restore** a detached vehicle
 - [ ] **Look up a plate** that's actively owned by someone else, and **submit a transfer
-      request** with logbook + NIC photos (any two small images work)
+      request** with registration book + NIC photos (any two small images work)
 - [ ] **Browse services** — package list, pricing, descriptions
 - [ ] **Book a service**: pick a package, pick a date on the calendar (confirm fully-booked /
       closed days render differently from available ones), pick a time slot, accept Terms &

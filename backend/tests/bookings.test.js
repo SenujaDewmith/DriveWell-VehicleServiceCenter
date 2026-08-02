@@ -475,9 +475,69 @@ describe("PATCH /api/bookings/:id/status", () => {
     });
 
     const { agent: managerA } = await staffAgent("Service Center Manager");
-    const res = await withPortal(managerA, "staff")("patch", `/api/bookings/${created.body.reservation_id}/status`).send({ status: "No-show" });
+    const res = await withPortal(managerA, "staff")("patch", `/api/bookings/${created.body.reservation_id}/status`).send({ status: "Completed" });
+    expect(res.status).toBe(200);
+    expect(res.body.booking.status).toBe("Completed");
+  });
+
+  // Only a "Booked" appointment whose scheduled time is at least NO_SHOW_GRACE_MINUTES
+  // in the past can be marked No-show — createReservation writes straight to the DB, which
+  // is the only way to get a booking with a past start_time (the booking API itself refuses
+  // to create one in the past).
+  test("marks a booking No-show once its scheduled time is safely in the past", async () => {
+    const pkg = await seedPackage();
+    const customer = await createUser("Customer");
+    const vehicle = await createVehicle(customer.user_id);
+    const pastTime = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
+    const reservation = await createReservation({
+      customerId: customer.user_id,
+      vehicleId: vehicle.vehicle_id,
+      packageId: pkg.package_id,
+      serviceDate: pastTime.toISOString().split("T")[0],
+      startTime: `${String(pastTime.getHours()).padStart(2, "0")}:${String(pastTime.getMinutes()).padStart(2, "0")}`,
+    });
+
+    const { agent: managerA } = await staffAgent("Service Center Manager");
+    const res = await withPortal(managerA, "staff")("patch", `/api/bookings/${reservation.reservation_id}/status`).send({ status: "No-show" });
     expect(res.status).toBe(200);
     expect(res.body.booking.status).toBe("No-show");
+  });
+
+  test("400 when marking No-show before the grace period has elapsed", async () => {
+    const pkg = await seedPackage();
+    const { customer, agent: customerA } = await customerAgent();
+    const vehicle = await createVehicle(customer.user_id);
+    const created = await withPortal(customerA, "customer")("post", "/api/bookings").send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkg.package_id,
+      service_date: nextWorkingDate(),
+      start_time: "09:00",
+      terms_accepted: true,
+      terms_version: "1.0",
+    });
+
+    const { agent: managerA } = await staffAgent("Service Center Manager");
+    const res = await withPortal(managerA, "staff")("patch", `/api/bookings/${created.body.reservation_id}/status`).send({ status: "No-show" });
+    expect(res.status).toBe(400);
+  });
+
+  test("400 when marking No-show a booking that isn't currently Booked", async () => {
+    const pkg = await seedPackage();
+    const customer = await createUser("Customer");
+    const vehicle = await createVehicle(customer.user_id);
+    const pastTime = new Date(Date.now() - 60 * 60 * 1000);
+    const reservation = await createReservation({
+      customerId: customer.user_id,
+      vehicleId: vehicle.vehicle_id,
+      packageId: pkg.package_id,
+      serviceDate: pastTime.toISOString().split("T")[0],
+      startTime: `${String(pastTime.getHours()).padStart(2, "0")}:${String(pastTime.getMinutes()).padStart(2, "0")}`,
+      status: "Cancelled",
+    });
+
+    const { agent: managerA } = await staffAgent("Service Center Manager");
+    const res = await withPortal(managerA, "staff")("patch", `/api/bookings/${reservation.reservation_id}/status`).send({ status: "No-show" });
+    expect(res.status).toBe(400);
   });
 
   test("403 when a non-manager tries to override status", async () => {

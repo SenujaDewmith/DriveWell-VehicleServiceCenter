@@ -12,7 +12,7 @@ const { uploadTransferDocs } = require("../middlewares/upload.middleware");
 const customerOnly = [verifyToken, authorizeRoles("Customer")];
 
 const handleTransferDocsUpload = (req, res, next) => {
-  uploadTransferDocs.fields([{ name: "logbook_photo", maxCount: 1 }, { name: "nic_photo", maxCount: 1 }])(req, res, (err) => {
+  uploadTransferDocs.fields([{ name: "registration_book_photo", maxCount: 1 }, { name: "nic_photo", maxCount: 1 }])(req, res, (err) => {
     if (err) return res.status(400).json({ message: err.message || "Document upload failed" });
     next();
   });
@@ -220,7 +220,7 @@ router.get("/transfer-requests/mine", customerOnly, listMyTransferRequests);
  * @swagger
  * /api/vehicles/transfer-requests:
  *   post:
- *     summary: Submit a request to claim a vehicle actively owned by another customer, with logbook + NIC verification photos
+ *     summary: Submit a request to claim a vehicle actively owned by another customer, with registration book + NIC verification photos
  *     tags: [Vehicles]
  *     security:
  *       - cookieAuth: []
@@ -232,7 +232,7 @@ router.get("/transfer-requests/mine", customerOnly, listMyTransferRequests);
  *             type: object
  *             properties:
  *               plate_no: { type: string }
- *               logbook_photo: { type: string, format: binary }
+ *               registration_book_photo: { type: string, format: binary }
  *               nic_photo: { type: string, format: binary }
  *     responses:
  *       201: { description: Transfer request submitted }
