@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Plus,
+  Minus,
   Pencil,
   ToggleLeft,
   ToggleRight,
@@ -38,6 +39,8 @@ const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif
 // displays the first 5 featured packages — capped here so the admin can't select
 // more than what's actually shown.
 const MAX_FEATURED_PACKAGES = 5;
+const PRICE_STEP = 100;
+const PRICE_PATTERN = /^\d+(\.\d{1,2})?$/;
 
 function imageSrc(image_url) {
   return image_url ? `${BASE}${image_url}` : null;
@@ -62,12 +65,15 @@ function validate(form) {
     errors.estimated_duration = "Duration is required";
   } else if (
     !Number.isInteger(Number(form.estimated_duration)) ||
-    Number(form.estimated_duration) < 30
+    Number(form.estimated_duration) < 30 ||
+    Number(form.estimated_duration) % 30 !== 0
   ) {
-    errors.estimated_duration = "Duration must be at least 30 minutes";
+    errors.estimated_duration = "Duration must be a multiple of 30 minutes (e.g. 30, 60, 90)";
   }
   if (form.price === "" || form.price === undefined) {
     errors.price = "Price is required";
+  } else if (!PRICE_PATTERN.test(String(form.price).trim())) {
+    errors.price = "Enter a valid amount, e.g. 2500 or 2500.00";
   } else if (Number(form.price) < 1) {
     errors.price = "Price must be at least LKR 1";
   }
@@ -77,6 +83,25 @@ function validate(form) {
     errors.max_capacity = "Max capacity must be at least 1";
   }
   return errors;
+}
+
+// Suggests the next package code so the admin never has to scan the table for
+// the last one used. Only considers existing codes that are purely numeric
+// (e.g. "001") — a custom/alphanumeric code shouldn't skew the sequence — and
+// pads to match the existing width, widening it if the increment overflows
+// (e.g. 099 -> 100).
+function suggestNextCodeSuffix(packages) {
+  const numericSuffixes = packages
+    .map((p) => p.package_code)
+    .filter((code) => code?.startsWith(PACKAGE_CODE_PREFIX))
+    .map((code) => code.slice(PACKAGE_CODE_PREFIX.length))
+    .filter((suffix) => /^\d+$/.test(suffix));
+
+  if (numericSuffixes.length === 0) return "001";
+
+  const width = Math.max(3, ...numericSuffixes.map((s) => s.length));
+  const nextValue = Math.max(...numericSuffixes.map(Number)) + 1;
+  return String(nextValue).padStart(width, "0");
 }
 
 function fmtDuration(mins) {
@@ -93,6 +118,7 @@ export function PackagesPage() {
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [originalForm, setOriginalForm] = useState(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [pageError, setPageError] = useState("");
@@ -123,14 +149,22 @@ export function PackagesPage() {
     };
   }, [imagePreview]);
 
-  // Runs after the form has (re)opened — scroll it into view and move focus to
-  // the first field, since the panel renders above the table and a click on a
-  // row further down would otherwise open it off-screen.
+  // Runs after the form has (re)opened — move focus to the first field.
   useEffect(() => {
     if (focusToken === 0) return;
-    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     nameInputRef.current?.focus();
   }, [focusToken]);
+
+  // Lock page scroll while the modal is open so the backdrop doesn't let the
+  // table scroll underneath it.
+  useEffect(() => {
+    if (!showForm) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [showForm]);
 
   const resetImageState = () => {
     if (imagePreview) URL.revokeObjectURL(imagePreview);
@@ -141,7 +175,7 @@ export function PackagesPage() {
   };
 
   const openNew = () => {
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, code_suffix: suggestNextCodeSuffix(packages) });
     setFormErrors({});
     setEditing(null);
     resetImageState();
@@ -151,16 +185,18 @@ export function PackagesPage() {
   };
 
   const openEdit = (pkg) => {
-    setForm({
+    const initialForm = {
       name: pkg.name,
       code_suffix: pkg.package_code?.startsWith(PACKAGE_CODE_PREFIX)
         ? pkg.package_code.slice(PACKAGE_CODE_PREFIX.length)
         : (pkg.package_code ?? ""),
       description: pkg.description ?? "",
       estimated_duration: pkg.estimated_duration,
-      price: parseFloat(pkg.price),
+      price: parseFloat(pkg.price).toFixed(2),
       max_capacity: pkg.max_capacity,
-    });
+    };
+    setForm(initialForm);
+    setOriginalForm(initialForm);
     setFormErrors({});
     resetImageState();
     setEditing(pkg);
@@ -313,7 +349,41 @@ export function PackagesPage() {
     },
   });
 
+  // Price is a plain text field (not type="number") so we control formatting
+  // ourselves — this is what lets us keep "2500.00" on screen instead of the
+  // browser trimming trailing zeros the way native number inputs do.
+  const handlePriceChange = (e) => {
+    const raw = e.target.value;
+    if (raw === "" || /^\d*\.?\d{0,2}$/.test(raw)) {
+      setForm({ ...form, price: raw });
+      if (formErrors.price) setFormErrors({ ...formErrors, price: undefined });
+    }
+  };
+
+  const handlePriceBlur = (e) => {
+    if (e.target.value.trim() === "") return;
+    const num = Number(e.target.value);
+    if (!Number.isNaN(num)) setForm((f) => ({ ...f, price: num.toFixed(2) }));
+  };
+
+  const adjustPrice = (delta) => {
+    const next = Math.max(0, (Number(form.price) || 0) + delta);
+    setForm((f) => ({ ...f, price: next.toFixed(2) }));
+    if (formErrors.price) setFormErrors({ ...formErrors, price: undefined });
+  };
+
   const currentImageSrc = imagePreview ?? imageSrc(editing?.image_url ?? null);
+
+  // While editing, the Update button stays disabled until a field or the image
+  // actually differs from what was loaded — nothing to save otherwise.
+  const isUnchanged =
+    editing &&
+    !imageFile &&
+    Object.keys(EMPTY_FORM).every((key) => String(form[key]) === String(originalForm[key]));
+
+  // While creating, the Create button stays disabled until every required
+  // field is filled in with a valid value.
+  const isFormComplete = Object.keys(validate(form)).length === 0;
 
   return (
     <div className="space-y-6">
@@ -351,196 +421,233 @@ export function PackagesPage() {
 
       {showForm && (
         <div
-          ref={formRef}
-          className="rounded-lg border border-border bg-card p-5 space-y-4 scroll-mt-4"
+          className="fixed inset-0 bg-background/80 z-50 flex items-center justify-center p-4"
+          onClick={closeForm}
         >
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-foreground">
-              {editing ? "Edit Package" : "New Package"}
-            </h3>
-            <button onClick={closeForm} className="text-muted-foreground hover:text-foreground">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+          <div
+            ref={formRef}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg border border-border bg-card p-5 space-y-4 shadow-lg"
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-foreground">
+                {editing ? "Edit Package" : "New Package"}
+              </h3>
+              <button onClick={closeForm} className="text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-          {/* Image */}
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-muted-foreground">Package Image</label>
-            <div className="flex items-start gap-4">
-              <div className="h-28 w-40 rounded-lg border border-border bg-background flex items-center justify-center overflow-hidden shrink-0">
-                {currentImageSrc ? (
-                  <img
-                    src={currentImageSrc}
-                    alt="Package preview"
-                    className="h-full w-full object-cover"
+            {/* Image */}
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-muted-foreground">Package Image</label>
+              <div className="flex items-start gap-4">
+                <div className="h-28 w-40 rounded-lg border border-border bg-background flex items-center justify-center overflow-hidden shrink-0">
+                  {currentImageSrc ? (
+                    <img
+                      src={currentImageSrc}
+                      alt="Package preview"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <Car className="h-8 w-8 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    onChange={handleImageSelect}
+                    className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-card file:px-3 file:py-1.5 file:text-sm file:text-foreground hover:file:border-accent"
                   />
+                  <p className="text-sm text-muted-foreground">JPEG, PNG, WEBP, or GIF — max 5MB</p>
+                  {imageError && <p className="text-sm text-destructive">{imageError}</p>}
+                  {editing?.image_url && !imageFile && (
+                    <button
+                      type="button"
+                      onClick={removeExistingImage}
+                      disabled={removingImage}
+                      className="flex items-center gap-1 rounded-md border border-destructive px-2 py-1 text-sm text-destructive hover:bg-destructive hover:text-destructive-foreground transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3 w-3" />{" "}
+                      {removingImage ? "Removing..." : "Remove Image"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Name */}
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-muted-foreground">
+                Package Name <span className="text-destructive">*</span>
+              </label>
+              <input
+                ref={nameInputRef}
+                placeholder="e.g. Full Engine Service"
+                maxLength={100}
+                {...field("name")}
+                className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${formErrors.name ? "border-destructive" : "border-border"}`}
+              />
+              {formErrors.name && <p className="text-sm text-destructive">{formErrors.name}</p>}
+            </div>
+
+            {/* Package Code */}
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-muted-foreground">
+                Package Code <span className="text-destructive">*</span>
+              </label>
+              <div className="flex max-w-xs">
+                <span className="inline-flex items-center rounded-l-md border border-r-0 border-border bg-muted px-3 text-sm font-mono text-muted-foreground">
+                  {PACKAGE_CODE_PREFIX}
+                </span>
+                <input
+                  placeholder="e.g. 001"
+                  maxLength={16}
+                  value={form.code_suffix}
+                  onChange={(e) => {
+                    setForm({ ...form, code_suffix: e.target.value.toUpperCase() });
+                    if (formErrors.code_suffix)
+                      setFormErrors({ ...formErrors, code_suffix: undefined });
+                  }}
+                  className={`flex-1 min-w-0 border rounded-r-md bg-background px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${formErrors.code_suffix ? "border-destructive" : "border-border"}`}
+                />
+              </div>
+              {formErrors.code_suffix ? (
+                <p className="text-sm text-destructive">{formErrors.code_suffix}</p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {editing
+                    ? `A short reference code shown to customers, e.g. ${PACKAGE_CODE_PREFIX}001`
+                    : "Auto-suggested from the last package code — feel free to change it."}
+                </p>
+              )}
+            </div>
+
+            {/* Description */}
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-muted-foreground">
+                What&apos;s Included / Description <span className="text-destructive">*</span>
+              </label>
+              <p className="text-sm text-muted-foreground">
+                Enter each item on a new line — these will be shown as bullet points to customers
+              </p>
+              <textarea
+                rows={5}
+                placeholder={
+                  "Oil change & filter replacement\nBrake inspection\nFluid top-up\nTyre pressure check"
+                }
+                {...field("description")}
+                className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y ${formErrors.description ? "border-destructive" : "border-border"}`}
+              />
+              {formErrors.description && (
+                <p className="text-sm text-destructive">{formErrors.description}</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Duration */}
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-muted-foreground">
+                  Duration (minutes) <span className="text-destructive">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={30}
+                  step={30}
+                  placeholder="e.g. 90"
+                  {...field("estimated_duration")}
+                  className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${formErrors.estimated_duration ? "border-destructive" : "border-border"}`}
+                />
+                {formErrors.estimated_duration ? (
+                  <p className="text-sm text-destructive">{formErrors.estimated_duration}</p>
                 ) : (
-                  <Car className="h-8 w-8 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    In steps of 30 minutes (30, 60, 90...)
+                  </p>
                 )}
               </div>
-              <div className="space-y-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  onChange={handleImageSelect}
-                  className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-card file:px-3 file:py-1.5 file:text-sm file:text-foreground hover:file:border-accent"
-                />
-                <p className="text-sm text-muted-foreground">JPEG, PNG, WEBP, or GIF — max 5MB</p>
-                {imageError && <p className="text-sm text-destructive">{imageError}</p>}
-                {editing?.image_url && !imageFile && (
+
+              {/* Price */}
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-muted-foreground">
+                  Price (LKR) <span className="text-destructive">*</span>
+                </label>
+                <div
+                  className={`flex items-stretch rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring ${formErrors.price ? "border-destructive" : "border-border"}`}
+                >
                   <button
                     type="button"
-                    onClick={removeExistingImage}
-                    disabled={removingImage}
-                    className="flex items-center gap-1 rounded-md border border-destructive px-2 py-1 text-sm text-destructive hover:bg-destructive hover:text-destructive-foreground transition-colors disabled:opacity-50"
+                    onClick={() => adjustPrice(-PRICE_STEP)}
+                    aria-label="Decrease price by 100"
+                    className="px-2 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:text-muted-foreground"
+                    disabled={(Number(form.price) || 0) <= 0}
                   >
-                    <Trash2 className="h-3 w-3" /> {removingImage ? "Removing..." : "Remove Image"}
+                    <Minus className="h-3.5 w-3.5" />
                   </button>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="e.g. 2500.00"
+                    value={form.price}
+                    onChange={handlePriceChange}
+                    onBlur={handlePriceBlur}
+                    className="w-full min-w-0 border-0 bg-transparent px-1 py-2 text-sm text-foreground text-right focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => adjustPrice(PRICE_STEP)}
+                    aria-label="Increase price by 100"
+                    className="px-2 text-muted-foreground hover:text-foreground"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {formErrors.price ? (
+                  <p className="text-sm text-destructive">{formErrors.price}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Amount in Sri Lankan Rupees, e.g. 2500.00
+                  </p>
+                )}
+              </div>
+
+              {/* Max Capacity */}
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-muted-foreground">
+                  Max Capacity <span className="text-destructive">*</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="e.g. 3"
+                  {...field("max_capacity")}
+                  className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${formErrors.max_capacity ? "border-destructive" : "border-border"}`}
+                />
+                {formErrors.max_capacity ? (
+                  <p className="text-sm text-destructive">{formErrors.max_capacity}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Concurrent bookings allowed</p>
                 )}
               </div>
             </div>
-          </div>
 
-          {/* Name */}
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-muted-foreground">
-              Package Name <span className="text-destructive">*</span>
-            </label>
-            <input
-              ref={nameInputRef}
-              placeholder="e.g. Full Engine Service"
-              maxLength={100}
-              {...field("name")}
-              className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${formErrors.name ? "border-destructive" : "border-border"}`}
-            />
-            {formErrors.name && <p className="text-sm text-destructive">{formErrors.name}</p>}
-          </div>
-
-          {/* Package Code */}
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-muted-foreground">
-              Package Code <span className="text-destructive">*</span>
-            </label>
-            <div className="flex max-w-xs">
-              <span className="inline-flex items-center rounded-l-md border border-r-0 border-border bg-muted px-3 text-sm font-mono text-muted-foreground">
-                {PACKAGE_CODE_PREFIX}
-              </span>
-              <input
-                placeholder="e.g. 001"
-                maxLength={16}
-                value={form.code_suffix}
-                onChange={(e) => {
-                  setForm({ ...form, code_suffix: e.target.value.toUpperCase() });
-                  if (formErrors.code_suffix)
-                    setFormErrors({ ...formErrors, code_suffix: undefined });
-                }}
-                className={`flex-1 min-w-0 border rounded-r-md bg-background px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${formErrors.code_suffix ? "border-destructive" : "border-border"}`}
-              />
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={save}
+                disabled={saving || (editing ? isUnchanged : !isFormComplete)}
+                className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50"
+              >
+                {saving ? "Saving..." : editing ? "Update Package" : "Create Package"}
+              </button>
+              <button
+                onClick={closeForm}
+                className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground transition-colors"
+              >
+                Cancel
+              </button>
             </div>
-            {formErrors.code_suffix ? (
-              <p className="text-sm text-destructive">{formErrors.code_suffix}</p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                A short reference code shown to customers, e.g. {PACKAGE_CODE_PREFIX}001
-              </p>
-            )}
-          </div>
-
-          {/* Description */}
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-muted-foreground">
-              What&apos;s Included / Description <span className="text-destructive">*</span>
-            </label>
-            <p className="text-sm text-muted-foreground">
-              Enter each item on a new line — these will be shown as bullet points to customers
-            </p>
-            <textarea
-              rows={5}
-              placeholder={
-                "Oil change & filter replacement\nBrake inspection\nFluid top-up\nTyre pressure check"
-              }
-              {...field("description")}
-              className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y ${formErrors.description ? "border-destructive" : "border-border"}`}
-            />
-            {formErrors.description && (
-              <p className="text-sm text-destructive">{formErrors.description}</p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Duration */}
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-muted-foreground">
-                Duration (minutes) <span className="text-destructive">*</span>
-              </label>
-              <input
-                type="number"
-                min={30}
-                placeholder="e.g. 90"
-                {...field("estimated_duration")}
-                className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${formErrors.estimated_duration ? "border-destructive" : "border-border"}`}
-              />
-              {formErrors.estimated_duration ? (
-                <p className="text-sm text-destructive">{formErrors.estimated_duration}</p>
-              ) : (
-                <p className="text-sm text-muted-foreground">Minimum 30 minutes</p>
-              )}
-            </div>
-
-            {/* Price */}
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-muted-foreground">
-                Price (LKR) <span className="text-destructive">*</span>
-              </label>
-              <input
-                type="number"
-                min={1}
-                placeholder="e.g. 7500"
-                {...field("price")}
-                className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${formErrors.price ? "border-destructive" : "border-border"}`}
-              />
-              {formErrors.price ? (
-                <p className="text-sm text-destructive">{formErrors.price}</p>
-              ) : (
-                <p className="text-sm text-muted-foreground">Amount in Sri Lankan Rupees</p>
-              )}
-            </div>
-
-            {/* Max Capacity */}
-            <div className="space-y-1">
-              <label className="text-sm font-medium text-muted-foreground">
-                Max Capacity <span className="text-destructive">*</span>
-              </label>
-              <input
-                type="number"
-                min={1}
-                placeholder="e.g. 3"
-                {...field("max_capacity")}
-                className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${formErrors.max_capacity ? "border-destructive" : "border-border"}`}
-              />
-              {formErrors.max_capacity ? (
-                <p className="text-sm text-destructive">{formErrors.max_capacity}</p>
-              ) : (
-                <p className="text-sm text-muted-foreground">Concurrent bookings allowed</p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={save}
-              disabled={saving}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50"
-            >
-              {saving ? "Saving..." : editing ? "Update Package" : "Create Package"}
-            </button>
-            <button
-              onClick={closeForm}
-              className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground transition-colors"
-            >
-              Cancel
-            </button>
           </div>
         </div>
       )}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Combobox } from "@/components/ui/combobox";
@@ -14,6 +14,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 const inputClass = (hasError) =>
   `w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${hasError ? "border-destructive" : "border-border"}`;
@@ -36,6 +43,7 @@ function MakesTab() {
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
+  const [initialName, setInitialName] = useState("");
   const [nameError, setNameError] = useState("");
   const [saving, setSaving] = useState(false);
   const [pageError, setPageError] = useState("");
@@ -54,6 +62,7 @@ function MakesTab() {
   const openNew = () => {
     setEditing(null);
     setName("");
+    setInitialName("");
     setNameError("");
     setShowForm(true);
     setPageError("");
@@ -62,10 +71,13 @@ function MakesTab() {
   const openEdit = (make) => {
     setEditing(make);
     setName(make.name);
+    setInitialName(make.name);
     setNameError("");
     setShowForm(true);
     setPageError("");
   };
+
+  const isDirty = name !== initialName;
 
   const save = async () => {
     const trimmed = name.trim();
@@ -124,19 +136,11 @@ function MakesTab() {
         </p>
       )}
 
-      {showForm && (
-        <div className="rounded-lg border border-border bg-card p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-foreground">
-              {editing ? "Edit Make" : "New Make"}
-            </h3>
-            <button
-              onClick={() => setShowForm(false)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+      <Dialog open={showForm} onOpenChange={(open) => !saving && setShowForm(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit Make" : "New Make"}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-1">
             <label className="text-sm font-medium text-muted-foreground">
               Name <span className="text-destructive">*</span>
@@ -153,23 +157,24 @@ function MakesTab() {
             />
             {nameError && <p className="text-sm text-destructive">{nameError}</p>}
           </div>
-          <div className="flex gap-2 pt-1">
+          <DialogFooter>
+            <button
+              onClick={() => setShowForm(false)}
+              disabled={saving}
+              className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
             <button
               onClick={save}
-              disabled={saving}
+              disabled={saving || (editing && !isDirty)}
               className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50"
             >
               {saving ? "Saving..." : editing ? "Update Make" : "Create Make"}
             </button>
-            <button
-              onClick={() => setShowForm(false)}
-              className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="rounded-lg border border-border bg-card overflow-x-auto">
         {loading ? (
@@ -252,6 +257,7 @@ function TypesTab() {
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
+  const [initialName, setInitialName] = useState("");
   const [nameError, setNameError] = useState("");
   const [saving, setSaving] = useState(false);
   const [pageError, setPageError] = useState("");
@@ -270,6 +276,7 @@ function TypesTab() {
   const openNew = () => {
     setEditing(null);
     setName("");
+    setInitialName("");
     setNameError("");
     setShowForm(true);
     setPageError("");
@@ -278,10 +285,13 @@ function TypesTab() {
   const openEdit = (type) => {
     setEditing(type);
     setName(type.name);
+    setInitialName(type.name);
     setNameError("");
     setShowForm(true);
     setPageError("");
   };
+
+  const isDirty = name !== initialName;
 
   const save = async () => {
     const trimmed = name.trim();
@@ -340,19 +350,11 @@ function TypesTab() {
         </p>
       )}
 
-      {showForm && (
-        <div className="rounded-lg border border-border bg-card p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-foreground">
-              {editing ? "Edit Type" : "New Type"}
-            </h3>
-            <button
-              onClick={() => setShowForm(false)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+      <Dialog open={showForm} onOpenChange={(open) => !saving && setShowForm(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit Type" : "New Type"}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-1">
             <label className="text-sm font-medium text-muted-foreground">
               Name <span className="text-destructive">*</span>
@@ -369,23 +371,24 @@ function TypesTab() {
             />
             {nameError && <p className="text-sm text-destructive">{nameError}</p>}
           </div>
-          <div className="flex gap-2 pt-1">
+          <DialogFooter>
+            <button
+              onClick={() => setShowForm(false)}
+              disabled={saving}
+              className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
             <button
               onClick={save}
-              disabled={saving}
+              disabled={saving || (editing && !isDirty)}
               className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50"
             >
               {saving ? "Saving..." : editing ? "Update Type" : "Create Type"}
             </button>
-            <button
-              onClick={() => setShowForm(false)}
-              className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="rounded-lg border border-border bg-card overflow-x-auto">
         {loading ? (
@@ -479,8 +482,10 @@ function ModelsTab() {
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_MODEL_FORM);
+  const [initialForm, setInitialForm] = useState(EMPTY_MODEL_FORM);
   const [nameError, setNameError] = useState("");
   const [makeError, setMakeError] = useState("");
+  const [typeError, setTypeError] = useState("");
   const [yearError, setYearError] = useState("");
   const [saving, setSaving] = useState(false);
   const [pageError, setPageError] = useState("");
@@ -515,9 +520,12 @@ function ModelsTab() {
 
   const openNew = () => {
     setEditing(null);
-    setForm({ ...EMPTY_MODEL_FORM, make_id: makeFilter });
+    const initial = { ...EMPTY_MODEL_FORM, make_id: makeFilter };
+    setForm(initial);
+    setInitialForm(initial);
     setNameError("");
     setMakeError("");
+    setTypeError("");
     setYearError("");
     setShowForm(true);
     setPageError("");
@@ -525,19 +533,24 @@ function ModelsTab() {
 
   const openEdit = (model) => {
     setEditing(model);
-    setForm({
+    const initial = {
       name: model.name,
       make_id: model.make_id.toString(),
       vehicle_type_id: model.vehicle_type_id?.toString() ?? "",
       start_year: model.start_year?.toString() ?? "",
       end_year: model.end_year?.toString() ?? "",
-    });
+    };
+    setForm(initial);
+    setInitialForm(initial);
     setNameError("");
     setMakeError("");
+    setTypeError("");
     setYearError("");
     setShowForm(true);
     setPageError("");
   };
+
+  const isDirty = Object.keys(EMPTY_MODEL_FORM).some((key) => form[key] !== initialForm[key]);
 
   const save = async () => {
     let hasError = false;
@@ -560,6 +573,10 @@ function ModelsTab() {
       setMakeError("Make is required");
       hasError = true;
     }
+    if (!form.vehicle_type_id) {
+      setTypeError("Vehicle type is required");
+      hasError = true;
+    }
     if (form.start_year && form.end_year && parseInt(form.start_year) > parseInt(form.end_year)) {
       setYearError("Start year must be before or equal to end year");
       hasError = true;
@@ -571,7 +588,7 @@ function ModelsTab() {
     const payload = {
       name: trimmedName,
       make_id: parseInt(form.make_id),
-      vehicle_type_id: form.vehicle_type_id ? parseInt(form.vehicle_type_id) : null,
+      vehicle_type_id: parseInt(form.vehicle_type_id),
       start_year: form.start_year ? parseInt(form.start_year) : null,
       end_year: form.end_year ? parseInt(form.end_year) : null,
     };
@@ -629,19 +646,11 @@ function ModelsTab() {
         </p>
       )}
 
-      {showForm && (
-        <div className="rounded-lg border border-border bg-card p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-foreground">
-              {editing ? "Edit Model" : "New Model"}
-            </h3>
-            <button
-              onClick={() => setShowForm(false)}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+      <Dialog open={showForm} onOpenChange={(open) => !saving && setShowForm(open)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit Model" : "New Model"}</DialogTitle>
+          </DialogHeader>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
@@ -681,15 +690,22 @@ function ModelsTab() {
             </div>
 
             <div className="space-y-1">
-              <label className="text-sm font-medium text-muted-foreground">Vehicle Type</label>
+              <label className="text-sm font-medium text-muted-foreground">
+                Vehicle Type <span className="text-destructive">*</span>
+              </label>
               <Combobox
                 options={typeOptions}
                 value={form.vehicle_type_id}
-                onValueChange={(v) => setForm({ ...form, vehicle_type_id: v })}
+                onValueChange={(v) => {
+                  setForm({ ...form, vehicle_type_id: v });
+                  if (typeError) setTypeError("");
+                }}
                 placeholder="Select type"
                 searchPlaceholder="Search types..."
                 emptyText="No type found."
+                className={typeError ? "border-destructive" : ""}
               />
+              {typeError && <p className="text-sm text-destructive">{typeError}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-2">
@@ -725,23 +741,24 @@ function ModelsTab() {
             </div>
           </div>
 
-          <div className="flex gap-2 pt-1">
+          <DialogFooter>
+            <button
+              onClick={() => setShowForm(false)}
+              disabled={saving}
+              className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
             <button
               onClick={save}
-              disabled={saving}
+              disabled={saving || (editing && !isDirty)}
               className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50"
             >
               {saving ? "Saving..." : editing ? "Update Model" : "Create Model"}
             </button>
-            <button
-              onClick={() => setShowForm(false)}
-              className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="rounded-lg border border-border bg-card overflow-x-auto">
         {loading ? (

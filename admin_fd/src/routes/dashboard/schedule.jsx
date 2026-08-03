@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Trash2, CalendarOff } from "lucide-react";
+import { Plus, Pencil, Trash2, CalendarOff } from "lucide-react";
 import { api } from "@/lib/api";
 
 const ALL_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -44,9 +44,29 @@ function toHHMM(t) {
   return t.slice(0, 5);
 }
 
+// Local calendar date as YYYY-MM-DD — matches what a <input type="date">
+// produces, and avoids the UTC-shift bugs of Date#toISOString() for
+// timezones ahead of UTC (a holiday added at 1am local time shouldn't be
+// treated as "yesterday").
+function todayISODate() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 // A holiday is a blocked time that spans the entire day for a specific date
 function isHoliday(b) {
   return b.date !== null && toHHMM(b.start_time) === "00:00" && toHHMM(b.end_time) === "23:59";
+}
+
+// Order-independent — toggling a day off and back on appends it to the end of
+// workingDays, which shouldn't by itself count as a change worth saving.
+function sameDays(a, b) {
+  if (a.length !== b.length) return false;
+  const sorted = [...b].sort();
+  return [...a].sort().every((day, i) => day === sorted[i]);
 }
 
 export function SchedulePage() {
@@ -54,12 +74,14 @@ export function SchedulePage() {
   const [dayStart, setDayStart] = useState("");
   const [dayEnd, setDayEnd] = useState("");
   const [cutoffHours, setCutoffHours] = useState(4);
+  const [savedHours, setSavedHours] = useState(null);
   const [blockedTimes, setBlockedTimes] = useState([]);
 
   const [newBlockDate, setNewBlockDate] = useState("");
   const [newBlockStart, setNewBlockStart] = useState("");
   const [newBlockEnd, setNewBlockEnd] = useState("");
   const [newBlockReason, setNewBlockReason] = useState("");
+  const [editingBlockId, setEditingBlockId] = useState(null);
 
   const [newHolidayDate, setNewHolidayDate] = useState("");
   const [newHolidayReason, setNewHolidayReason] = useState("");
@@ -80,10 +102,14 @@ export function SchedulePage() {
           .split(",")
           .map((n) => NUM_TO_DAY[parseInt(n)])
           .filter(Boolean);
+        const start = toHHMM(config.day_start_time);
+        const end = toHHMM(config.day_end_time);
+        const cutoff = config.same_day_cutoff_minutes / 60;
         setWorkingDays(days);
-        setDayStart(toHHMM(config.day_start_time));
-        setDayEnd(toHHMM(config.day_end_time));
-        setCutoffHours(config.same_day_cutoff_minutes / 60);
+        setDayStart(start);
+        setDayEnd(end);
+        setCutoffHours(cutoff);
+        setSavedHours({ workingDays: days, dayStart: start, dayEnd: end, cutoffHours: cutoff });
         setBlockedTimes(blocked_times);
       })
       .catch(() => setError("Failed to load config"))
@@ -123,6 +149,7 @@ export function SchedulePage() {
         day_end_time: dayEnd,
         same_day_cutoff_minutes: Math.round(cutoffHours * 60),
       });
+      setSavedHours({ workingDays, dayStart, dayEnd, cutoffHours });
       setSuccess("Business hours saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
@@ -131,7 +158,24 @@ export function SchedulePage() {
     }
   };
 
-  const addBlockedTime = async () => {
+  const resetBlockForm = () => {
+    setNewBlockDate("");
+    setNewBlockStart("");
+    setNewBlockEnd("");
+    setNewBlockReason("");
+    setEditingBlockId(null);
+  };
+
+  const startEditBlock = (b) => {
+    setNewBlockDate(b.date ?? "");
+    setNewBlockStart(toHHMM(b.start_time));
+    setNewBlockEnd(toHHMM(b.end_time));
+    setNewBlockReason(b.reason ?? "");
+    setEditingBlockId(b.block_id);
+    setError("");
+  };
+
+  const saveBlockedTime = async () => {
     if (!newBlockStart || !newBlockEnd) {
       setError("Start time and end time are required");
       return;
@@ -143,19 +187,25 @@ export function SchedulePage() {
     setAddingBlock(true);
     setError("");
     try {
-      await api.post("/api/config/blocked-times", {
+      const payload = {
         date: newBlockDate || undefined,
         start_time: newBlockStart,
         end_time: newBlockEnd,
         reason: newBlockReason || undefined,
-      });
-      setNewBlockDate("");
-      setNewBlockStart("");
-      setNewBlockEnd("");
-      setNewBlockReason("");
+      };
+      if (editingBlockId) {
+        await api.put(`/api/config/blocked-times/${editingBlockId}`, payload);
+      } else {
+        await api.post("/api/config/blocked-times", payload);
+      }
+      resetBlockForm();
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add blocked time");
+      setError(
+        err instanceof Error
+          ? err.message
+          : `Failed to ${editingBlockId ? "update" : "add"} blocked time`,
+      );
     } finally {
       setAddingBlock(false);
     }
@@ -164,6 +214,10 @@ export function SchedulePage() {
   const addHoliday = async () => {
     if (!newHolidayDate) {
       setError("Date is required");
+      return;
+    }
+    if (holidayDateError) {
+      setError(holidayDateError);
       return;
     }
     setAddingHoliday(true);
@@ -189,16 +243,43 @@ export function SchedulePage() {
     setError("");
     try {
       await api.delete(`/api/config/blocked-times/${block.block_id}`);
+      if (editingBlockId === block.block_id) resetBlockForm();
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to remove blocked time");
     }
   };
 
+  const hoursChanged =
+    savedHours !== null &&
+    (!sameDays(workingDays, savedHours.workingDays) ||
+      dayStart !== savedHours.dayStart ||
+      dayEnd !== savedHours.dayEnd ||
+      cutoffHours !== savedHours.cutoffHours);
+
   const holidays = blockedTimes
     .filter(isHoliday)
     .sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
   const partialBlocks = blockedTimes.filter((b) => !isHoliday(b));
+
+  // Validates the picked date before it ever reaches the server — a holiday
+  // in the past is meaningless, and a duplicate just clutters the list.
+  const holidayDateError = !newHolidayDate
+    ? null
+    : newHolidayDate < todayISODate()
+      ? "Date can't be in the past"
+      : holidays.some((h) => h.date === newHolidayDate)
+        ? "This date is already marked as a holiday"
+        : null;
+  const isHolidayDateValid = Boolean(newHolidayDate) && !holidayDateError;
+
+  // Same idea for the blocked-time form — only enable Add/Update once both
+  // times are picked and end is actually after start.
+  const blockTimeError =
+    newBlockStart && newBlockEnd && newBlockEnd <= newBlockStart
+      ? "End time must be after start time"
+      : null;
+  const isBlockTimeValid = Boolean(newBlockStart) && Boolean(newBlockEnd) && !blockTimeError;
 
   if (loading) {
     return <div className="text-sm text-muted-foreground p-8">Loading...</div>;
@@ -224,10 +305,10 @@ export function SchedulePage() {
           <h3 className="text-sm font-semibold text-foreground">Business Hours</h3>
           <button
             onClick={saveBusinessHours}
-            disabled={saving}
+            disabled={saving || !hoursChanged}
             className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50"
           >
-            {saving ? "Saving..." : "Save Business Hours"}
+            {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>
         <p className="text-sm text-muted-foreground">
@@ -235,6 +316,7 @@ export function SchedulePage() {
           duration and these hours — you no longer need to create individual time slots.
         </p>
 
+        <label className="block text-sm font-medium text-muted-foreground">Working Days</label>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {ALL_DAYS.map((day) => (
             <button
@@ -307,10 +389,12 @@ export function SchedulePage() {
             <label className="block text-sm font-medium text-muted-foreground">Date</label>
             <input
               type="date"
+              min={todayISODate()}
               value={newHolidayDate}
               onChange={(e) => setNewHolidayDate(e.target.value)}
-              className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className={`border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${holidayDateError ? "border-destructive" : "border-border"}`}
             />
+            {holidayDateError && <p className="text-sm text-destructive">{holidayDateError}</p>}
           </div>
           <div className="space-y-1 flex-1 min-w-40">
             <label className="block text-sm font-medium text-muted-foreground">
@@ -326,7 +410,7 @@ export function SchedulePage() {
           </div>
           <button
             onClick={addHoliday}
-            disabled={addingHoliday}
+            disabled={addingHoliday || !isHolidayDateValid}
             className="flex items-center gap-1 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50"
           >
             <Plus className="h-4 w-4" /> {addingHoliday ? "Adding..." : "Add Holiday"}
@@ -378,6 +462,15 @@ export function SchedulePage() {
           Holidays above instead.
         </p>
 
+        {editingBlockId && (
+          <p className="text-sm text-accent flex items-center gap-2">
+            Editing block —{" "}
+            <button type="button" onClick={resetBlockForm} className="underline hover:no-underline">
+              cancel
+            </button>
+          </p>
+        )}
+
         <div className="flex flex-wrap items-end gap-2">
           <div className="space-y-1">
             <label className="block text-sm font-medium text-muted-foreground">
@@ -405,8 +498,9 @@ export function SchedulePage() {
               type="time"
               value={newBlockEnd}
               onChange={(e) => setNewBlockEnd(e.target.value)}
-              className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className={`border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${blockTimeError ? "border-destructive" : "border-border"}`}
             />
+            {blockTimeError && <p className="text-sm text-destructive">{blockTimeError}</p>}
           </div>
           <div className="space-y-1 flex-1 min-w-40">
             <label className="block text-sm font-medium text-muted-foreground">
@@ -421,11 +515,18 @@ export function SchedulePage() {
             />
           </div>
           <button
-            onClick={addBlockedTime}
-            disabled={addingBlock}
+            onClick={saveBlockedTime}
+            disabled={addingBlock || !isBlockTimeValid}
             className="flex items-center gap-1 rounded-md bg-accent px-3 py-2 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50"
           >
-            <Plus className="h-4 w-4" /> {addingBlock ? "Adding..." : "Add Block"}
+            <Plus className="h-4 w-4" />{" "}
+            {addingBlock
+              ? editingBlockId
+                ? "Updating..."
+                : "Adding..."
+              : editingBlockId
+                ? "Update Block"
+                : "Add Block"}
           </button>
         </div>
 
@@ -454,13 +555,22 @@ export function SchedulePage() {
                   <td className="py-2 px-2 text-foreground">{toHHMM(b.end_time)}</td>
                   <td className="py-2 px-2 text-muted-foreground">{b.reason ?? "—"}</td>
                   <td className="py-2 px-2">
-                    <button
-                      onClick={() => removeBlockedTime(b)}
-                      title="Delete"
-                      className="p-1 text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => startEditBlock(b)}
+                        title="Edit"
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={() => removeBlockedTime(b)}
+                        title="Delete"
+                        className="p-1 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -16,7 +16,8 @@ const packageSchema = z.object({
   estimated_duration: z
     .number({ required_error: "Duration is required", invalid_type_error: "Duration must be a number" })
     .int("Duration must be a whole number")
-    .min(30, "Duration must be at least 30 minutes"),
+    .min(30, "Duration must be at least 30 minutes")
+    .multipleOf(30, "Duration must be a multiple of 30 minutes (e.g. 30, 60, 90)"),
   price: z
     .number({ required_error: "Price is required", invalid_type_error: "Price must be a number" })
     .min(1, "Price must be at least LKR 1"),

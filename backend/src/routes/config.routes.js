@@ -1,6 +1,12 @@
 const express = require("express");
 const router = express.Router();
-const { getConfig, updateConfig, addBlockedTime, deleteBlockedTime } = require("../controllers/config.controller");
+const {
+  getConfig,
+  updateConfig,
+  addBlockedTime,
+  updateBlockedTime,
+  deleteBlockedTime,
+} = require("../controllers/config.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
 
 const managerOnly = [verifyToken, authorizeRoles("Service Center Manager")];
@@ -94,6 +100,40 @@ router.put("/", managerOnly, updateConfig);
  *       500: { description: Server error }
  */
 router.post("/blocked-times", managerOnly, addBlockedTime);
+
+/**
+ * @swagger
+ * /api/config/blocked-times/{id}:
+ *   put:
+ *     summary: Update a blocked/unavailable time period (Manager only)
+ *     tags: [Config]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [start_time, end_time]
+ *             properties:
+ *               date:       { type: string, format: date, example: "2026-07-20", description: "Omit for a recurring block that applies every working day (e.g. lunch break)" }
+ *               start_time: { type: string, example: "12:00", description: "HH:MM format" }
+ *               end_time:   { type: string, example: "13:00", description: "HH:MM format; must be after start_time" }
+ *               reason:     { type: string, example: "Lunch break" }
+ *     responses:
+ *       200: { description: Blocked time updated }
+ *       400: { description: Validation error }
+ *       403: { description: Manager only }
+ *       404: { description: Blocked time not found }
+ *       500: { description: Server error }
+ */
+router.put("/blocked-times/:id", managerOnly, updateBlockedTime);
 
 /**
  * @swagger

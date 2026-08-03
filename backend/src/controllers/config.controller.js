@@ -88,6 +88,32 @@ const addBlockedTime = async (req, res) => {
   }
 };
 
+const updateBlockedTime = async (req, res) => {
+  const { date, start_time, end_time, reason } = req.body;
+  if (!start_time || !end_time)
+    return res.status(400).json({ message: "start_time and end_time are required (HH:MM)" });
+  if (normalizeTime(end_time) <= normalizeTime(start_time))
+    return res.status(400).json({ message: "end_time must be after start_time" });
+
+  try {
+    const block = await prisma.blockedTime.update({
+      where: { block_id: parseInt(req.params.id) },
+      data: {
+        date: date ? new Date(date) : null,
+        start_time: toTimeDate(start_time),
+        end_time: toTimeDate(end_time),
+        reason: reason || null,
+      },
+    });
+    logActivity(prisma, { user_id: req.user.user_id, action: "SCHEDULE_UPDATED", entity_type: "blocked_time", entity_id: block.block_id });
+    res.status(200).json({ message: "Blocked time updated", block: flattenBlockedTime(block) });
+  } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Blocked time not found" });
+    logger.error(`updateBlockedTime failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 const deleteBlockedTime = async (req, res) => {
   try {
     const block = await prisma.blockedTime.delete({ where: { block_id: parseInt(req.params.id) } });
@@ -100,4 +126,4 @@ const deleteBlockedTime = async (req, res) => {
   }
 };
 
-module.exports = { getConfig, updateConfig, addBlockedTime, deleteBlockedTime };
+module.exports = { getConfig, updateConfig, addBlockedTime, updateBlockedTime, deleteBlockedTime };

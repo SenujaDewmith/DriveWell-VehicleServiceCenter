@@ -16,7 +16,7 @@ const vehicleModelSchema = z
       .min(1, "Name is required")
       .max(150, "Name must be 150 characters or less"),
     make_id: z.number({ required_error: "make_id is required", invalid_type_error: "make_id must be a number" }).int().positive(),
-    vehicle_type_id: z.number().int().positive().optional().nullable(),
+    vehicle_type_id: z.number({ required_error: "vehicle_type_id is required", invalid_type_error: "vehicle_type_id must be a number" }).int().positive(),
     start_year: z.number().int().min(1900, "Start year must be 1900 or later").optional().nullable(),
     end_year: z.number().int().min(1900, "End year must be 1900 or later").optional().nullable(),
   })
