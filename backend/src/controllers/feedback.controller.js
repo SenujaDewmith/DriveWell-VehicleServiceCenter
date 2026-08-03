@@ -4,6 +4,9 @@ const { fmtDate } = require("../lib/format");
 const { VEHICLE_SELECT, flattenVehicleRef } = require("../lib/vehicleFlatten");
 
 const CUSTOMER_ROLE = 5;
+// Matches MAX_FEATURED_FEEDBACK in admin_fd/feedback.jsx — the landing page's
+// testimonials section only ever displays up to 4 manager-picked feedback entries.
+const MAX_FEATURED_FEEDBACK = 4;
 
 const listFeedback = async (req, res) => {
   const { user_id, role_id } = req.user;
@@ -43,6 +46,7 @@ const listFeedback = async (req, res) => {
       rating: f.rating,
       comment: f.comment,
       submitted_at: f.submitted_at,
+      is_featured: f.is_featured,
       booking_ref: f.reservation.booking_ref,
       service_date: fmtDate(f.reservation.service_date),
       ...flattenVehicleRef(f.reservation.vehicle),
@@ -89,15 +93,12 @@ const submitFeedback = async (req, res) => {
   }
 };
 
-// Public — no auth. Only well-rated, commented feedback is fit for marketing display,
+// Public — no auth. Only manager-featured feedback is fit for marketing display,
 // and only the customer's first name + last initial is exposed (full name is PII).
 const listPublicTestimonials = async (req, res) => {
   try {
     const rows = await prisma.feedback.findMany({
-      where: {
-        rating: { gte: 4 },
-        comment: { not: null },
-      },
+      where: { is_featured: true },
       select: {
         feedback_id: true,
         rating: true,
@@ -106,13 +107,12 @@ const listPublicTestimonials = async (req, res) => {
           select: { customer: { select: { full_name: true } } },
         },
       },
-      orderBy: [{ rating: "desc" }, { submitted_at: "desc" }],
-      take: 9,
+      orderBy: { submitted_at: "desc" },
+      take: MAX_FEATURED_FEEDBACK,
     });
 
     const testimonials = rows
-      .filter((f) => f.comment.trim().length > 0 && f.customer.customer?.full_name)
-      .slice(0, 6)
+      .filter((f) => f.comment?.trim().length > 0 && f.customer.customer?.full_name)
       .map((f) => {
         const [first, ...rest] = f.customer.customer.full_name.trim().split(/\s+/);
         const lastInitial = rest.length ? `${rest[rest.length - 1][0]}.` : "";
@@ -150,4 +150,60 @@ const getFeedbackByBooking = async (req, res) => {
   }
 };
 
-module.exports = { listFeedback, submitFeedback, getFeedbackByBooking, listPublicTestimonials };
+const featureFeedback = async (req, res) => {
+  try {
+    const feedbackId = parseInt(req.params.id);
+    const existing = await prisma.feedback.findUnique({
+      where: { feedback_id: feedbackId },
+      select: { is_featured: true, comment: true },
+    });
+    if (!existing) return res.status(404).json({ message: "Feedback not found" });
+
+    if (!existing.is_featured) {
+      if (!existing.comment?.trim()) {
+        return res.status(400).json({ message: "Feedback with no comment can't be featured" });
+      }
+      const featuredCount = await prisma.feedback.count({ where: { is_featured: true } });
+      if (featuredCount >= MAX_FEATURED_FEEDBACK) {
+        return res.status(400).json({
+          message: `Already have ${MAX_FEATURED_FEEDBACK} testimonials selected. Unfeature one before adding another.`,
+        });
+      }
+    }
+
+    const feedback = await prisma.feedback.update({
+      where: { feedback_id: feedbackId },
+      data: { is_featured: true },
+      select: { feedback_id: true, is_featured: true },
+    });
+    res.status(200).json({ message: "Feedback featured", feedback });
+  } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Feedback not found" });
+    logger.error(`featureFeedback failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const unfeatureFeedback = async (req, res) => {
+  try {
+    const feedback = await prisma.feedback.update({
+      where: { feedback_id: parseInt(req.params.id) },
+      data: { is_featured: false },
+      select: { feedback_id: true, is_featured: true },
+    });
+    res.status(200).json({ message: "Feedback unfeatured", feedback });
+  } catch (error) {
+    if (error.code === "P2025") return res.status(404).json({ message: "Feedback not found" });
+    logger.error(`unfeatureFeedback failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+module.exports = {
+  listFeedback,
+  submitFeedback,
+  getFeedbackByBooking,
+  listPublicTestimonials,
+  featureFeedback,
+  unfeatureFeedback,
+};

@@ -249,6 +249,7 @@ const options = {
             rating:         { type: "integer", example: 4, minimum: 1, maximum: 5 },
             comment:        { type: "string",  example: "Great service, very professional." },
             submitted_at:   { type: "string",  format: "date-time" },
+            is_featured:    { type: "boolean", example: false },
           },
         },
         FeedbackInput: {

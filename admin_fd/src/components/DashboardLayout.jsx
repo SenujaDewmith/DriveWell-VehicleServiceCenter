@@ -18,12 +18,14 @@ import {
   Wrench,
   ArrowLeftRight,
   Car,
+  MessageSquare,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 
 const managerNav = [
   { label: "Overview", to: "/dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
   { label: "Service Packages", to: "/dashboard/packages", icon: <Package className="h-4 w-4" /> },
+  { label: "Feedback", to: "/dashboard/feedback", icon: <MessageSquare className="h-4 w-4" /> },
   {
     label: "Charge Catalog",
     to: "/dashboard/charge-catalog",

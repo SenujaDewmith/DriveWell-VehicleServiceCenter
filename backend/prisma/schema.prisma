@@ -352,6 +352,7 @@ model Feedback {
   rating         Int
   comment        String?
   submitted_at   DateTime @default(now())
+  is_featured    Boolean  @default(false)
 
   reservation Reservation @relation(fields: [reservation_id], references: [reservation_id])
   customer    User        @relation("CustomerFeedback", fields: [customer_id], references: [user_id])

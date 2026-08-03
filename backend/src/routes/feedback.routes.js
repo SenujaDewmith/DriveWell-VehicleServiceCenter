@@ -1,7 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const { listFeedback, submitFeedback, getFeedbackByBooking, listPublicTestimonials } = require("../controllers/feedback.controller");
+const {
+  listFeedback,
+  submitFeedback,
+  getFeedbackByBooking,
+  listPublicTestimonials,
+  featureFeedback,
+  unfeatureFeedback,
+} = require("../controllers/feedback.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
+const managerOnly = [verifyToken, authorizeRoles("Service Center Manager")];
 
 /**
  * @swagger
@@ -120,5 +128,48 @@ router.get("/booking/:booking_id", verifyToken, getFeedbackByBooking);
  *       500: { description: Server error }
  */
 router.post("/", verifyToken, authorizeRoles("Customer"), submitFeedback);
+
+/**
+ * @swagger
+ * /api/feedback/{id}/feature:
+ *   patch:
+ *     summary: Feature feedback as a testimonial on the public landing page (Manager only, max 4 at a time)
+ *     tags: [Feedback]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Feedback featured }
+ *       400: { description: Already at the max number of featured testimonials }
+ *       403: { description: Manager only }
+ *       404: { description: Feedback not found }
+ *       500: { description: Server error }
+ */
+router.patch("/:id/feature", managerOnly, featureFeedback);
+
+/**
+ * @swagger
+ * /api/feedback/{id}/unfeature:
+ *   patch:
+ *     summary: Remove feedback from the landing page's testimonials section (Manager only)
+ *     tags: [Feedback]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Feedback unfeatured }
+ *       403: { description: Manager only }
+ *       404: { description: Feedback not found }
+ *       500: { description: Server error }
+ */
+router.patch("/:id/unfeature", managerOnly, unfeatureFeedback);
 
 module.exports = router;

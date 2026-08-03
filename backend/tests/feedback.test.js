@@ -24,6 +24,18 @@ async function completedBookingFixture() {
   return { pkg, customer, vehicle, reservation };
 }
 
+async function feedbackFixture({ email, rating = 5, comment = "Great service!" } = {}) {
+  const pkg = await seedPackage();
+  const customer = await createUser("Customer", email ? { email } : undefined);
+  const vehicle = await createVehicle(customer.user_id);
+  const reservation = await createReservation({
+    customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Completed",
+  });
+  const agent = await agentFor(customer, "customer");
+  const res = await agent.post("/api/feedback").set("X-Portal", "customer").send({ reservation_id: reservation.reservation_id, rating, comment });
+  return res.body.feedback;
+}
+
 describe("POST /api/feedback", () => {
   test("customer submits feedback for a completed booking", async () => {
     const { reservation, customer } = await completedBookingFixture();
@@ -137,25 +149,119 @@ describe("GET /api/feedback/booking/:booking_id", () => {
 });
 
 describe("GET /api/feedback/public", () => {
-  test("only shows rating >= 4 with a non-empty comment, as first-name + last-initial", async () => {
+  test("only shows manager-featured feedback, as first-name + last-initial", async () => {
     const pkg = await seedPackage();
 
     const goodCustomer = await createUser("Customer", { full_name: "Sarah Jayasuriya" });
     const goodVehicle = await createVehicle(goodCustomer.user_id);
     const goodReservation = await createReservation({ customerId: goodCustomer.user_id, vehicleId: goodVehicle.vehicle_id, packageId: pkg.package_id, status: "Completed" });
     const goodAgent = await agentFor(goodCustomer, "customer");
-    await goodAgent.post("/api/feedback").set("X-Portal", "customer").send({ reservation_id: goodReservation.reservation_id, rating: 5, comment: "Excellent work!" });
+    const goodFeedback = await goodAgent.post("/api/feedback").set("X-Portal", "customer").send({ reservation_id: goodReservation.reservation_id, rating: 5, comment: "Excellent work!" }).then((r) => r.body.feedback);
 
     const poorCustomer = await createUser("Customer", { full_name: "Poor Rater", email: "poor@test.local" });
     const poorVehicle = await createVehicle(poorCustomer.user_id);
     const poorReservation = await createReservation({ customerId: poorCustomer.user_id, vehicleId: poorVehicle.vehicle_id, packageId: pkg.package_id, status: "Completed" });
     const poorAgent = await agentFor(poorCustomer, "customer");
-    await poorAgent.post("/api/feedback").set("X-Portal", "customer").send({ reservation_id: poorReservation.reservation_id, rating: 2, comment: "Not great" });
+    await poorAgent.post("/api/feedback").set("X-Portal", "customer").send({ reservation_id: poorReservation.reservation_id, rating: 5, comment: "Also great, but not featured" });
+
+    // Neither shows up until a manager features one — a high rating alone is not enough.
+    const beforeRes = await request(app).get("/api/feedback/public");
+    expect(beforeRes.body.testimonials).toHaveLength(0);
+
+    const manager = await createUser("Service Center Manager", { email: "manager-public-test@test.local" });
+    const managerAgent = request.agent(app);
+    await loginAs(managerAgent, manager, "staff");
+    await managerAgent.patch(`/api/feedback/${goodFeedback.feedback_id}/feature`).set("X-Portal", "staff");
 
     const res = await request(app).get("/api/feedback/public");
     expect(res.status).toBe(200);
     expect(res.body.testimonials).toHaveLength(1);
     expect(res.body.testimonials[0].display_name).toBe("Sarah J.");
     expect(res.body.testimonials[0].comment).toBe("Excellent work!");
+  });
+});
+
+describe("PATCH /api/feedback/:id/feature and /unfeature", () => {
+  test("manager features feedback for the landing page", async () => {
+    const feedback = await feedbackFixture({ email: "feature-1@test.local" });
+    const manager = await createUser("Service Center Manager", { email: "manager-feature-1@test.local" });
+    const agent = request.agent(app);
+    await loginAs(agent, manager, "staff");
+
+    const res = await agent.patch(`/api/feedback/${feedback.feedback_id}/feature`).set("X-Portal", "staff");
+    expect(res.status).toBe(200);
+    expect(res.body.feedback.is_featured).toBe(true);
+  });
+
+  test("manager unfeatures feedback", async () => {
+    const feedback = await feedbackFixture({ email: "feature-2@test.local" });
+    const manager = await createUser("Service Center Manager", { email: "manager-feature-2@test.local" });
+    const agent = request.agent(app);
+    await loginAs(agent, manager, "staff");
+
+    await agent.patch(`/api/feedback/${feedback.feedback_id}/feature`).set("X-Portal", "staff");
+    const res = await agent.patch(`/api/feedback/${feedback.feedback_id}/unfeature`).set("X-Portal", "staff");
+    expect(res.status).toBe(200);
+    expect(res.body.feedback.is_featured).toBe(false);
+  });
+
+  // is_featured is a manager-curated "pick", not derived from ratings —
+  // capped at MAX_FEATURED_FEEDBACK (4) landing-page slots.
+  test("refuses to feature a 5th testimonial once 4 are already featured", async () => {
+    const manager = await createUser("Service Center Manager", { email: "manager-feature-cap@test.local" });
+    const agent = request.agent(app);
+    await loginAs(agent, manager, "staff");
+
+    for (let i = 0; i < 4; i++) {
+      const fb = await feedbackFixture({ email: `feature-cap-${i}@test.local` });
+      await agent.patch(`/api/feedback/${fb.feedback_id}/feature`).set("X-Portal", "staff");
+    }
+    const fifth = await feedbackFixture({ email: "feature-cap-4@test.local" });
+
+    const res = await agent.patch(`/api/feedback/${fifth.feedback_id}/feature`).set("X-Portal", "staff");
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/already have 4/i);
+  });
+
+  test("re-featuring an already-featured testimonial does not hit the cap", async () => {
+    const manager = await createUser("Service Center Manager", { email: "manager-feature-refeat@test.local" });
+    const agent = request.agent(app);
+    await loginAs(agent, manager, "staff");
+
+    let alreadyFeatured;
+    for (let i = 0; i < 4; i++) {
+      const fb = await feedbackFixture({ email: `feature-refeat-${i}@test.local` });
+      await agent.patch(`/api/feedback/${fb.feedback_id}/feature`).set("X-Portal", "staff");
+      if (i === 0) alreadyFeatured = fb;
+    }
+
+    const res = await agent.patch(`/api/feedback/${alreadyFeatured.feedback_id}/feature`).set("X-Portal", "staff");
+    expect(res.status).toBe(200);
+  });
+
+  test("rejects non-manager", async () => {
+    const feedback = await feedbackFixture({ email: "feature-3@test.local" });
+    const supervisor = await createUser("Supervisor", { email: "supervisor-feature@test.local" });
+    const agent = request.agent(app);
+    await loginAs(agent, supervisor, "staff");
+
+    const res = await agent.patch(`/api/feedback/${feedback.feedback_id}/feature`).set("X-Portal", "staff");
+    expect(res.status).toBe(403);
+  });
+
+  test("401 when not authenticated", async () => {
+    const feedback = await feedbackFixture({ email: "feature-4@test.local" });
+    const res = await request(app).patch(`/api/feedback/${feedback.feedback_id}/feature`);
+    expect(res.status).toBe(401);
+  });
+
+  test("refuses to feature feedback with no comment", async () => {
+    const feedback = await feedbackFixture({ email: "feature-nocomment@test.local", comment: "" });
+    const manager = await createUser("Service Center Manager", { email: "manager-feature-nocomment@test.local" });
+    const agent = request.agent(app);
+    await loginAs(agent, manager, "staff");
+
+    const res = await agent.patch(`/api/feedback/${feedback.feedback_id}/feature`).set("X-Portal", "staff");
+    expect(res.status).toBe(400);
   });
 });

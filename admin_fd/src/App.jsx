@@ -8,6 +8,7 @@ import { DashboardIndex } from "@/routes/dashboard/index";
 import { ActivityPage } from "@/routes/dashboard/activity";
 import { BookingsPage } from "@/routes/dashboard/bookings";
 import { ChargeCatalogPage } from "@/routes/dashboard/charge-catalog";
+import { FeedbackPage } from "@/routes/dashboard/feedback";
 import { PackagesPage } from "@/routes/dashboard/packages";
 import { PerformancePage } from "@/routes/dashboard/performance";
 import { RevenuePage } from "@/routes/dashboard/revenue";
@@ -31,6 +32,7 @@ export default function App() {
               <Route path="activity" element={<ActivityPage />} />
               <Route path="bookings" element={<BookingsPage />} />
               <Route path="charge-catalog" element={<ChargeCatalogPage />} />
+              <Route path="feedback" element={<FeedbackPage />} />
               <Route path="packages" element={<PackagesPage />} />
               <Route path="performance" element={<PerformancePage />} />
               <Route path="revenue" element={<RevenuePage />} />
