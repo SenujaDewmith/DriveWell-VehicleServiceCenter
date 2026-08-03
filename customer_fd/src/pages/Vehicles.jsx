@@ -13,6 +13,8 @@ import { vehiclesService, } from "@/services/vehicles.service";
 import { YEAR_OPTIONS } from "@/lib/vehicleYears";
 import { isValidSriLankanPlate } from "@/lib/plateNumber";
 import { PlateNumberInput } from "@/components/ui/plate-number-input";
+import { PhoneNumberInput } from "@/components/ui/phone-number-input";
+import { isValidSriLankanPhone } from "@/lib/phoneNumber";
 import { Car, Edit, Trash2, Plus, Loader2, Wrench, ChevronRight, RotateCcw, FileUp } from "lucide-react";
 import { toast } from "sonner";
 function TransferRequestStatusBadge({ status }) {
@@ -353,7 +355,7 @@ export default function Vehicles() {
         ? user?.phone ?? ""
         : contactPhoneChoice === "secondary"
             ? user?.secondaryPhone ?? ""
-            : newContactPhone.trim();
+            : newContactPhone;
     const submitTransferRequest = async () => {
         if (!registrationBookFile || !nicFile) {
             setTransferRequestError("Both a vehicle's registration book photo and an NIC photo are required");
@@ -361,6 +363,12 @@ export default function Vehicles() {
         }
         if (!resolvedContactPhone) {
             setTransferRequestError("A contact phone number is required");
+            return;
+        }
+        // Primary/secondary come from already-saved profile data (which may pre-date this
+        // format), so only the freshly-typed option is held to the strict +94 shape here.
+        if (contactPhoneChoice === "new" && !isValidSriLankanPhone(resolvedContactPhone)) {
+            setTransferRequestError("Enter a valid 9-digit number after +94");
             return;
         }
         setSubmittingTransferRequest(true);
@@ -722,7 +730,9 @@ export default function Vehicles() {
                   <input type="radio" name="contact_phone_choice" checked={contactPhoneChoice === "new"} onChange={() => setContactPhoneChoice("new")}/>
                   Use a different number
                 </label>
-                {contactPhoneChoice === "new" && (<Input type="tel" placeholder="e.g. 077-1234567" value={newContactPhone} onChange={(e) => setNewContactPhone(e.target.value)} className="mt-1"/>)}
+                {contactPhoneChoice === "new" && (<div className="mt-1">
+                    <PhoneNumberInput id="new-contact-phone" value={newContactPhone} onChange={setNewContactPhone}/>
+                  </div>)}
               </div>
             </div>
 

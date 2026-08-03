@@ -66,14 +66,18 @@ router.post("/force-transfer", managerOnly, forceTransferVehicle);
  * @swagger
  * /api/admin/vehicles/transfer-requests:
  *   get:
- *     summary: List customer-submitted vehicle transfer requests, optionally filtered by status
+ *     summary: List vehicle transfer requests/history, optionally filtered by status (comma-separated for multiple, e.g. "Approved,Rejected")
  *     tags: [VehicleAdmin]
  *     security:
  *       - cookieAuth: []
  *     parameters:
  *       - in: query
  *         name: status
- *         schema: { type: string, enum: [Pending, Approved, Rejected] }
+ *         schema: { type: string, example: "Approved,Rejected" }
+ *       - in: query
+ *         name: plate
+ *         schema: { type: string }
+ *         description: Filter by plate number (partial match)
  *     responses:
  *       200: { description: List of transfer requests }
  *       401: { description: Not authenticated }

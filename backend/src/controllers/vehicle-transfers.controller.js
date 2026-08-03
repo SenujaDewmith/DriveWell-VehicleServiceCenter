@@ -102,19 +102,87 @@ const forceTransferVehicle = async (req, res) => {
       });
     }
 
+    // Any pending transfer requests for this vehicle are about to go stale — this
+    // direct transfer already resolves ownership, so fold them in now instead of
+    // leaving them stuck in the Pending queue forever.
+    const pendingRequests = await prisma.vehicleTransferRequest.findMany({
+      where: { vehicle_id: vehicle.vehicle_id, status: "Pending" },
+    });
+
     const oldCustomerId = vehicle.customer_id;
-    await prisma.$transaction((tx) =>
-      performOwnershipTransfer(tx, {
+    await prisma.$transaction(async (tx) => {
+      await performOwnershipTransfer(tx, {
         vehicleId: vehicle.vehicle_id,
         newOwnerId: newOwner.user_id,
         oldOwnerId: oldCustomerId,
         actorUserId: staffUserId,
         action: "VEHICLE_FORCE_TRANSFERRED",
-      })
-    );
+      });
+
+      // Staff-initiated transfers don't go through the request flow, but they still
+      // get a row here — always already Approved — so the History tab has one
+      // consistent place to look up every ownership change, not just customer-filed ones.
+      await tx.vehicleTransferRequest.create({
+        data: {
+          vehicle_id: vehicle.vehicle_id,
+          requester_id: newOwner.user_id,
+          current_owner_id: oldCustomerId,
+          status: "Approved",
+          source: "Staff",
+          reviewer_id: staffUserId,
+          reviewed_at: new Date(),
+        },
+      });
+
+      for (const request of pendingRequests) {
+        // Only the request filed by the same person who just received the vehicle
+        // is "approved" by this transfer — any others were requesting a vehicle
+        // that just went to someone else, so they're superseded, not fulfilled.
+        const matchesNewOwner = request.requester_id === newOwner.user_id;
+        await tx.vehicleTransferRequest.update({
+          where: { request_id: request.request_id },
+          data: {
+            status: matchesNewOwner ? "Approved" : "Rejected",
+            reviewer_id: staffUserId,
+            reviewed_at: new Date(),
+            rejection_reason: matchesNewOwner
+              ? null
+              : "Vehicle was transferred directly by staff to a different customer.",
+            registration_book_photo_path: null,
+            nic_photo_path: null,
+          },
+        });
+        await logActivity(tx, {
+          user_id: staffUserId,
+          action: matchesNewOwner ? "VEHICLE_TRANSFER_REQUEST_APPROVED" : "VEHICLE_TRANSFER_REQUEST_REJECTED",
+          entity_type: "vehicle_transfer_request",
+          entity_id: request.request_id,
+        });
+      }
+    });
+
+    deleteTransferDocs(...pendingRequests.flatMap((r) => [r.registration_book_photo_path, r.nic_photo_path]));
 
     if (oldCustomerId) {
       notifyPreviousOwner(oldCustomerId, { plateNo: normalizedPlate, reason: "transferred" });
+    }
+
+    for (const request of pendingRequests) {
+      const matchesNewOwner = request.requester_id === newOwner.user_id;
+      const requester = await prisma.user.findUnique({
+        where: { user_id: request.requester_id },
+        select: { email: true, customer: { select: { full_name: true } } },
+      });
+      if (requester) {
+        sendTransferRequestDecisionEmail(requester.email, {
+          customerName: requester.customer?.full_name,
+          plateNo: normalizedPlate,
+          approved: matchesNewOwner,
+          reason: matchesNewOwner
+            ? undefined
+            : "This vehicle was transferred directly by staff to a different customer.",
+        });
+      }
     }
 
     const updated = await prisma.vehicle.findUnique({ where: { vehicle_id: vehicle.vehicle_id }, include: VEHICLE_INCLUDE });
@@ -126,13 +194,20 @@ const forceTransferVehicle = async (req, res) => {
 };
 
 const listTransferRequests = async (req, res) => {
-  const { status } = req.query;
+  const { status, plate } = req.query;
   try {
+    // Accepts a single status or a comma-separated list (e.g. "Approved,Rejected"
+    // for the History tab, which has no interest in a single status on its own).
+    const statuses = status ? status.split(",").map((s) => s.trim()).filter(Boolean) : [];
     const requests = await prisma.vehicleTransferRequest.findMany({
-      where: status ? { status } : {},
+      where: {
+        ...(statuses.length ? { status: { in: statuses } } : {}),
+        ...(plate ? { vehicle: { plate_no: { contains: plate.trim().toUpperCase() } } } : {}),
+      },
       include: {
         vehicle: { include: VEHICLE_INCLUDE },
         requester: { select: { user_id: true, email: true, customer: { select: { full_name: true } } } },
+        reviewer: { select: { user_id: true, email: true, staff: { select: { full_name: true } } } },
       },
       orderBy: { created_at: "desc" },
     });
@@ -154,6 +229,7 @@ const listTransferRequests = async (req, res) => {
         return {
           request_id: r.request_id,
           status: r.status,
+          source: r.source,
           contact_phone: r.contact_phone,
           created_at: r.created_at,
           reviewed_at: r.reviewed_at,
@@ -166,6 +242,9 @@ const listTransferRequests = async (req, res) => {
           },
           current_owner: owner
             ? { user_id: owner.user_id, email: owner.email, full_name: owner.customer?.full_name ?? null }
+            : null,
+          reviewer: r.reviewer
+            ? { user_id: r.reviewer.user_id, email: r.reviewer.email, full_name: r.reviewer.staff?.full_name ?? null }
             : null,
         };
       }),

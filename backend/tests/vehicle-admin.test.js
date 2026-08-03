@@ -211,6 +211,74 @@ describe("POST /api/admin/vehicles/force-transfer", () => {
     const wrongRole = await agent.post("/api/admin/vehicles/force-transfer").set("X-Portal", "customer").send({});
     expect(wrongRole.status).toBe(403);
   });
+
+  // Regression: force-transferring a plate that already has a pending customer
+  // transfer request used to leave that request stuck in the Pending queue
+  // forever, since the direct transfer never touched vehicle_transfer_requests.
+  test("auto-approves a pending request filed by the same customer it just transferred to", async () => {
+    const { agent } = await managerSession();
+    const owner = await createUser("Customer");
+    const newOwner = await createUser("Customer");
+    const vehicle = await createVehicle(owner.user_id, { plate_no: "FTR-0007" });
+    const req_ = await createTransferRequest({ vehicle, requesterId: newOwner.user_id, currentOwnerId: owner.user_id });
+
+    const res = await agent.post("/api/admin/vehicles/force-transfer").set("X-Portal", "staff").send({
+      plate_no: "FTR-0007", new_owner_email: newOwner.email,
+    });
+    expect(res.status).toBe(200);
+
+    const updatedRequest = await prisma.vehicleTransferRequest.findUnique({ where: { request_id: req_.request_id } });
+    expect(updatedRequest.status).toBe("Approved");
+    expect(updatedRequest.registration_book_photo_path).toBeNull();
+    expect(updatedRequest.nic_photo_path).toBeNull();
+
+    // No longer shows up in the Pending queue.
+    const pendingList = await agent.get("/api/admin/vehicles/transfer-requests?status=Pending").set("X-Portal", "staff");
+    expect(pendingList.body.requests).toHaveLength(0);
+  });
+
+  test("auto-rejects a pending request filed by someone other than the new owner", async () => {
+    const { agent } = await managerSession();
+    const owner = await createUser("Customer");
+    const requester = await createUser("Customer");
+    const newOwner = await createUser("Customer");
+    const vehicle = await createVehicle(owner.user_id, { plate_no: "FTR-0008" });
+    const req_ = await createTransferRequest({ vehicle, requesterId: requester.user_id, currentOwnerId: owner.user_id });
+
+    const res = await agent.post("/api/admin/vehicles/force-transfer").set("X-Portal", "staff").send({
+      plate_no: "FTR-0008", new_owner_email: newOwner.email,
+    });
+    expect(res.status).toBe(200);
+
+    const updatedRequest = await prisma.vehicleTransferRequest.findUnique({ where: { request_id: req_.request_id } });
+    expect(updatedRequest.status).toBe("Rejected");
+    expect(updatedRequest.rejection_reason).toMatch(/transferred directly by staff/i);
+    expect(updatedRequest.registration_book_photo_path).toBeNull();
+
+    const pendingList = await agent.get("/api/admin/vehicles/transfer-requests?status=Pending").set("X-Portal", "staff");
+    expect(pendingList.body.requests).toHaveLength(0);
+  });
+
+  test("creates a Staff-sourced, already-Approved history record for the transfer", async () => {
+    const { agent, manager } = await managerSession();
+    const owner = await createUser("Customer");
+    const newOwner = await createUser("Customer");
+    await createVehicle(owner.user_id, { plate_no: "FTR-0009" });
+
+    const res = await agent.post("/api/admin/vehicles/force-transfer").set("X-Portal", "staff").send({
+      plate_no: "FTR-0009", new_owner_email: newOwner.email,
+    });
+    expect(res.status).toBe(200);
+
+    const history = await agent.get("/api/admin/vehicles/transfer-requests?status=Approved").set("X-Portal", "staff");
+    const record = history.body.requests.find((r) => r.vehicle.plate_no === "FTR-0009");
+    expect(record).toBeDefined();
+    expect(record.source).toBe("Staff");
+    expect(record.status).toBe("Approved");
+    expect(record.requester.email).toBe(newOwner.email);
+    expect(record.current_owner.email).toBe(owner.email);
+    expect(record.reviewer.email).toBe(manager.email);
+  });
 });
 
 describe("GET /api/admin/vehicles/transfer-requests", () => {
@@ -243,6 +311,52 @@ describe("GET /api/admin/vehicles/transfer-requests", () => {
     expect(res.status).toBe(200);
     expect(res.body.requests).toHaveLength(1);
     expect(res.body.requests[0].status).toBe("Rejected");
+  });
+
+  test("filters by a comma-separated list of statuses (the History tab's query)", async () => {
+    const { agent } = await managerSession();
+    const owner = await createUser("Customer");
+    const requesterA = await createUser("Customer");
+    const requesterB = await createUser("Customer");
+    const requesterC = await createUser("Customer");
+    const vehicleA = await createVehicle(owner.user_id, { plate_no: "LST-0004" });
+    const vehicleB = await createVehicle(owner.user_id, { plate_no: "LST-0005" });
+    const vehicleC = await createVehicle(owner.user_id, { plate_no: "LST-0006" });
+    await createTransferRequest({ vehicle: vehicleA, requesterId: requesterA.user_id, currentOwnerId: owner.user_id, status: "Pending" });
+    await createTransferRequest({ vehicle: vehicleB, requesterId: requesterB.user_id, currentOwnerId: owner.user_id, status: "Approved", withDocs: false });
+    await createTransferRequest({ vehicle: vehicleC, requesterId: requesterC.user_id, currentOwnerId: owner.user_id, status: "Rejected", withDocs: false });
+
+    const res = await agent.get("/api/admin/vehicles/transfer-requests?status=Approved,Rejected").set("X-Portal", "staff");
+    expect(res.status).toBe(200);
+    expect(res.body.requests).toHaveLength(2);
+    expect(res.body.requests.map((r) => r.status).sort()).toEqual(["Approved", "Rejected"]);
+  });
+
+  test("filters by plate number (partial match)", async () => {
+    const { agent } = await managerSession();
+    const owner = await createUser("Customer");
+    const requesterA = await createUser("Customer");
+    const requesterB = await createUser("Customer");
+    const vehicleA = await createVehicle(owner.user_id, { plate_no: "PLT-1001" });
+    const vehicleB = await createVehicle(owner.user_id, { plate_no: "OTH-2002" });
+    await createTransferRequest({ vehicle: vehicleA, requesterId: requesterA.user_id, currentOwnerId: owner.user_id, status: "Approved", withDocs: false });
+    await createTransferRequest({ vehicle: vehicleB, requesterId: requesterB.user_id, currentOwnerId: owner.user_id, status: "Approved", withDocs: false });
+
+    const res = await agent.get("/api/admin/vehicles/transfer-requests?plate=PLT-1").set("X-Portal", "staff");
+    expect(res.status).toBe(200);
+    expect(res.body.requests).toHaveLength(1);
+    expect(res.body.requests[0].vehicle.plate_no).toBe("PLT-1001");
+  });
+
+  test("customer-submitted requests default to source \"Customer\"", async () => {
+    const { agent } = await managerSession();
+    const owner = await createUser("Customer");
+    const requester = await createUser("Customer");
+    const vehicle = await createVehicle(owner.user_id, { plate_no: "LST-0007" });
+    await createTransferRequest({ vehicle, requesterId: requester.user_id, currentOwnerId: owner.user_id });
+
+    const res = await agent.get("/api/admin/vehicles/transfer-requests").set("X-Portal", "staff");
+    expect(res.body.requests[0].source).toBe("Customer");
   });
 
   test("no token -> 401, non-manager -> 403", async () => {

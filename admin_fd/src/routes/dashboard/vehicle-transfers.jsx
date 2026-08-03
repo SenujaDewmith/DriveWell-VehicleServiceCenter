@@ -89,6 +89,10 @@ export function VehicleTransfersPage() {
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectInput, setShowRejectInput] = useState(false);
 
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyPlateFilter, setHistoryPlateFilter] = useState("");
+
   const load = (plate) => {
     setLoading(true);
     const query = plate ? `?plate=${encodeURIComponent(plate)}` : "";
@@ -108,9 +112,20 @@ export function VehicleTransfersPage() {
       .finally(() => setRequestsLoading(false));
   };
 
+  const loadHistory = (plate) => {
+    setHistoryLoading(true);
+    const query = plate ? `&plate=${encodeURIComponent(plate)}` : "";
+    api
+      .get(`/api/admin/vehicles/transfer-requests?status=Approved,Rejected${query}`)
+      .then((d) => setHistory(d.requests))
+      .catch(() => setError("Failed to load transfer history"))
+      .finally(() => setHistoryLoading(false));
+  };
+
   useEffect(() => {
     load();
     loadRequests();
+    loadHistory();
   }, []);
 
   if (role !== "manager") return <Navigate to="/dashboard" />;
@@ -137,6 +152,7 @@ export function VehicleTransfersPage() {
       setError("");
       setReviewRequest(null);
       loadRequests();
+      loadHistory();
       load(plateFilter);
     } catch (err) {
       setReviewError(err instanceof Error ? err.message : "Approval failed");
@@ -157,6 +173,7 @@ export function VehicleTransfersPage() {
       setError("");
       setReviewRequest(null);
       loadRequests();
+      loadHistory();
     } catch (err) {
       setReviewError(err instanceof Error ? err.message : "Rejection failed");
     } finally {
@@ -191,6 +208,8 @@ export function VehicleTransfersPage() {
       setSuccess(`${transferPlate.trim().toUpperCase()} transferred successfully`);
       setError("");
       load(plateFilter);
+      loadRequests();
+      loadHistory();
     } catch (err) {
       setDialogError(err instanceof Error ? err.message : "Transfer failed");
     } finally {
@@ -227,6 +246,7 @@ export function VehicleTransfersPage() {
             Transfer Requests{requests.length > 0 ? ` (${requests.length})` : ""}
           </TabsTrigger>
           <TabsTrigger value="detached">Detached Vehicles</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="requests">
@@ -367,6 +387,107 @@ export function VehicleTransfersPage() {
                     <TableRow>
                       <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                         No detached vehicles found
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="history" className="space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <input
+                placeholder="Search by plate number..."
+                value={historyPlateFilter}
+                onChange={(e) => setHistoryPlateFilter(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && loadHistory(historyPlateFilter)}
+                className="w-full pl-8 border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <button
+              onClick={() => loadHistory(historyPlateFilter)}
+              className="rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+            >
+              Search
+            </button>
+          </div>
+
+          <div className="rounded-lg border border-border bg-card">
+            {historyLoading ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Plate</TableHead>
+                    <TableHead>Vehicle</TableHead>
+                    <TableHead>New Owner</TableHead>
+                    <TableHead>Previous Owner</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead>Reviewed By</TableHead>
+                    <TableHead>Reviewed On</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {history.map((r) => (
+                    <TableRow key={r.request_id}>
+                      <TableCell className="font-medium text-foreground">
+                        {r.vehicle.plate_no}
+                      </TableCell>
+                      <TableCell className="text-foreground">
+                        {r.vehicle.make} {r.vehicle.model} ({r.vehicle.vehicle_type})
+                        {r.vehicle.year ? ` — ${r.vehicle.year}` : ""}
+                      </TableCell>
+                      <TableCell className="text-foreground">
+                        {r.requester.full_name ?? "—"}
+                        <div className="text-xs text-muted-foreground">{r.requester.email}</div>
+                      </TableCell>
+                      <TableCell className="text-foreground">
+                        {r.current_owner ? (
+                          <>
+                            {r.current_owner.full_name ?? "—"}
+                            <div className="text-xs text-muted-foreground">
+                              {r.current_owner.email}
+                            </div>
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={`text-sm font-medium ${r.status === "Approved" ? "text-accent" : "text-destructive"}`}
+                        >
+                          {r.status}
+                        </span>
+                        {r.status === "Rejected" && r.rejection_reason && (
+                          <p className="text-xs text-muted-foreground mt-0.5 max-w-xs">
+                            {r.rejection_reason}
+                          </p>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {r.source === "Staff" ? "Staff Direct" : "Customer Request"}
+                      </TableCell>
+                      <TableCell className="text-foreground">
+                        {r.reviewer?.full_name ?? r.reviewer?.email ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {r.reviewed_at ? new Date(r.reviewed_at).toLocaleDateString() : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {history.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                        {historyPlateFilter
+                          ? `No resolved transfers found for "${historyPlateFilter}"`
+                          : "No resolved transfers yet"}
                       </TableCell>
                     </TableRow>
                   )}

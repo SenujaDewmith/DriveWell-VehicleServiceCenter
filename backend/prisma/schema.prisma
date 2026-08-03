@@ -151,8 +151,14 @@ model VehicleTransferRequest {
   current_owner_id             Int?
   // Snapshot of the phone number given at submission time — so staff can call
   // whoever filed the request, even if their profile phone changes later.
-  contact_phone                String    @db.VarChar(20)
+  // Null for staff-initiated rows (source = "Staff"), which skip the customer
+  // submission flow entirely.
+  contact_phone                String?   @db.VarChar(20)
   status                       String    @default("Pending") @db.VarChar(20)
+  // "Customer" = filed by a customer through the transfer-request flow (the
+  // default). "Staff" = created directly by a manager's force-transfer, purely
+  // as a history record — always inserted already Approved, never Pending.
+  source                       String    @default("Customer") @db.VarChar(20)
   // Nulled out once resolved (Approved/Rejected) — the actual files are deleted
   // from disk at that point too. Documents shouldn't outlive their one-time purpose.
   registration_book_photo_path String?   @db.VarChar(500)
