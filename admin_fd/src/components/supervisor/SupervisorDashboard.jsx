@@ -107,6 +107,16 @@ function shiftDateKey(key, deltaDays) {
   return dateKeyOf(date);
 }
 
+// Packages store their contents as one item per line — same convention the
+// customer-facing package cards use to render bullets.
+function packageBullets(description) {
+  if (!description) return [];
+  return description
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 function formatDisplayDate(key) {
   const [y, m, d] = key.split("-").map(Number);
   const date = new Date(y, m - 1, d);
@@ -707,6 +717,17 @@ export function SupervisorDashboard() {
                 <span className="text-muted-foreground">Package:</span> {selected.package_name}
               </p>
             </div>
+
+            {packageBullets(selected.package_description).length > 0 && (
+              <div className="rounded-md border border-border p-3 space-y-1.5">
+                <p className="text-sm font-medium text-foreground">Package Includes</p>
+                <ul className="list-disc list-inside space-y-0.5 text-sm text-muted-foreground">
+                  {packageBullets(selected.package_description).map((line, idx) => (
+                    <li key={idx}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <StatusStepBar status={selected.status} />
 

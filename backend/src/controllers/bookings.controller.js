@@ -44,6 +44,7 @@ const flattenBooking = (r, { hideCustomerIdentity = false } = {}) => ({
   ...flattenVehicleRef(r.vehicle),
   package_name: r.package?.name,
   package_price: r.package?.price,
+  package_description: r.package?.description,
   estimated_duration: r.package?.estimated_duration,
   slot_time: fmtTime(r.start_time),
   slot_end_time: fmtTime(r.end_time),
@@ -57,7 +58,7 @@ const BOOKING_INCLUDE = {
     },
   },
   vehicle: VEHICLE_SELECT,
-  package: { select: { name: true, price: true, estimated_duration: true } },
+  package: { select: { name: true, price: true, estimated_duration: true, description: true } },
 };
 
 // Richer include used only for the single-booking detail view — the list view stays
