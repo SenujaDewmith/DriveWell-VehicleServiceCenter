@@ -10,6 +10,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -38,6 +39,7 @@ export function Combobox({
     (o) => o.label.toLowerCase() === trimmedSearch.toLowerCase(),
   );
   const showCreate = !!onCreateOption && trimmedSearch.length > 0 && !exactMatchExists;
+  const showCreateHint = !!onCreateOption && trimmedSearch.length === 0;
 
   const closeAndReset = () => {
     setOpen(false);
@@ -73,45 +75,62 @@ export function Combobox({
         <Command shouldFilter={false}>
           <CommandInput placeholder={searchPlaceholder} value={search} onValueChange={setSearch} />
           <CommandList>
-            {filtered.length === 0 && !showCreate && <CommandEmpty>{emptyText}</CommandEmpty>}
-            <CommandGroup>
-              {filtered.map((option) => (
-                <CommandItem
-                  key={option.value}
-                  value={option.label}
-                  disabled={option.disabled}
-                  onSelect={() => {
-                    if (option.disabled) return;
-                    onValueChange(option.value === value ? "" : option.value);
-                    closeAndReset();
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      value === option.value ? "opacity-100" : "opacity-0",
+            {filtered.length === 0 && !showCreate && !showCreateHint && (
+              <CommandEmpty>{emptyText}</CommandEmpty>
+            )}
+            {filtered.length > 0 && (
+              <CommandGroup>
+                {filtered.map((option) => (
+                  <CommandItem
+                    key={option.value}
+                    value={option.label}
+                    disabled={option.disabled}
+                    onSelect={() => {
+                      if (option.disabled) return;
+                      onValueChange(option.value === value ? "" : option.value);
+                      closeAndReset();
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        value === option.value ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    {option.label}
+                    {option.disabled && (
+                      <span className="ml-auto text-xs text-muted-foreground">Added</span>
                     )}
-                  />
-                  {option.label}
-                  {option.disabled && (
-                    <span className="ml-auto text-xs text-muted-foreground">Added</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {(showCreate || showCreateHint) && (
+              <>
+                {filtered.length > 0 && <CommandSeparator />}
+                <CommandGroup>
+                  {showCreate && (
+                    <CommandItem
+                      value={`__create__${trimmedSearch}`}
+                      onSelect={() => {
+                        onCreateOption(trimmedSearch);
+                        closeAndReset();
+                      }}
+                      className="text-accent"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      {createLabel(trimmedSearch)}
+                    </CommandItem>
                   )}
-                </CommandItem>
-              ))}
-              {showCreate && (
-                <CommandItem
-                  value={`__create__${trimmedSearch}`}
-                  onSelect={() => {
-                    onCreateOption(trimmedSearch);
-                    closeAndReset();
-                  }}
-                  className="text-accent"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  {createLabel(trimmedSearch)}
-                </CommandItem>
-              )}
-            </CommandGroup>
+                  {showCreateHint && (
+                    <CommandItem value="__create_hint__" disabled className="text-muted-foreground">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Type to add a new one
+                    </CommandItem>
+                  )}
+                </CommandGroup>
+              </>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>
