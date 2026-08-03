@@ -148,6 +148,8 @@ export function SupervisorDashboard() {
   const noteTimersRef = useRef({});
   const noteSavingValueRef = useRef({});
   const odoTimerRef = useRef(null);
+  const modalContentRef = useRef(null);
+  const closeButtonRef = useRef(null);
 
   const selected = bookings.find((b) => b.reservation_id === selectedId);
   const currentStepIdx = selected ? stepIndexForStatus(selected.status) : -1;
@@ -292,6 +294,13 @@ export function SupervisorDashboard() {
       await api.patch(`/api/service-records/${selectedId}/status`, { status: nextStatus });
       loadBookings();
       loadRecord(selectedId);
+      // Completing the service is the end of the flow — bring the close button
+      // back into view and focus it so the supervisor can dismiss immediately
+      // instead of scrolling back up through the whole form.
+      if (nextStatus === "Completed") {
+        modalContentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+        closeButtonRef.current?.focus();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update status");
     } finally {
@@ -669,6 +678,7 @@ export function SupervisorDashboard() {
           onClick={() => setSelectedId(null)}
         >
           <div
+            ref={modalContentRef}
             className="w-full max-w-xl max-h-[85vh] overflow-y-auto rounded-lg border border-border bg-card p-4 space-y-4 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
@@ -677,6 +687,7 @@ export function SupervisorDashboard() {
                 {selected.booking_ref ?? `#${selected.reservation_id}`} — Detail
               </h3>
               <button
+                ref={closeButtonRef}
                 onClick={() => setSelectedId(null)}
                 className="text-muted-foreground hover:text-foreground"
               >
