@@ -9,9 +9,11 @@ const {
   getBlockedRangesForDate, generateWindows, rangesOverlap,
   MIN_LEAD_MINUTES, getLocalNow,
 } = require("../lib/slotGenerator");
+const { RESERVATION_STATUS, PAYMENT_STATUS } = require("../constants/status");
 
 const CUSTOMER_ROLE = 5;
 const MANAGER_ROLE = 1;
+const STAFF_ROLE = 4;
 
 // Customers may self-cancel only up to this many minutes before the appointment
 // (staff/manager cancellations are exempt — this is a self-service guardrail, not a hard business rule)
@@ -29,8 +31,10 @@ const CURRENT_TERMS_VERSION = "1.0";
 
 // `hideCustomerIdentity` is set for rows a customer can see only because they currently own
 // the vehicle, not because they authored the booking (vehicle-scoped service history) — the
-// previous owner's name/email must never leak to whoever owns the vehicle now.
-const flattenBooking = (r, { hideCustomerIdentity = false } = {}) => ({
+// previous owner's name/email must never leak to whoever owns the vehicle now. `hidePaymentStatus`
+// is set for Service Staff — payment is a cashier/manager/supervisor/customer concern, staff only
+// need to know the service status.
+const flattenBooking = (r, { hideCustomerIdentity = false, hidePaymentStatus = false } = {}) => ({
   reservation_id: r.reservation_id,
   booking_ref: r.booking_ref,
   service_date: fmtDate(r.service_date),
@@ -48,6 +52,7 @@ const flattenBooking = (r, { hideCustomerIdentity = false } = {}) => ({
   estimated_duration: r.package?.estimated_duration,
   slot_time: fmtTime(r.start_time),
   slot_end_time: fmtTime(r.end_time),
+  payment_status: hidePaymentStatus ? undefined : r.invoice?.payment_status ?? null,
 });
 
 const BOOKING_INCLUDE = {
@@ -59,6 +64,7 @@ const BOOKING_INCLUDE = {
   },
   vehicle: VEHICLE_SELECT,
   package: { select: { name: true, price: true, estimated_duration: true, description: true } },
+  invoice: { select: { payment_status: true } },
 };
 
 // Richer include used only for the single-booking detail view — the list view stays
@@ -83,8 +89,8 @@ const BOOKING_DETAIL_INCLUDE = {
 // `includeServiceItems` gates the supervisor's itemized "additional work found" notes out
 // of the customer payload — same policy as invoices.controller.js's includeSupervisorNotes:
 // remarks are customer-facing, but the structured item list stays internal/staff-only.
-const flattenBookingDetail = (r, { includeServiceItems = false, hideCustomerIdentity = false } = {}) => ({
-  ...flattenBooking(r, { hideCustomerIdentity }),
+const flattenBookingDetail = (r, { includeServiceItems = false, hideCustomerIdentity = false, hidePaymentStatus = false } = {}) => ({
+  ...flattenBooking(r, { hideCustomerIdentity, hidePaymentStatus }),
   service_record: r.service_record
     ? {
         remarks: r.service_record.remarks,
@@ -103,8 +109,9 @@ const flattenBookingDetail = (r, { includeServiceItems = false, hideCustomerIden
     : null,
   // Financial detail of someone else's transaction — not needed for "what was done to
   // this vehicle" history, so it's dropped entirely rather than just the identity fields.
+  // Also dropped entirely for Service Staff, who don't need billing information at all.
   invoice:
-    !hideCustomerIdentity && r.invoice
+    !hideCustomerIdentity && !hidePaymentStatus && r.invoice
       ? {
           invoice_id: r.invoice.invoice_id,
           base_amount: r.invoice.base_amount,
@@ -134,7 +141,7 @@ const getNoShowCounts = async (customerIds) => {
   if (uniqueIds.length === 0) return {};
   const grouped = await prisma.reservation.groupBy({
     by: ["customer_id"],
-    where: { customer_id: { in: uniqueIds }, status: "No-show" },
+    where: { customer_id: { in: uniqueIds }, status: RESERVATION_STATUS.NO_SHOW },
     _count: { _all: true },
   });
   return Object.fromEntries(grouped.map((g) => [g.customer_id, g._count._all]));
@@ -186,7 +193,10 @@ const listBookings = async (req, res) => {
 
     res.status(200).json({
       bookings: rows.map((r) => ({
-        ...flattenBooking(r, { hideCustomerIdentity: role_id === CUSTOMER_ROLE && r.customer_id !== user_id }),
+        ...flattenBooking(r, {
+          hideCustomerIdentity: role_id === CUSTOMER_ROLE && r.customer_id !== user_id,
+          hidePaymentStatus: role_id === STAFF_ROLE,
+        }),
         ...(role_id !== CUSTOMER_ROLE && { customer_no_show_count: noShowCounts[r.customer_id] ?? 0 }),
       })),
     });
@@ -221,7 +231,11 @@ const getBooking = async (req, res) => {
 
     res.status(200).json({
       booking: {
-        ...flattenBookingDetail(row, { includeServiceItems: role_id !== CUSTOMER_ROLE, hideCustomerIdentity }),
+        ...flattenBookingDetail(row, {
+          includeServiceItems: role_id !== CUSTOMER_ROLE,
+          hideCustomerIdentity,
+          hidePaymentStatus: role_id === STAFF_ROLE,
+        }),
         ...(role_id !== CUSTOMER_ROLE && { customer_no_show_count: noShowCounts[row.customer_id] ?? 0 }),
       },
     });
@@ -379,7 +393,7 @@ const cancelBooking = async (req, res) => {
     if (!booking) return res.status(404).json({ message: "Booking not found" });
     if (role_id === CUSTOMER_ROLE && booking.customer_id !== user_id)
       return res.status(403).json({ message: "Access denied" });
-    if (booking.status !== "Booked")
+    if (booking.status !== RESERVATION_STATUS.BOOKED)
       return res.status(400).json({ message: `Cannot cancel a booking with status: ${booking.status}` });
 
     if (role_id === CUSTOMER_ROLE) {
@@ -395,7 +409,7 @@ const cancelBooking = async (req, res) => {
 
     await prisma.reservation.update({
       where: { reservation_id: parseInt(id) },
-      data: { status: "Cancelled" },
+      data: { status: RESERVATION_STATUS.CANCELLED },
     });
 
     sendBookingCancellation(booking.customer_user.email, {
@@ -416,7 +430,10 @@ const cancelBooking = async (req, res) => {
 const overrideStatus = async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
-  const valid = ["Booked", "Started", "In Progress", "Completed", "Ready for Pickup", "Collected", "Cancelled", "No-show"];
+  const valid = [
+    RESERVATION_STATUS.BOOKED, RESERVATION_STATUS.STARTED, RESERVATION_STATUS.COMPLETED,
+    RESERVATION_STATUS.COLLECTED, RESERVATION_STATUS.CANCELLED, RESERVATION_STATUS.NO_SHOW,
+  ];
 
   if (!status || !valid.includes(status))
     return res.status(400).json({ message: `status must be one of: ${valid.join(", ")}` });
@@ -425,15 +442,16 @@ const overrideStatus = async (req, res) => {
     const booking = await prisma.reservation.findUnique({
       where: { reservation_id: parseInt(id) },
       include: {
+        invoice: { select: { payment_status: true } },
         customer_user: { select: { email: true, customer: { select: { full_name: true } } } },
       },
     });
     if (!booking) return res.status(404).json({ message: "Booking not found" });
 
-    if (status === "No-show") {
+    if (status === RESERVATION_STATUS.NO_SHOW) {
       // Mirrors cancelBooking's status guard — a no-show only makes sense from "Booked"
       // (can't no-show something already completed, cancelled, or in progress).
-      if (booking.status !== "Booked")
+      if (booking.status !== RESERVATION_STATUS.BOOKED)
         return res.status(400).json({ message: `Cannot mark as No-show — booking is already "${booking.status}"` });
 
       const { todayKey, nowMinutes } = getLocalNow();
@@ -446,12 +464,18 @@ const overrideStatus = async (req, res) => {
       }
     }
 
+    // No bypass: even a manager's manual override can't hand back a vehicle that
+    // hasn't been paid for — this is a hard business rule, not just a UI guardrail.
+    if (status === RESERVATION_STATUS.COLLECTED && (!booking.invoice || booking.invoice.payment_status !== PAYMENT_STATUS.PAID)) {
+      return res.status(400).json({ message: "Cannot set status to Collected — invoice is not marked Paid" });
+    }
+
     const updated = await prisma.reservation.update({
       where: { reservation_id: parseInt(id) },
       data: { status },
     });
 
-    if (status === "No-show") {
+    if (status === RESERVATION_STATUS.NO_SHOW) {
       sendNoShowNotice(booking.customer_user.email, {
         customerName: booking.customer_user.customer?.full_name,
         bookingRef: booking.booking_ref,
@@ -484,14 +508,14 @@ const releaseVehicle = async (req, res) => {
     });
     if (!booking) return res.status(404).json({ message: "Booking not found" });
 
-    if (booking.status !== "Ready for Pickup")
-      return res.status(400).json({ message: `Cannot release — booking is "${booking.status}", not "Ready for Pickup"` });
-    if (!booking.invoice || booking.invoice.payment_status !== "Paid")
+    if (booking.status !== RESERVATION_STATUS.COMPLETED)
+      return res.status(400).json({ message: `Cannot release — booking is "${booking.status}", not "Completed"` });
+    if (!booking.invoice || booking.invoice.payment_status !== PAYMENT_STATUS.PAID)
       return res.status(400).json({ message: "Cannot release — invoice is not marked Paid" });
 
     const updated = await prisma.reservation.update({
       where: { reservation_id: parseInt(id) },
-      data: { status: "Collected" },
+      data: { status: RESERVATION_STATUS.COLLECTED },
     });
 
     logActivity(prisma, { user_id: req.user.user_id, action: "VEHICLE_RELEASED", entity_type: "reservation", entity_id: parseInt(id) });

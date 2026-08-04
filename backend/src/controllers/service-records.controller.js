@@ -1,14 +1,14 @@
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
-const { sendStatusUpdate } = require("../services/email.service");
+const { sendStatusUpdate, sendServiceCompleted } = require("../services/email.service");
 const { logActivity } = require("../lib/activityLogger");
+const { RESERVATION_STATUS } = require("../constants/status");
 
-const NOTIFY_STATUSES = ["Completed"];
 const SERVICE_STAFF_ROLE = 4;
 
 // A service record is finalized once the booking reaches Completed — remarks,
 // items and staff notes are locked from that point on.
-const LOCKED_STATUSES = ["Completed"];
+const LOCKED_STATUSES = [RESERVATION_STATUS.COMPLETED];
 
 const assertBookingEditable = async (bookingId) => {
   const reservation = await prisma.reservation.findUnique({
@@ -114,15 +114,19 @@ const createServiceRecord = async (req, res) => {
   const { remarks } = req.body;
 
   try {
-    const record = await prisma.$transaction(async (tx) => {
-      const booking = await tx.reservation.findUnique({
+    const { record, booking } = await prisma.$transaction(async (tx) => {
+      const reservation = await tx.reservation.findUnique({
         where: { reservation_id: parseInt(booking_id) },
-        select: { status: true },
+        select: {
+          status: true,
+          booking_ref: true,
+          customer_user: { select: { email: true, customer: { select: { full_name: true } } } },
+        },
       });
-      if (!booking) {
+      if (!reservation) {
         const err = new Error("Booking not found"); err.status = 404; throw err;
       }
-      if (!["Booked", "Started"].includes(booking.status)) {
+      if (![RESERVATION_STATUS.BOOKED, RESERVATION_STATUS.STARTED].includes(reservation.status)) {
         const err = new Error("Booking is not in a state that can be started"); err.status = 400; throw err;
       }
 
@@ -144,13 +148,18 @@ const createServiceRecord = async (req, res) => {
 
       await tx.reservation.update({
         where: { reservation_id: parseInt(booking_id) },
-        data: { status: "Started" },
+        data: { status: RESERVATION_STATUS.STARTED },
       });
 
-      return created;
+      return { record: created, booking: reservation };
     });
 
     logger.info(`Service record created — record_id: ${record.record_id}`);
+    sendStatusUpdate(booking.customer_user.email, {
+      customerName: booking.customer_user.customer?.full_name,
+      bookingRef: booking.booking_ref,
+      status: RESERVATION_STATUS.STARTED,
+    });
     res.status(201).json({ message: "Service record created", record });
   } catch (error) {
     if (error.status) return res.status(error.status).json({ message: error.message });
@@ -211,14 +220,14 @@ const updateServiceRecord = async (req, res) => {
 const updateStatus = async (req, res) => {
   const { booking_id } = req.params;
   const { status } = req.body;
-  const valid = ["Started", "In Progress", "Completed"];
+  const valid = [RESERVATION_STATUS.STARTED, RESERVATION_STATUS.COMPLETED];
 
   if (!status || !valid.includes(status))
     return res.status(400).json({ message: `status must be one of: ${valid.join(", ")}` });
 
   try {
     const booking = await prisma.$transaction(async (tx) => {
-      if (status === "Completed") {
+      if (status === RESERVATION_STATUS.COMPLETED) {
         const record = await tx.serviceRecord.findUnique({
           where: { reservation_id: parseInt(booking_id) },
           select: { record_id: true, quality_checked: true, has_oil_change: true, current_odometer: true, next_service_odometer: true },
@@ -247,15 +256,14 @@ const updateStatus = async (req, res) => {
       return updated;
     });
 
-    if (NOTIFY_STATUSES.includes(status)) {
+    if (status === RESERVATION_STATUS.COMPLETED) {
       const customer = await prisma.user.findUnique({
         where: { user_id: booking.customer_id },
         select: { email: true, customer: { select: { full_name: true } } },
       });
-      sendStatusUpdate(customer.email, {
+      sendServiceCompleted(customer.email, {
         customerName: customer.customer?.full_name,
         bookingRef: booking.booking_ref,
-        status,
       });
     }
 

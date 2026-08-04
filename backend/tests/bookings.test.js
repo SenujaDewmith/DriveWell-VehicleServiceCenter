@@ -551,4 +551,102 @@ describe("PATCH /api/bookings/:id/status", () => {
     const res = await withPortal(agent, "staff")("patch", "/api/bookings/1/status").send({ status: "Bogus" });
     expect(res.status).toBe(400);
   });
+
+  test("400 when a manager tries to override to Collected while the invoice is unpaid — no bypass", async () => {
+    const pkg = await seedPackage();
+    const customer = await createUser("Customer");
+    const vehicle = await createVehicle(customer.user_id);
+    const reservation = await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Completed",
+    });
+    await prisma.invoice.create({
+      data: { reservation_id: reservation.reservation_id, base_amount: 5000, total_amount: 5000 },
+    });
+
+    const { agent: managerA } = await staffAgent("Service Center Manager");
+    const res = await withPortal(managerA, "staff")("patch", `/api/bookings/${reservation.reservation_id}/status`).send({ status: "Collected" });
+    expect(res.status).toBe(400);
+
+    const updated = await prisma.reservation.findUnique({ where: { reservation_id: reservation.reservation_id } });
+    expect(updated.status).toBe("Completed");
+  });
+
+  test("manager can override to Collected once the invoice is Paid", async () => {
+    const pkg = await seedPackage();
+    const customer = await createUser("Customer");
+    const vehicle = await createVehicle(customer.user_id);
+    const reservation = await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Completed",
+    });
+    await prisma.invoice.create({
+      data: { reservation_id: reservation.reservation_id, base_amount: 5000, total_amount: 5000, payment_status: "Paid" },
+    });
+
+    const { agent: managerA } = await staffAgent("Service Center Manager");
+    const res = await withPortal(managerA, "staff")("patch", `/api/bookings/${reservation.reservation_id}/status`).send({ status: "Collected" });
+    expect(res.status).toBe(200);
+    expect(res.body.booking.status).toBe("Collected");
+  });
+});
+
+describe("PATCH /api/bookings/:id/release", () => {
+  async function completedFixture() {
+    const pkg = await seedPackage();
+    const customer = await createUser("Customer");
+    const vehicle = await createVehicle(customer.user_id);
+    const reservation = await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Completed",
+    });
+    return { reservation, customer, vehicle };
+  }
+
+  test("400 when the booking isn't Completed yet", async () => {
+    const pkg = await seedPackage();
+    const customer = await createUser("Customer");
+    const vehicle = await createVehicle(customer.user_id);
+    const reservation = await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Started",
+    });
+
+    const { agent } = await staffAgent("Supervisor");
+    const res = await withPortal(agent, "staff")("patch", `/api/bookings/${reservation.reservation_id}/release`);
+    expect(res.status).toBe(400);
+  });
+
+  test("400 when Completed but the invoice is not marked Paid", async () => {
+    const { reservation } = await completedFixture();
+    await prisma.invoice.create({
+      data: { reservation_id: reservation.reservation_id, base_amount: 5000, total_amount: 5000 },
+    });
+
+    const { agent } = await staffAgent("Supervisor");
+    const res = await withPortal(agent, "staff")("patch", `/api/bookings/${reservation.reservation_id}/release`);
+    expect(res.status).toBe(400);
+  });
+
+  test("400 when Completed with no invoice at all", async () => {
+    const { reservation } = await completedFixture();
+    const { agent } = await staffAgent("Supervisor");
+    const res = await withPortal(agent, "staff")("patch", `/api/bookings/${reservation.reservation_id}/release`);
+    expect(res.status).toBe(400);
+  });
+
+  test("releases the vehicle once Completed and Paid, setting status to Collected", async () => {
+    const { reservation } = await completedFixture();
+    await prisma.invoice.create({
+      data: { reservation_id: reservation.reservation_id, base_amount: 5000, total_amount: 5000, payment_status: "Paid" },
+    });
+
+    const { agent } = await staffAgent("Supervisor");
+    const res = await withPortal(agent, "staff")("patch", `/api/bookings/${reservation.reservation_id}/release`);
+    expect(res.status).toBe(200);
+    expect(res.body.booking.status).toBe("Collected");
+  });
+
+  test("403 for a customer trying to release a vehicle", async () => {
+    const { reservation } = await completedFixture();
+    const { agent } = await customerAgent();
+    const res = await withPortal(agent, "customer")("patch", `/api/bookings/${reservation.reservation_id}/release`);
+    expect(res.status).toBe(403);
+  });
 });

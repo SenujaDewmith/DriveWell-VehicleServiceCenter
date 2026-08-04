@@ -16,7 +16,7 @@ const STEPS = [
         step: "3",
         icon: Clock,
         title: "Track Your Status",
-        description: "Watch your booking move from Booked to Started to Ready for Pickup on your dashboard",
+        description: "Watch your booking move from Booked to Started to Completed on your dashboard",
     },
     {
         step: "4",

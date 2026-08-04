@@ -15,6 +15,15 @@ module.exports = async () => {
     stdio: "inherit",
   });
 
+  // reservations.status is a plain VarChar in schema.prisma (see scripts/add-status-constraint.js
+  // for why) so the CHECK constraint isn't part of the Prisma-managed schema and needs applying
+  // separately after every --force-reset, to keep the test DB's guarantees identical to production's.
+  execSync("node scripts/add-status-constraint.js", {
+    cwd: path.join(__dirname, "../.."),
+    env: process.env,
+    stdio: "inherit",
+  });
+
   const { seedReferenceData } = require("./seedReferenceData");
   await seedReferenceData();
 

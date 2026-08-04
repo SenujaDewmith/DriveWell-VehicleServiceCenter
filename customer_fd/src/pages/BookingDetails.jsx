@@ -41,12 +41,14 @@ function fmtDateTime(d) {
 const STATUS_COLORS = {
     Booked: "bg-status-booked/10 text-status-booked border-status-booked/20",
     Started: "bg-status-inProgress/10 text-status-inProgress border-status-inProgress/20",
-    "In Progress": "bg-status-inProgress/10 text-status-inProgress border-status-inProgress/20",
-    "Ready for Pickup": "bg-status-ready/10 text-status-ready border-status-ready/20",
     Completed: "bg-status-completed/10 text-status-completed border-status-completed/20",
     Collected: "bg-status-completed/10 text-status-completed border-status-completed/20",
     Cancelled: "bg-status-cancelled/10 text-status-cancelled border-status-cancelled/20",
     "No-show": "bg-status-cancelled/10 text-status-cancelled border-status-cancelled/20",
+};
+const PAYMENT_COLORS = {
+    Paid: "bg-status-completed/10 text-status-completed border-status-completed/20",
+    Unpaid: "bg-status-ready/10 text-status-ready border-status-ready/20",
 };
 export default function BookingDetails() {
     const { id } = useParams();
@@ -176,9 +178,14 @@ export default function BookingDetails() {
       <div className="mb-6">
         <div className="flex items-start justify-between mb-2">
           <h1 className="text-4xl font-bold">Booking Details</h1>
-          <Badge variant="outline" className={`text-lg py-1 px-3 ${STATUS_COLORS[booking.status]}`}>
-            {booking.status}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className={`text-lg py-1 px-3 ${STATUS_COLORS[booking.status]}`}>
+              {booking.status}
+            </Badge>
+            {booking.invoice && (<Badge variant="outline" className={`text-lg py-1 px-3 ${PAYMENT_COLORS[booking.invoice.payment_status]}`}>
+                {booking.invoice.payment_status}
+              </Badge>)}
+          </div>
         </div>
         {booking.booking_ref && (<div className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5">
             <span className="text-xs text-muted-foreground">Ref</span>
@@ -438,7 +445,7 @@ export default function BookingDetails() {
               </p>
             </div>))}
 
-        {["Completed", "Ready for Pickup", "Collected"].includes(booking.status) ? (<div className="space-y-3">
+        {booking.status === "Collected" ? (<div className="space-y-3">
             {hasFeedback && (<p className="text-sm text-muted-foreground text-center">You've already left feedback for this service.</p>)}
             <div className="flex gap-3">
               <Button variant="outline" onClick={backToBookings}>

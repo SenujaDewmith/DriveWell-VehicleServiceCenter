@@ -27,7 +27,7 @@ const ELIGIBLE_BOOKING = {
     reservation_id: 42,
     booking_ref: "BK-42",
     service_date: "2026-07-01",
-    status: "Completed",
+    status: "Collected",
     created_at: "2026-07-01T00:00:00.000Z",
     vehicle_id: 1,
     package_id: 1,

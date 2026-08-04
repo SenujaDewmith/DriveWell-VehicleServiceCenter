@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
-import { StatusBadge } from "@/components/manager/ManagerOverview";
+import { StatusBadge, PaymentBadge } from "@/components/manager/ManagerOverview";
 import { Combobox } from "@/components/ui/combobox";
 import {
   AlertDialog,
@@ -47,19 +47,18 @@ function SaveStatusLabel({ status }) {
   return null;
 }
 
-const ACTIVE_STATUSES = ["Booked", "Started", "In Progress", "Completed"];
+const ACTIVE_STATUSES = ["Booked", "Started", "Completed"];
 const STAFF_SLOT_COUNT = 3;
 
-// The Supervisor-facing flow has exactly 3 states — Started/In Progress collapse
-// into one step, both on the step bar and on the advance button, so a booking
-// only ever needs two clicks (Booked → Started, Started → Completed) to finish.
-const DISPLAY_STEPS = ["Booked", "Started / In Progress", "Completed"];
+// The Supervisor-facing flow has exactly 3 states, so a booking only ever needs
+// two clicks (Booked → Started, Started → Completed) to finish.
+const DISPLAY_STEPS = ["Booked", "Started", "Completed"];
 const STEP_TARGET_STATUS = ["Booked", "Started", "Completed"];
 
 function stepIndexForStatus(status) {
   if (status === "Booked") return 0;
   if (status === "Completed") return 2;
-  return 1; // Started or In Progress
+  return 1; // Started
 }
 
 function StatusStepBar({ status }) {
@@ -214,8 +213,10 @@ export function SupervisorDashboard() {
 
   const loadReleaseQueue = () => {
     setReleaseLoading(true);
+    // "Ready for Release" is a view over Completed bookings, not its own stored status —
+    // payment_status (now included on every booking row) decides whether Release is enabled.
     api
-      .get(`/api/bookings?status=${encodeURIComponent("Ready for Pickup")}`)
+      .get(`/api/bookings?status=${encodeURIComponent("Completed")}`)
       .then((d) => setReleaseQueue(d.bookings))
       .catch(() => setReleaseError("Failed to load vehicles ready for release"))
       .finally(() => setReleaseLoading(false));
@@ -704,60 +705,68 @@ export function SupervisorDashboard() {
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Customer</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Vehicle</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Package</th>
+                <th className="text-left py-2 px-2 font-medium text-muted-foreground">Payment</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Action</th>
               </tr>
             </thead>
             <tbody>
               {releaseLoading && (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={6} className="py-8 text-center text-muted-foreground">
                     Loading...
                   </td>
                 </tr>
               )}
               {!releaseLoading &&
-                releaseQueue.map((b) => (
-                  <tr key={b.reservation_id} className="border-b border-border last:border-0">
-                    <td className="py-2 px-2 text-muted-foreground">
-                      {b.booking_ref ?? `#${b.reservation_id}`}
-                    </td>
-                    <td className="py-2 px-2 text-foreground">{b.customer_name}</td>
-                    <td className="py-2 px-2 text-foreground">{b.plate_no}</td>
-                    <td className="py-2 px-2 text-foreground">{b.package_name}</td>
-                    <td className="py-2 px-2">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <button
-                            disabled={releasingId === b.reservation_id}
-                            className="rounded-md border border-chart-1 px-2 py-1 text-sm font-medium text-chart-1 hover:bg-chart-1 hover:text-accent-foreground transition-colors disabled:opacity-50"
-                          >
-                            {releasingId === b.reservation_id ? "..." : "Release Vehicle"}
-                          </button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              Release {b.booking_ref ?? `#${b.reservation_id}`} to the customer?
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Confirms {b.customer_name}'s {b.plate_no} is being handed over now that
-                              payment has been received. This can't be undone from here.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => releaseVehicleAction(b.reservation_id)}>
-                              Confirm Release
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </td>
-                  </tr>
-                ))}
+                releaseQueue.map((b) => {
+                  const isPaid = b.payment_status === "Paid";
+                  return (
+                    <tr key={b.reservation_id} className="border-b border-border last:border-0">
+                      <td className="py-2 px-2 text-muted-foreground">
+                        {b.booking_ref ?? `#${b.reservation_id}`}
+                      </td>
+                      <td className="py-2 px-2 text-foreground">{b.customer_name}</td>
+                      <td className="py-2 px-2 text-foreground">{b.plate_no}</td>
+                      <td className="py-2 px-2 text-foreground">{b.package_name}</td>
+                      <td className="py-2 px-2">
+                        <PaymentBadge paymentStatus={b.payment_status} />
+                      </td>
+                      <td className="py-2 px-2">
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <button
+                              disabled={!isPaid || releasingId === b.reservation_id}
+                              title={!isPaid ? "Cannot release until payment is marked Paid" : undefined}
+                              className="rounded-md border border-chart-1 px-2 py-1 text-sm font-medium text-chart-1 hover:bg-chart-1 hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-chart-1"
+                            >
+                              {releasingId === b.reservation_id ? "..." : "Release Vehicle"}
+                            </button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                Release {b.booking_ref ?? `#${b.reservation_id}`} to the customer?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Confirms {b.customer_name}'s {b.plate_no} is being handed over now that
+                                payment has been received. This can't be undone from here.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => releaseVehicleAction(b.reservation_id)}>
+                                Confirm Release
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </td>
+                    </tr>
+                  );
+                })}
               {!releaseLoading && releaseQueue.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={6} className="py-8 text-center text-muted-foreground">
                     No vehicles waiting for release
                   </td>
                 </tr>

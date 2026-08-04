@@ -107,16 +107,16 @@ export function CashierDashboard() {
 
   const loadBookings = () => {
     setLoading(true);
+    // "Ready for Pickup" no longer exists as a stored status — a booking that's Completed
+    // and already invoiced simply won't be Completed anymore once paid (payment doesn't
+    // change the reservation status), so the invoicedIds filter below is the only guard needed.
     Promise.all([
-      api.get(`/api/bookings?status=${encodeURIComponent("Ready for Pickup")}`),
       api.get(`/api/bookings?status=${encodeURIComponent("Completed")}`),
       api.get("/api/invoices"),
     ])
-      .then(([ready, completed, invoiced]) => {
+      .then(([completed, invoiced]) => {
         const invoicedIds = new Set(invoiced.invoices.map((i) => i.reservation_id));
-        const merged = [...ready.bookings, ...completed.bookings].filter(
-          (b) => !invoicedIds.has(b.reservation_id),
-        );
+        const merged = completed.bookings.filter((b) => !invoicedIds.has(b.reservation_id));
         setBookings(merged);
       })
       .catch(() => setError("Failed to load billable bookings"))

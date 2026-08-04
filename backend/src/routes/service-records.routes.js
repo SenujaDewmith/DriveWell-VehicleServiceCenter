@@ -151,8 +151,8 @@ router.put("/:booking_id", supervisorOrManager, updateServiceRecord);
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [Started, "In Progress", Completed]
- *                 example: "In Progress"
+ *                 enum: [Started, Completed]
+ *                 example: "Completed"
  *     responses:
  *       200: { description: Status updated and email sent for Completed }
  *       400: { description: Invalid status, or quality check not yet completed when advancing to Completed }

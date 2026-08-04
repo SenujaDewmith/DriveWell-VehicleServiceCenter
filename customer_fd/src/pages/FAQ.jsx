@@ -22,7 +22,7 @@ const CATEGORIES = [
             },
             {
                 question: "How do I track the status of my service?",
-                answer: "Every booking's detail page shows its current stage — Booked, Started, In Progress, and Ready for Pickup or Completed — updated in real time as our team works on your vehicle, along with a supervisor's quality-check confirmation.",
+                answer: "Every booking's detail page shows its current stage — Booked, Started, Completed, or Collected — updated in real time as our team works on your vehicle, along with a supervisor's quality-check confirmation and your payment status once the invoice is ready.",
             },
         ],
     },
@@ -68,7 +68,7 @@ const CATEGORIES = [
             },
             {
                 question: "Can I leave feedback after a service?",
-                answer: "Yes — once a booking is marked Completed or Ready for Pickup, you can leave feedback for that visit from the Feedback page. It helps us keep improving how the service center runs.",
+                answer: "Yes — once your vehicle has been collected, you can leave feedback for that visit from the Feedback page. It helps us keep improving how the service center runs.",
             },
         ],
     },

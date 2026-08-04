@@ -52,7 +52,7 @@ describe("POST /api/invoices", () => {
     expect(res.body.invoice.items).toHaveLength(2);
   });
 
-  test("400 when the booking is not Completed/Ready for Pickup", async () => {
+  test("400 when the booking is not Completed", async () => {
     const pkg = await seedPackage();
     const customer = await createUser("Customer");
     const vehicle = await createVehicle(customer.user_id);
@@ -204,6 +204,18 @@ describe("PATCH /api/invoices/:id/payment", () => {
     const res = await agent.patch(`/api/invoices/${created.body.invoice.invoice_id}/payment`).set("X-Portal", "staff").send({ payment_status: "Paid", payment_method: "Cash" });
     expect(res.status).toBe(200);
     expect(res.body.invoice.payment_status).toBe("Paid");
+  });
+
+  test("does not change the reservation's status when payment is marked Paid — Completed stays Completed", async () => {
+    const { reservation } = await completedBookingFixture();
+    const cashier = await createUser("Cashier");
+    const agent = await agentFor(cashier, "staff");
+    const created = await agent.post("/api/invoices").set("X-Portal", "staff").send({ reservation_id: reservation.reservation_id, base_amount: 5000 });
+
+    await agent.patch(`/api/invoices/${created.body.invoice.invoice_id}/payment`).set("X-Portal", "staff").send({ payment_status: "Paid" });
+
+    const updated = await prisma.reservation.findUnique({ where: { reservation_id: reservation.reservation_id } });
+    expect(updated.status).toBe("Completed");
   });
 
   test("400 for an invalid payment_status", async () => {

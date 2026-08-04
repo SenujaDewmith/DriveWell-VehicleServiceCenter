@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import { StatusBadge } from "@/components/manager/ManagerOverview";
+import { StatusBadge, PaymentBadge } from "@/components/manager/ManagerOverview";
 import { InvoiceViewModal } from "@/components/invoices/InvoiceView";
 import { Eye, X, AlertTriangle } from "lucide-react";
 import {
@@ -18,9 +18,7 @@ import {
 const statuses = [
   "Booked",
   "Started",
-  "In Progress",
   "Completed",
-  "Ready for Pickup",
   "Collected",
   "Cancelled",
   "No-show",
@@ -183,6 +181,7 @@ export function BookingsPage() {
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Vehicle</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Package</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Status</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Payment</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Invoice</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Actions</th>
               </tr>
@@ -228,6 +227,9 @@ export function BookingsPage() {
                           </span>
                         )}
                       </div>
+                    </td>
+                    <td className="py-2 px-3">
+                      <PaymentBadge paymentStatus={invoice?.payment_status} />
                     </td>
                     <td className="py-2 px-3">
                       {invoice ? (
@@ -279,7 +281,7 @@ export function BookingsPage() {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={10} className="py-8 text-center text-muted-foreground">
                     No bookings match filter
                   </td>
                 </tr>

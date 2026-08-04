@@ -3,6 +3,7 @@ const logger = require("../utils/logger");
 const { logActivity } = require("../lib/activityLogger");
 const { sendVehicleTransferredEmail, sendTransferRequestNoticeEmail } = require("../services/email.service");
 const { isValidPhone } = require("../lib/phone");
+const { RESERVATION_STATUS } = require("../constants/status");
 
 const VEHICLE_INCLUDE = {
   make: { select: { make_id: true, name: true } },
@@ -12,8 +13,10 @@ const VEHICLE_INCLUDE = {
 };
 
 // Bookings that aren't finished yet — these are the only ones that should
-// block a detach/transfer. Completed/cancelled/no-show history never blocks.
-const UNRESOLVED_BOOKING_STATUSES = { notIn: ["Cancelled", "No-show", "Completed"] };
+// block a detach/transfer. Completed/collected/cancelled/no-show history never blocks.
+const UNRESOLVED_BOOKING_STATUSES = {
+  notIn: [RESERVATION_STATUS.CANCELLED, RESERVATION_STATUS.NO_SHOW, RESERVATION_STATUS.COMPLETED, RESERVATION_STATUS.COLLECTED],
+};
 
 const flattenVehicle = (v) => ({
   vehicle_id: v.vehicle_id,

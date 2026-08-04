@@ -67,8 +67,24 @@ const sendStatusUpdate = (to, { customerName, bookingRef, status }) =>
     <p>Hi ${customerName},</p>
     <p>Your vehicle service (Ref: <strong>${bookingRef}</strong>) status has been updated to:</p>
     <h3>${status}</h3>
-    ${status === "Ready for Pickup" ? "<p>Payment received — your vehicle is ready. Please collect it from our staff at the service center.</p>" : ""}
     <p>Thank you for your patience.</p>
+  `);
+
+const sendServiceCompleted = (to, { customerName, bookingRef }) =>
+  sendEmail(to, "Service Completed – DriveWell", `
+    <h2>Service Completed</h2>
+    <p>Hi ${customerName},</p>
+    <p>Your vehicle service (Ref: <strong>${bookingRef}</strong>) has been completed.</p>
+    <p>We're preparing your invoice — you'll be notified once it's ready.</p>
+    <p>Thank you for your patience.</p>
+  `);
+
+const sendPaymentReceived = (to, { customerName, bookingRef, totalAmount }) =>
+  sendEmail(to, "Payment Received – DriveWell", `
+    <h2>Payment Received</h2>
+    <p>Hi ${customerName},</p>
+    <p>We've received your payment of <strong>LKR ${Number(totalAmount).toLocaleString()}</strong> for your service (Ref: <strong>${bookingRef}</strong>).</p>
+    <p>Your vehicle is ready — please collect it from our staff at the service center.</p>
   `);
 
 const sendPasswordResetEmail = (to, { customerName, resetUrl }) =>
@@ -132,5 +148,5 @@ module.exports = {
   sendWelcomeEmail, sendBookingConfirmation, sendBookingCancellation, sendNoShowNotice, sendStatusUpdate,
   sendVehicleTransferredEmail, sendPasswordResetEmail,
   sendTransferRequestNoticeEmail, sendTransferRequestDecisionEmail,
-  sendInvoiceReady, sendVehicleCollected,
+  sendInvoiceReady, sendVehicleCollected, sendPaymentReceived, sendServiceCompleted,
 };

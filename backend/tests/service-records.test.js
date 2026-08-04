@@ -163,13 +163,10 @@ describe("PATCH /api/service-records/:booking_id/status", () => {
     expect(res.body.message).toMatch(/quality check/i);
   });
 
-  test("advances Started -> In Progress -> Completed once quality-checked", async () => {
+  test("advances Started -> Completed once quality-checked", async () => {
     const { reservation } = await bookingFixture("Booked");
     const { agent } = await staffAgent("Supervisor");
     await withPortal(agent)("post", `/api/service-records/${reservation.reservation_id}`).send({});
-
-    const toInProgress = await withPortal(agent)("patch", `/api/service-records/${reservation.reservation_id}/status`).send({ status: "In Progress" });
-    expect(toInProgress.status).toBe(200);
 
     await withPortal(agent)("put", `/api/service-records/${reservation.reservation_id}`).send({ quality_checked: true });
     const toCompleted = await withPortal(agent)("patch", `/api/service-records/${reservation.reservation_id}/status`).send({ status: "Completed" });
@@ -181,6 +178,14 @@ describe("PATCH /api/service-records/:booking_id/status", () => {
     const { reservation } = await bookingFixture("Booked");
     const { agent } = await staffAgent("Supervisor");
     const res = await withPortal(agent)("patch", `/api/service-records/${reservation.reservation_id}/status`).send({ status: "Bogus" });
+    expect(res.status).toBe(400);
+  });
+
+  test("400 when trying to advance to the removed 'In Progress' status", async () => {
+    const { reservation } = await bookingFixture("Booked");
+    const { agent } = await staffAgent("Supervisor");
+    await withPortal(agent)("post", `/api/service-records/${reservation.reservation_id}`).send({});
+    const res = await withPortal(agent)("patch", `/api/service-records/${reservation.reservation_id}/status`).send({ status: "In Progress" });
     expect(res.status).toBe(400);
   });
 });

@@ -2,6 +2,7 @@ const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { fmtDate } = require("../lib/format");
 const { VEHICLE_SELECT, flattenVehicleRef } = require("../lib/vehicleFlatten");
+const { isFullyDone } = require("../constants/status");
 
 const CUSTOMER_ROLE = 5;
 // Matches MAX_FEATURED_FEEDBACK in admin_fd/feedback.jsx — the landing page's
@@ -77,8 +78,8 @@ const submitFeedback = async (req, res) => {
     });
     if (!booking) return res.status(404).json({ message: "Booking not found" });
     if (booking.customer_id !== user_id) return res.status(403).json({ message: "Access denied" });
-    if (!["Completed", "Ready for Pickup"].includes(booking.status))
-      return res.status(400).json({ message: "Feedback can only be submitted for completed services" });
+    if (!isFullyDone(booking.status))
+      return res.status(400).json({ message: "Feedback can only be submitted once the vehicle has been collected" });
 
     const feedback = await prisma.feedback.create({
       data: { reservation_id: parseInt(reservation_id), customer_id: user_id, rating, comment: comment || null },

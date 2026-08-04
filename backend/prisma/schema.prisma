@@ -208,6 +208,11 @@ model WorkingConfig {
   @@map("working_config")
 }
 
+enum PaymentStatus {
+  Unpaid
+  Paid
+}
+
 model BlockedTime {
   block_id   Int       @id @default(autoincrement())
   date       DateTime? @db.Date
@@ -228,6 +233,10 @@ model Reservation {
   start_time        DateTime  @db.Time
   end_time          DateTime  @db.Time
   service_date      DateTime  @db.Date
+  // Enforced beyond app-level validation by a DB CHECK constraint (see
+  // scripts/add-status-constraint.js) restricting this to the 6 lifecycle values —
+  // kept as a plain String (not a Prisma enum) so the JS-facing value for every status,
+  // including "No-show", matches exactly what the rest of the app already reads/writes.
   status            String    @default("Booked") @db.VarChar(30)
   created_at        DateTime  @default(now())
   // Clickwrap consent record — which T&C version the customer accepted and when.
@@ -322,7 +331,7 @@ model Invoice {
   additional_charges Decimal  @default(0) @db.Decimal(10, 2)
   discount           Decimal  @default(0) @db.Decimal(10, 2)
   total_amount       Decimal  @db.Decimal(10, 2)
-  payment_status     String   @default("Unpaid") @db.VarChar(20)
+  payment_status     PaymentStatus @default(Unpaid)
   payment_method     String?  @db.VarChar(30)
   notes              String?
   generated_at       DateTime @default(now())

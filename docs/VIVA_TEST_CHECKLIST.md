@@ -1,11 +1,12 @@
 # DriveWell — Viva Demo & Manual Test Checklist
 
-Use this as both a pre-viva QA pass and a live demo script. It's organized around the booking
-lifecycle (`Booked → Started → In Progress → Completed → Ready for Pickup`, plus `Cancelled` /
-`No-show`), since that's the spine of the whole system, with each role's features grouped
-around the point in that lifecycle where they act.
+Use this as both a pre-viva QA pass and a live demo script. It's organized around two
+independent statuses that together describe a booking: **service status**
+(`Booked → Started → Completed → Collected`, plus `Cancelled` / `No-show`), and **payment
+status** (`Unpaid → Paid`, only meaningful once an invoice exists, and never shown to Service
+Staff). Each role's features are grouped around the point in that lifecycle where they act.
 
-Automated coverage backing this up: 377 backend integration tests (`backend/tests`, run with
+Automated coverage backing this up: 411 backend integration tests (`backend/tests`, run with
 `npm test` inside `backend/`) plus frontend component tests in `customer_fd` and `admin_fd`.
 This checklist is for what those tests can't show a panel — the actual UI working end to end.
 
@@ -49,9 +50,10 @@ This checklist is for what those tests can't show a panel — the actual UI work
 - [ ] **View bookings list** and a booking's detail page (status, vehicle, package)
 - [ ] **Cancel a booking** made far enough in the future; separately confirm a booking within 24
       hours of its slot **cannot** be self-cancelled (error message explains why)
-- [ ] **Feedback**: after a booking reaches Completed (see Supervisor section below), submit a
-      1–5 star rating + comment; confirm a second submission for the same booking is rejected
-      (one review per booking)
+- [ ] **Feedback**: after a booking reaches Collected — fully serviced, paid, and handed back
+      (see Supervisor section below) — submit a 1–5 star rating + comment; confirm a second
+      submission for the same booking is rejected (one review per booking), and confirm
+      feedback is refused for a booking that's only Completed (not yet paid/collected)
 - [ ] **Invoices**: after a Cashier generates one (see below), confirm the customer can view it
       but does not see the supervisor's internal remarks/work notes (staff-only)
 - [ ] **Public landing page**: testimonials section shows only 4★+ reviews with a comment,
@@ -77,7 +79,10 @@ This checklist is for what those tests can't show a panel — the actual UI work
 - [ ] **Users**: create a Supervisor, Cashier, and Service Staff account; toggle an account's
       active/inactive status and confirm a deactivated account can no longer log in
 - [ ] **Override a booking's status** directly (e.g. force to `No-show`) — manager-only escape
-      hatch
+      hatch. Confirm it still refuses to force a booking to `Collected` while its invoice is
+      Unpaid — there's no override for the payment gate, even for a manager
+- [ ] **All Bookings**: confirm the table's Payment column reflects each booking's invoice
+      status (or `—` before an invoice exists) alongside its service status
 - [ ] **Reports**:
   - [ ] Revenue — total/paid/unpaid, by package, by date
   - [ ] Volume — bookings by status, by package, by date
@@ -96,13 +101,19 @@ This checklist is for what those tests can't show a panel — the actual UI work
       assignment is blocked and a duplicate staff member can't be assigned twice
 - [ ] **Add a service item** — once picked from the charge catalog, once as a free-text note
       (e.g. "rear brake pads worn") — these carry no price yet, that's the Cashier's call
-- [ ] Advance status **Started → In Progress**
 - [ ] Try advancing to **Completed before the quality check is ticked** — should be blocked with
       a clear message
 - [ ] Tick **quality check**, then advance to **Completed** — should succeed and trigger a
-      status-update email to the customer
+      status-update email to the customer. Note: this says nothing about payment — that's a
+      separate status the Cashier controls next
 - [ ] Confirm the record is now locked: editing remarks/odometer/assignments/items after
       Completed is rejected (finalized record)
+- [ ] After the Cashier marks the invoice Paid (below), come back to the **Ready for Release**
+      table — the booking should appear with a **Paid** payment badge and an enabled **Release
+      Vehicle** button; releasing moves the booking to `Collected` and emails the customer a
+      collection confirmation + feedback prompt
+- [ ] Confirm the **Release Vehicle** button is disabled (and the row shows **Unpaid**) for any
+      Completed booking the Cashier hasn't marked Paid yet
 
 ## 4. Cashier journey (admin_fd, staff portal)
 
@@ -112,8 +123,11 @@ This checklist is for what those tests can't show a panel — the actual UI work
       charge catalog
 - [ ] **Generate the invoice**: base amount + itemized additional charges + a discount → confirm
       the total is computed correctly (base + additional − discount)
-- [ ] Confirm invoice generation is blocked for a booking that isn't Completed/Ready for Pickup
-- [ ] **Mark the invoice Paid** with a payment method
+- [ ] Confirm invoice generation is blocked for a booking that isn't Completed
+- [ ] **Mark the invoice Paid** with a payment method — triggers a "Payment Received" email to
+      the customer, and the booking's payment status becomes Paid everywhere it's shown
+      (customer, manager, supervisor, cashier — not on the Service Staff view, which never shows
+      payment information at all)
 - [ ] Confirm a second invoice can't be generated for the same booking
 
 ## 5. Service Staff journey (admin_fd, staff portal)
@@ -123,6 +137,8 @@ This checklist is for what those tests can't show a panel — the actual UI work
       every job in the system)
 - [ ] **My Performance** — confirm it reflects the completed job and any feedback rating left on
       it
+- [ ] Confirm nothing in the Service Staff views shows payment/invoice information — staff only
+      ever see service status
 
 ## 6. Cross-cutting spot checks (fast, worth doing right before the panel arrives)
 

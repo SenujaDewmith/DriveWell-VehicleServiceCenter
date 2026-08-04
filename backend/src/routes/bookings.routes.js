@@ -260,7 +260,7 @@ router.patch("/:id/cancel", verifyToken, cancelBooking);
  *               status:
  *                 type: string
  *                 example: No-show
- *                 enum: [Booked, Started, "In Progress", Completed, "Ready for Pickup", Collected, Cancelled, No-show]
+ *                 enum: [Booked, Started, Completed, Collected, Cancelled, No-show]
  *     responses:
  *       200: { description: Status updated }
  *       400: { description: Invalid status }
@@ -277,7 +277,7 @@ router.patch("/:id/status", verifyToken, authorizeRoles("Service Center Manager"
  *     summary: Release the vehicle to the customer (Supervisor / Manager only)
  *     description: >
  *       Confirms the customer physically collected the vehicle. Only allowed when the booking
- *       is "Ready for Pickup" and its invoice is marked Paid — the real payment gate for handover.
+ *       is "Completed" and its invoice is marked Paid — the real payment gate for handover.
  *       On success the booking status becomes "Collected".
  *     tags: [Bookings]
  *     security:
@@ -289,7 +289,7 @@ router.patch("/:id/status", verifyToken, authorizeRoles("Service Center Manager"
  *         schema: { type: integer }
  *     responses:
  *       200: { description: Vehicle released }
- *       400: { description: Booking not Ready for Pickup, or invoice not Paid }
+ *       400: { description: Booking not Completed, or invoice not Paid }
  *       403: { description: Supervisor or Manager only }
  *       404: { description: Booking not found }
  *       500: { description: Server error }

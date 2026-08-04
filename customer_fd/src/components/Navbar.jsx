@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Moon, Sun, Menu, User, LogOut, Car, Calendar, FileText, Star } from "lucide-react";
@@ -30,9 +31,11 @@ export function Navbar() {
     const navigate = useNavigate();
     const location = useLocation();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
     const navLinks = getNavLinks(!!user);
     const isActiveLink = (to) => to === "/" ? location.pathname === "/" : location.pathname.startsWith(to);
     const handleLogout = async () => {
+        setLogoutDialogOpen(false);
         await logout();
         navigate("/");
         toast.success("Logged out successfully");
@@ -98,7 +101,7 @@ export function Navbar() {
                     Feedback
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>
+                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setLogoutDialogOpen(true); }}>
                     <LogOut className="mr-2 h-4 w-4"/>
                     Logout
                   </DropdownMenuItem>
@@ -140,5 +143,20 @@ export function Navbar() {
             </nav>
           </div>)}
       </div>
+
+      <AlertDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Log out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You'll need to sign in again to access your bookings, vehicles, and invoices.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleLogout}>Logout</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </header>);
 }

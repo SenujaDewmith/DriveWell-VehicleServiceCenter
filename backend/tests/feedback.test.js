@@ -19,7 +19,7 @@ async function completedBookingFixture() {
   const customer = await createUser("Customer", { full_name: "Sarah Jayasuriya" });
   const vehicle = await createVehicle(customer.user_id);
   const reservation = await createReservation({
-    customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Completed",
+    customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Collected",
   });
   return { pkg, customer, vehicle, reservation };
 }
@@ -29,7 +29,7 @@ async function feedbackFixture({ email, rating = 5, comment = "Great service!" }
   const customer = await createUser("Customer", email ? { email } : undefined);
   const vehicle = await createVehicle(customer.user_id);
   const reservation = await createReservation({
-    customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Completed",
+    customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Collected",
   });
   const agent = await agentFor(customer, "customer");
   const res = await agent.post("/api/feedback").set("X-Portal", "customer").send({ reservation_id: reservation.reservation_id, rating, comment });
@@ -61,12 +61,28 @@ describe("POST /api/feedback", () => {
     expect(tooLow.status).toBe(400);
   });
 
-  test("400 when the booking is not yet completed", async () => {
+  test("400 when the booking is not yet collected", async () => {
     const pkg = await seedPackage();
     const customer = await createUser("Customer");
     const vehicle = await createVehicle(customer.user_id);
     const reservation = await createReservation({
       customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Booked",
+    });
+    const agent = await agentFor(customer, "customer");
+    const res = await agent.post("/api/feedback").set("X-Portal", "customer").send({ reservation_id: reservation.reservation_id, rating: 5 });
+    expect(res.status).toBe(400);
+  });
+
+  // Regression test for the original bug: a booking that's Completed (service done) but not
+  // yet Collected (still needs payment/handover) must still be rejected — only "Collected"
+  // is the fully-done state, and this must not silently pass once a fully-collected booking
+  // moves on to any future state either.
+  test("400 when the booking is Completed but not yet Collected", async () => {
+    const pkg = await seedPackage();
+    const customer = await createUser("Customer");
+    const vehicle = await createVehicle(customer.user_id);
+    const reservation = await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Completed",
     });
     const agent = await agentFor(customer, "customer");
     const res = await agent.post("/api/feedback").set("X-Portal", "customer").send({ reservation_id: reservation.reservation_id, rating: 5 });
@@ -154,13 +170,13 @@ describe("GET /api/feedback/public", () => {
 
     const goodCustomer = await createUser("Customer", { full_name: "Sarah Jayasuriya" });
     const goodVehicle = await createVehicle(goodCustomer.user_id);
-    const goodReservation = await createReservation({ customerId: goodCustomer.user_id, vehicleId: goodVehicle.vehicle_id, packageId: pkg.package_id, status: "Completed" });
+    const goodReservation = await createReservation({ customerId: goodCustomer.user_id, vehicleId: goodVehicle.vehicle_id, packageId: pkg.package_id, status: "Collected" });
     const goodAgent = await agentFor(goodCustomer, "customer");
     const goodFeedback = await goodAgent.post("/api/feedback").set("X-Portal", "customer").send({ reservation_id: goodReservation.reservation_id, rating: 5, comment: "Excellent work!" }).then((r) => r.body.feedback);
 
     const poorCustomer = await createUser("Customer", { full_name: "Poor Rater", email: "poor@test.local" });
     const poorVehicle = await createVehicle(poorCustomer.user_id);
-    const poorReservation = await createReservation({ customerId: poorCustomer.user_id, vehicleId: poorVehicle.vehicle_id, packageId: pkg.package_id, status: "Completed" });
+    const poorReservation = await createReservation({ customerId: poorCustomer.user_id, vehicleId: poorVehicle.vehicle_id, packageId: pkg.package_id, status: "Collected" });
     const poorAgent = await agentFor(poorCustomer, "customer");
     await poorAgent.post("/api/feedback").set("X-Portal", "customer").send({ reservation_id: poorReservation.reservation_id, rating: 5, comment: "Also great, but not featured" });
 

@@ -15,7 +15,10 @@ import {
 
 const COLORS = ["#A7D129", "#616F39", "#3E432E", "#8B9D4A", "#D4E157"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const COMPLETED_STATUSES = ["Completed", "Ready for Pickup"];
+// "Collected" is included because a same-day booking that's fully paid and handed
+// back before day's end has still had its service completed today — it shouldn't
+// disappear from this KPI just because it advanced past "Completed".
+const COMPLETED_STATUSES = ["Completed", "Collected"];
 
 function todayKey() {
   const d = new Date();
@@ -226,10 +229,7 @@ export function StatusBadge({ status }) {
   const colors = {
     Booked: "bg-status-booked/10 text-status-booked border border-status-booked/20",
     Started: "bg-status-in-progress/10 text-status-in-progress border border-status-in-progress/20",
-    "In Progress":
-      "bg-status-in-progress/10 text-status-in-progress border border-status-in-progress/20",
     Completed: "bg-status-completed/10 text-status-completed border border-status-completed/20",
-    "Ready for Pickup": "bg-status-ready/10 text-status-ready border border-status-ready/20",
     Collected: "bg-status-completed/10 text-status-completed border border-status-completed/20",
     Cancelled: "bg-status-cancelled/10 text-status-cancelled border border-status-cancelled/20",
     "No-show": "bg-status-cancelled/10 text-status-cancelled border border-status-cancelled/20",
@@ -240,6 +240,23 @@ export function StatusBadge({ status }) {
       className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] || "bg-muted text-muted-foreground border border-border"}`}
     >
       {status}
+    </span>
+  );
+}
+
+// Reused wherever a booking's payment status needs a badge (manager's All Bookings,
+// supervisor's release queue) — never rendered for Service Staff, who don't see payment data.
+export function PaymentBadge({ paymentStatus }) {
+  if (!paymentStatus) return <span className="text-xs text-muted-foreground">—</span>;
+  const colors = {
+    Paid: "bg-status-completed/10 text-status-completed border border-status-completed/20",
+    Unpaid: "bg-status-ready/10 text-status-ready border border-status-ready/20",
+  };
+  return (
+    <span
+      className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${colors[paymentStatus] || "bg-muted text-muted-foreground border border-border"}`}
+    >
+      {paymentStatus}
     </span>
   );
 }

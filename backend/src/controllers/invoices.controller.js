@@ -3,7 +3,8 @@ const logger = require("../utils/logger");
 const { fmtDate } = require("../lib/format");
 const { logActivity } = require("../lib/activityLogger");
 const { VEHICLE_SELECT, flattenVehicleRef } = require("../lib/vehicleFlatten");
-const { sendInvoiceReady, sendStatusUpdate } = require("../services/email.service");
+const { sendInvoiceReady, sendPaymentReceived } = require("../services/email.service");
+const { RESERVATION_STATUS, PAYMENT_STATUS } = require("../constants/status");
 
 const CUSTOMER_ROLE = 5;
 
@@ -233,8 +234,8 @@ const createInvoice = async (req, res) => {
       },
     });
     if (!booking) return res.status(404).json({ message: "Booking not found" });
-    if (!["Completed", "Ready for Pickup"].includes(booking.status))
-      return res.status(400).json({ message: "Can only generate invoice for Completed or Ready for Pickup bookings" });
+    if (booking.status !== RESERVATION_STATUS.COMPLETED)
+      return res.status(400).json({ message: "Can only generate invoice for Completed bookings" });
 
     const invoice = await prisma.$transaction(async (tx) => {
       const created = await tx.invoice.create({
@@ -274,50 +275,34 @@ const updatePaymentStatus = async (req, res) => {
   const { id } = req.params;
   const { payment_status, payment_method } = req.body;
 
-  if (!payment_status || !["Paid", "Unpaid"].includes(payment_status))
+  if (!payment_status || !Object.values(PAYMENT_STATUS).includes(payment_status))
     return res.status(400).json({ message: "payment_status must be 'Paid' or 'Unpaid'" });
 
   try {
-    const { invoice, promotedToReadyForPickup } = await prisma.$transaction(async (tx) => {
-      const updatedInvoice = await tx.invoice.update({
-        where: { invoice_id: parseInt(id) },
-        data: { payment_status, payment_method: payment_method || null },
-        include: {
-          reservation: {
-            select: {
-              status: true,
-              booking_ref: true,
-              customer_user: { select: { email: true, customer: { select: { full_name: true } } } },
-            },
+    const invoice = await prisma.invoice.update({
+      where: { invoice_id: parseInt(id) },
+      data: { payment_status, payment_method: payment_method || null },
+      include: {
+        reservation: {
+          select: {
+            status: true,
+            booking_ref: true,
+            customer_user: { select: { email: true, customer: { select: { full_name: true } } } },
           },
         },
-      });
-
-      // Payment is the real-world signal that the vehicle is ready to hand back —
-      // auto-advance the booking so the Supervisor's release queue and the customer's
-      // status view pick it up without a separate manual step.
-      let promoted = false;
-      if (payment_status === "Paid" && updatedInvoice.reservation.status === "Completed") {
-        await tx.reservation.update({
-          where: { reservation_id: updatedInvoice.reservation_id },
-          data: { status: "Ready for Pickup" },
-        });
-        promoted = true;
-      }
-
-      return { invoice: updatedInvoice, promotedToReadyForPickup: promoted };
+      },
     });
 
     logger.info(`Invoice ${id} payment status set to ${payment_status}`);
-    if (payment_status === "Paid") {
+    if (payment_status === PAYMENT_STATUS.PAID) {
       logActivity(prisma, { user_id: req.user.user_id, action: "PAYMENT_RECEIVED", entity_type: "invoice", entity_id: parseInt(id) });
-    }
-    if (promotedToReadyForPickup) {
-      logActivity(prisma, { user_id: req.user.user_id, action: "STATUS_CHANGED", entity_type: "reservation", entity_id: invoice.reservation_id });
-      sendStatusUpdate(invoice.reservation.customer_user.email, {
+      // Replaces the old auto-promotion-to-"Ready for Pickup" email — the reservation
+      // status no longer changes on payment, so this is the sole signal telling the
+      // customer their car is ready to be collected once they've paid.
+      sendPaymentReceived(invoice.reservation.customer_user.email, {
         customerName: invoice.reservation.customer_user.customer?.full_name,
         bookingRef: invoice.reservation.booking_ref,
-        status: "Ready for Pickup",
+        totalAmount: invoice.total_amount,
       });
     }
     const { reservation, ...invoiceFields } = invoice;
