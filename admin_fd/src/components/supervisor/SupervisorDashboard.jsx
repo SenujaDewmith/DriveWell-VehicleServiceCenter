@@ -3,6 +3,17 @@ import { api } from "@/lib/api";
 import { StatusBadge } from "@/components/manager/ManagerOverview";
 import { Combobox } from "@/components/ui/combobox";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Check,
   CheckCircle,
   ChevronLeft,
@@ -714,13 +725,33 @@ export function SupervisorDashboard() {
                     <td className="py-2 px-2 text-foreground">{b.plate_no}</td>
                     <td className="py-2 px-2 text-foreground">{b.package_name}</td>
                     <td className="py-2 px-2">
-                      <button
-                        onClick={() => releaseVehicleAction(b.reservation_id)}
-                        disabled={releasingId === b.reservation_id}
-                        className="rounded-md border border-chart-1 px-2 py-1 text-sm font-medium text-chart-1 hover:bg-chart-1 hover:text-accent-foreground transition-colors disabled:opacity-50"
-                      >
-                        {releasingId === b.reservation_id ? "..." : "Release Vehicle"}
-                      </button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <button
+                            disabled={releasingId === b.reservation_id}
+                            className="rounded-md border border-chart-1 px-2 py-1 text-sm font-medium text-chart-1 hover:bg-chart-1 hover:text-accent-foreground transition-colors disabled:opacity-50"
+                          >
+                            {releasingId === b.reservation_id ? "..." : "Release Vehicle"}
+                          </button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              Release {b.booking_ref ?? `#${b.reservation_id}`} to the customer?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Confirms {b.customer_name}'s {b.plate_no} is being handed over now that
+                              payment has been received. This can't be undone from here.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => releaseVehicleAction(b.reservation_id)}>
+                              Confirm Release
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </td>
                   </tr>
                 ))}

@@ -120,9 +120,17 @@ const sendInvoiceReady = (to, { customerName, bookingRef, totalAmount }) =>
     <p>Please visit the service center to complete payment and collect your vehicle.</p>
   `);
 
+const sendVehicleCollected = (to, { customerName, bookingRef }) =>
+  sendEmail(to, "Thank You For Choosing DriveWell!", `
+    <h2>Vehicle Collected</h2>
+    <p>Hi ${customerName},</p>
+    <p>Your vehicle (Ref: <strong>${bookingRef}</strong>) has been collected. Thank you for choosing DriveWell!</p>
+    <p>We'd love to hear how we did — feel free to log in and leave us a comment about your service experience.</p>
+  `);
+
 module.exports = {
   sendWelcomeEmail, sendBookingConfirmation, sendBookingCancellation, sendNoShowNotice, sendStatusUpdate,
   sendVehicleTransferredEmail, sendPasswordResetEmail,
   sendTransferRequestNoticeEmail, sendTransferRequestDecisionEmail,
-  sendInvoiceReady,
+  sendInvoiceReady, sendVehicleCollected,
 };

@@ -14,7 +14,7 @@ export function getCustomerStatusNote(booking) {
     return "Payment received. Please collect your vehicle from our staff.";
   }
   if (booking.status === "Collected") {
-    return "Vehicle collected. Thank you for choosing DriveWell!";
+    return "Vehicle collected. Thank you for choosing DriveWell! Feel free to leave us a comment about your service experience.";
   }
   return null;
 }

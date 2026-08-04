@@ -1,7 +1,7 @@
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { fmtDate, fmtTime } = require("../lib/format");
-const { sendBookingConfirmation, sendBookingCancellation, sendNoShowNotice } = require("../services/email.service");
+const { sendBookingConfirmation, sendBookingCancellation, sendNoShowNotice, sendVehicleCollected } = require("../services/email.service");
 const { logActivity } = require("../lib/activityLogger");
 const { VEHICLE_SELECT, flattenVehicleRef } = require("../lib/vehicleFlatten");
 const {
@@ -477,7 +477,10 @@ const releaseVehicle = async (req, res) => {
   try {
     const booking = await prisma.reservation.findUnique({
       where: { reservation_id: parseInt(id) },
-      include: { invoice: { select: { payment_status: true } } },
+      include: {
+        invoice: { select: { payment_status: true } },
+        customer_user: { select: { email: true, customer: { select: { full_name: true } } } },
+      },
     });
     if (!booking) return res.status(404).json({ message: "Booking not found" });
 
@@ -492,6 +495,10 @@ const releaseVehicle = async (req, res) => {
     });
 
     logActivity(prisma, { user_id: req.user.user_id, action: "VEHICLE_RELEASED", entity_type: "reservation", entity_id: parseInt(id) });
+    sendVehicleCollected(booking.customer_user.email, {
+      customerName: booking.customer_user.customer?.full_name,
+      bookingRef: booking.booking_ref,
+    });
     res.status(200).json({ message: "Vehicle released", booking: updated });
   } catch (error) {
     logger.error(`releaseVehicle failed — ${error.message}`);

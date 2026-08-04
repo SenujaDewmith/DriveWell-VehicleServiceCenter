@@ -6,6 +6,17 @@ import {
   InvoiceViewModal,
   SupervisorServiceDetails,
 } from "@/components/invoices/InvoiceView";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Eye, Printer, Plus, Search, Trash2, X } from "lucide-react";
 
 const SEARCH_DEBOUNCE_MS = 500;
@@ -302,13 +313,37 @@ export function CashierDashboard() {
                   </td>
                   <td className="py-2 px-2 text-foreground">{inv.payment_method ?? "—"}</td>
                   <td className="py-2 px-2">
-                    <button
-                      onClick={() => markInvoicePaid(inv.invoice_id, inv.payment_method ?? "Cash")}
-                      disabled={markingPaidId === inv.invoice_id}
-                      className="rounded-md border border-chart-1 px-2 py-1 text-sm font-medium text-chart-1 hover:bg-chart-1 hover:text-accent-foreground transition-colors disabled:opacity-50"
-                    >
-                      {markingPaidId === inv.invoice_id ? "..." : "Mark as Paid"}
-                    </button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <button
+                          disabled={markingPaidId === inv.invoice_id}
+                          className="rounded-md border border-chart-1 px-2 py-1 text-sm font-medium text-chart-1 hover:bg-chart-1 hover:text-accent-foreground transition-colors disabled:opacity-50"
+                        >
+                          {markingPaidId === inv.invoice_id ? "..." : "Mark as Paid"}
+                        </button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            Mark {inv.booking_ref ?? `#${inv.invoice_id}`} as paid?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Confirms LKR {parseFloat(inv.total_amount).toLocaleString()} was received
+                            from {inv.customer_name} ({inv.payment_method ?? "Cash"}). This marks the
+                            service as Completed & Paid — the Supervisor will then verify payment and
+                            release the vehicle. This can't be undone from here.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => markInvoicePaid(inv.invoice_id, inv.payment_method ?? "Cash")}
+                          >
+                            Confirm Payment
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </td>
                 </tr>
               ))}
@@ -635,7 +670,16 @@ export function CashierDashboard() {
               currentOdometer={draft.current_odometer}
               nextServiceOdometer={draft.next_service_odometer}
             />
-            <div className="p-3 border-t border-border no-print">
+            <div className="p-3 border-t border-border no-print flex gap-2">
+              <button
+                onClick={() => {
+                  setShowInvoice(false);
+                  setSelectedId(null);
+                }}
+                className="flex-1 rounded-md border border-border py-2 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+              >
+                Close (Awaiting Payment)
+              </button>
               <button
                 onClick={async () => {
                   await markInvoicePaid(createdInvoice.invoice_id, paymentMethod);
@@ -643,7 +687,7 @@ export function CashierDashboard() {
                   setSelectedId(null);
                 }}
                 disabled={markingPaidId === createdInvoice.invoice_id}
-                className="w-full flex items-center justify-center gap-2 rounded-md bg-chart-1 py-2 text-sm font-semibold text-accent-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+                className="flex-1 flex items-center justify-center gap-2 rounded-md bg-chart-1 py-2 text-sm font-semibold text-accent-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
               >
                 {markingPaidId === createdInvoice.invoice_id ? "Updating..." : "Mark as Paid Now"}
               </button>
