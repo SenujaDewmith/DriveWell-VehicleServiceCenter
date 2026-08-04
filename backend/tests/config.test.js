@@ -165,20 +165,20 @@ describe("PUT /api/config", () => {
 describe("GET /api/config/contact", () => {
   test("readable without authentication", async () => {
     const agent = await managerAgent();
-    await agent.put("/api/config/contact").set("X-Portal", "staff").send({ contact_phone: "+94 77 830 8747" });
+    await agent.put("/api/config/contact").set("X-Portal", "staff").send({ contact_phone: "+94778308747" });
 
     const res = await request(app).get("/api/config/contact");
     expect(res.status).toBe(200);
-    expect(res.body.contact_phone).toBe("+94 77 830 8747");
+    expect(res.body.contact_phone).toBe("+94778308747");
   });
 });
 
 describe("PUT /api/config/contact", () => {
   test("manager updates the contact phone", async () => {
     const agent = await managerAgent();
-    const res = await agent.put("/api/config/contact").set("X-Portal", "staff").send({ contact_phone: "+94 11 234 5678" });
+    const res = await agent.put("/api/config/contact").set("X-Portal", "staff").send({ contact_phone: "+94112345678" });
     expect(res.status).toBe(200);
-    expect(res.body.contact_phone).toBe("+94 11 234 5678");
+    expect(res.body.contact_phone).toBe("+94112345678");
   });
 
   test("rejects a malformed phone number", async () => {
@@ -187,17 +187,29 @@ describe("PUT /api/config/contact", () => {
     expect(res.status).toBe(400);
   });
 
+  test("rejects a number with the wrong digit count after +94", async () => {
+    const agent = await managerAgent();
+    const res = await agent.put("/api/config/contact").set("X-Portal", "staff").send({ contact_phone: "+9477830874" });
+    expect(res.status).toBe(400);
+  });
+
+  test("rejects a spaced/formatted number — must be +94 plus exactly 9 digits, nothing else", async () => {
+    const agent = await managerAgent();
+    const res = await agent.put("/api/config/contact").set("X-Portal", "staff").send({ contact_phone: "+94 77 830 8747" });
+    expect(res.status).toBe(400);
+  });
+
   test("rejects non-manager", async () => {
     const supervisor = await createUser("Supervisor");
     const agent = request.agent(app);
     await loginAs(agent, supervisor, "staff");
 
-    const res = await agent.put("/api/config/contact").set("X-Portal", "staff").send({ contact_phone: "+94 77 830 8747" });
+    const res = await agent.put("/api/config/contact").set("X-Portal", "staff").send({ contact_phone: "+94778308747" });
     expect(res.status).toBe(403);
   });
 
   test("rejects unauthenticated request", async () => {
-    const res = await request(app).put("/api/config/contact").send({ contact_phone: "+94 77 830 8747" });
+    const res = await request(app).put("/api/config/contact").send({ contact_phone: "+94778308747" });
     expect(res.status).toBe(401);
   });
 });

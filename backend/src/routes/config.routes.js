@@ -89,7 +89,7 @@ router.put("/", managerOnly, updateConfig);
  *             schema:
  *               type: object
  *               properties:
- *                 contact_phone: { type: string, nullable: true, example: "+94 77 830 8747" }
+ *                 contact_phone: { type: string, nullable: true, example: "+94778308747" }
  *       500: { description: Server error }
  */
 router.get("/contact", getPublicContactPhone);
@@ -110,7 +110,7 @@ router.get("/contact", getPublicContactPhone);
  *             type: object
  *             required: [contact_phone]
  *             properties:
- *               contact_phone: { type: string, example: "+94 77 830 8747" }
+ *               contact_phone: { type: string, example: "+94778308747", description: "Fixed +94 prefix plus exactly 9 local digits" }
  *     responses:
  *       200: { description: Contact phone updated }
  *       400: { description: Validation error }

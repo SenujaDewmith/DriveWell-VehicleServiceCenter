@@ -2,13 +2,10 @@ const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { fmtTime, fmtDate } = require("../lib/format");
 const { logActivity } = require("../lib/activityLogger");
+const { isValidSriLankanPhone } = require("../lib/phone");
 
 const toTimeDate = (hhmm) => new Date(`1970-01-01T${hhmm}:00.000Z`);
 const normalizeTime = (t) => t.slice(0, 5); // "HH:MM" — comparable regardless of "HH:MM" vs "HH:MM:SS" input
-
-// Loose shape check, not a strict E.164 parse — this field is free text an admin types in
-// (e.g. "+94 77 830 8747"), not something users submit that needs canonicalizing.
-const PHONE_SHAPE_REGEX = /^[+\d][\d\s\-()]{6,19}$/;
 
 const flattenBlockedTime = (b) => ({
   ...b,
@@ -82,8 +79,8 @@ const getPublicContactPhone = async (req, res) => {
 
 const updateContactPhone = async (req, res) => {
   const { contact_phone } = req.body;
-  if (typeof contact_phone !== "string" || !PHONE_SHAPE_REGEX.test(contact_phone.trim()))
-    return res.status(400).json({ message: "contact_phone must be a valid phone number" });
+  if (!isValidSriLankanPhone(contact_phone))
+    return res.status(400).json({ message: "Enter a valid 9-digit number after +94" });
 
   try {
     await prisma.workingConfig.updateMany({ data: { contact_phone: contact_phone.trim() } });

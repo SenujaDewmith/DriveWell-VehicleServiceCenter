@@ -3,7 +3,9 @@
 // backfill only touches rows that are still NULL.
 const prisma = require("../src/lib/prisma");
 
-const DEFAULT_CONTACT_PHONE = "+94 77 830 8747";
+// Fixed +94 prefix plus exactly 9 local digits, no formatting — must match SL_PHONE_REGEX
+// in backend/src/lib/phone.js and customer_fd/src/lib/phoneNumber.js.
+const DEFAULT_CONTACT_PHONE = "+94778308747";
 
 const run = async () => {
   await prisma.$executeRawUnsafe(`ALTER TABLE working_config ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(20)`);

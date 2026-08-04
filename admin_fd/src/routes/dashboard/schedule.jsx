@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2, CalendarOff } from "lucide-react";
 import { api } from "@/lib/api";
+import { PhoneNumberInput } from "@/components/ui/phone-number-input";
+import { isValidSriLankanPhone } from "@/lib/phoneNumber";
 
 const ALL_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DAY_TO_NUM = {
@@ -165,8 +167,8 @@ export function SchedulePage() {
   };
 
   const saveContactPhone = async () => {
-    if (!contactPhone.trim()) {
-      setError("Contact phone is required");
+    if (!isValidSriLankanPhone(contactPhone)) {
+      setError("Enter a valid 9-digit number after +94");
       return;
     }
     setSavingContact(true);
@@ -418,13 +420,9 @@ export function SchedulePage() {
         </p>
         <div className="space-y-1">
           <label className="block text-sm font-medium text-muted-foreground">Support Phone Number</label>
-          <input
-            type="text"
-            value={contactPhone}
-            onChange={(e) => setContactPhone(e.target.value)}
-            placeholder="+94 77 830 8747"
-            className="w-64 border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          />
+          <div className="w-64">
+            <PhoneNumberInput value={contactPhone} onChange={setContactPhone} />
+          </div>
         </div>
       </div>
 
