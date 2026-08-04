@@ -162,6 +162,46 @@ describe("PUT /api/config", () => {
   });
 });
 
+describe("GET /api/config/contact", () => {
+  test("readable without authentication", async () => {
+    const agent = await managerAgent();
+    await agent.put("/api/config/contact").set("X-Portal", "staff").send({ contact_phone: "+94 77 830 8747" });
+
+    const res = await request(app).get("/api/config/contact");
+    expect(res.status).toBe(200);
+    expect(res.body.contact_phone).toBe("+94 77 830 8747");
+  });
+});
+
+describe("PUT /api/config/contact", () => {
+  test("manager updates the contact phone", async () => {
+    const agent = await managerAgent();
+    const res = await agent.put("/api/config/contact").set("X-Portal", "staff").send({ contact_phone: "+94 11 234 5678" });
+    expect(res.status).toBe(200);
+    expect(res.body.contact_phone).toBe("+94 11 234 5678");
+  });
+
+  test("rejects a malformed phone number", async () => {
+    const agent = await managerAgent();
+    const res = await agent.put("/api/config/contact").set("X-Portal", "staff").send({ contact_phone: "not a phone" });
+    expect(res.status).toBe(400);
+  });
+
+  test("rejects non-manager", async () => {
+    const supervisor = await createUser("Supervisor");
+    const agent = request.agent(app);
+    await loginAs(agent, supervisor, "staff");
+
+    const res = await agent.put("/api/config/contact").set("X-Portal", "staff").send({ contact_phone: "+94 77 830 8747" });
+    expect(res.status).toBe(403);
+  });
+
+  test("rejects unauthenticated request", async () => {
+    const res = await request(app).put("/api/config/contact").send({ contact_phone: "+94 77 830 8747" });
+    expect(res.status).toBe(401);
+  });
+});
+
 describe("POST /api/config/blocked-times", () => {
   test("manager adds a recurring blocked time (no date = applies every working day)", async () => {
     const agent = await managerAgent();

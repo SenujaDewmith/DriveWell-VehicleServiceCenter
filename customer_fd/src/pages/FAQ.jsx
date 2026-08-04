@@ -3,7 +3,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { useNavigate } from "react-router-dom";
 import { Calendar, Car, CreditCard, HelpCircle, UserCog } from "lucide-react";
 import { CANCELLATION_CUTOFF_HOURS } from "@/lib/bookingRules";
-const CATEGORIES = [
+import { useContactPhone } from "@/hooks/useContactPhone";
+const getCategories = (contactPhone) => [
     {
         icon: Calendar,
         title: "Booking & Appointments",
@@ -14,7 +15,7 @@ const CATEGORIES = [
             },
             {
                 question: "How do I cancel a booking?",
-                answer: `Open the booking under My Bookings and select Cancel Booking. Self-service cancellation is available up until ${CANCELLATION_CUTOFF_HOURS} hours before your appointment. Inside that window, please call the service center directly for urgent changes.`,
+                answer: `Open the booking under My Bookings and select Cancel Booking. Self-service cancellation is available up until ${CANCELLATION_CUTOFF_HOURS} hours before your appointment. Inside that window, please call us${contactPhone ? ` at ${contactPhone}` : ""} for urgent changes.`,
             },
             {
                 question: "What happens if I miss my appointment?",
@@ -70,11 +71,19 @@ const CATEGORIES = [
                 question: "Can I leave feedback after a service?",
                 answer: "Yes — once your vehicle has been collected, you can leave feedback for that visit from the Feedback page. It helps us keep improving how the service center runs.",
             },
+            {
+                question: "How do I reach the service center directly?",
+                answer: contactPhone
+                    ? `Call us at ${contactPhone} — we're happy to help with anything that isn't covered here.`
+                    : "Contact details are shown at the bottom of every page.",
+            },
         ],
     },
 ];
 export default function FAQ() {
     const navigate = useNavigate();
+    const contactPhone = useContactPhone();
+    const categories = getCategories(contactPhone);
     return (<div className="min-h-screen">
       {/* Page header */}
       <section className="relative py-24 overflow-hidden">
@@ -92,7 +101,7 @@ export default function FAQ() {
       <section className="py-20">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto space-y-12">
-            {CATEGORIES.map((category) => (<div key={category.title}>
+            {categories.map((category) => (<div key={category.title}>
                 <div className="flex items-center gap-3 mb-2">
                   <category.icon className="h-6 w-6 text-cta"/>
                   <h2 className="text-2xl font-bold">{category.title}</h2>

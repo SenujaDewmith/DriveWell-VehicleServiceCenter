@@ -15,6 +15,7 @@ import { isValidSriLankanPlate } from "@/lib/plateNumber";
 import { PlateNumberInput } from "@/components/ui/plate-number-input";
 import { PhoneNumberInput } from "@/components/ui/phone-number-input";
 import { isValidSriLankanPhone } from "@/lib/phoneNumber";
+import { useContactPhone } from "@/hooks/useContactPhone";
 import { Car, Edit, Trash2, Plus, Loader2, Wrench, ChevronRight, RotateCcw, FileUp } from "lucide-react";
 import { toast } from "sonner";
 function TransferRequestStatusBadge({ status }) {
@@ -55,6 +56,7 @@ function validateForm(data) {
 export default function Vehicles() {
     const { user, updateProfile: updateAuthProfile } = useAuth();
     const navigate = useNavigate();
+    const contactPhone = useContactPhone();
     const [vehicles, setVehicles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [detachedVehicles, setDetachedVehicles] = useState([]);
@@ -710,7 +712,15 @@ export default function Vehicles() {
               registration book and NIC as verification — a manager will review them before any transfer happens, and the
               current owner will be notified that a request was filed.
             </p>
-            {transferRequestError && (<p className="text-sm text-destructive">{transferRequestError}</p>)}
+            {transferRequestError && (<div className="space-y-1">
+                <p className="text-sm text-destructive">{transferRequestError}</p>
+                {contactPhone && (<p className="text-xs text-muted-foreground">
+                    Still stuck? Call us at{" "}
+                    <a href={`tel:${contactPhone.replace(/[^\d+]/g, "")}`} className="underline hover:text-foreground">
+                      {contactPhone}
+                    </a>.
+                  </p>)}
+              </div>)}
 
             <div className="space-y-2">
               <Label>Contact Phone Number <span className="text-destructive">*</span></Label>

@@ -105,6 +105,7 @@ const options = {
             working_days:   { type: "string",  example: "1,2,3,4,5", description: "Comma-separated day numbers: 0=Sun, 1=Mon ... 6=Sat" },
             day_start_time: { type: "string",  example: "08:00:00" },
             day_end_time:   { type: "string",  example: "18:00:00" },
+            contact_phone:  { type: "string", nullable: true, example: "+94 77 830 8747" },
           },
         },
         BlockedTime: {

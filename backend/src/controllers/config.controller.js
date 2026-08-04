@@ -6,6 +6,10 @@ const { logActivity } = require("../lib/activityLogger");
 const toTimeDate = (hhmm) => new Date(`1970-01-01T${hhmm}:00.000Z`);
 const normalizeTime = (t) => t.slice(0, 5); // "HH:MM" — comparable regardless of "HH:MM" vs "HH:MM:SS" input
 
+// Loose shape check, not a strict E.164 parse — this field is free text an admin types in
+// (e.g. "+94 77 830 8747"), not something users submit that needs canonicalizing.
+const PHONE_SHAPE_REGEX = /^[+\d][\d\s\-()]{6,19}$/;
+
 const flattenBlockedTime = (b) => ({
   ...b,
   date: b.date ? fmtDate(b.date) : null,
@@ -60,6 +64,34 @@ const updateConfig = async (req, res) => {
     });
   } catch (error) {
     logger.error(`updateConfig failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Public — no auth. Deliberately returns only the phone number, not the full config
+// (business hours / blocked times aren't anonymous visitors' business).
+const getPublicContactPhone = async (req, res) => {
+  try {
+    const config = await prisma.workingConfig.findFirst({ select: { contact_phone: true } });
+    res.status(200).json({ contact_phone: config?.contact_phone ?? null });
+  } catch (error) {
+    logger.error(`getPublicContactPhone failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const updateContactPhone = async (req, res) => {
+  const { contact_phone } = req.body;
+  if (typeof contact_phone !== "string" || !PHONE_SHAPE_REGEX.test(contact_phone.trim()))
+    return res.status(400).json({ message: "contact_phone must be a valid phone number" });
+
+  try {
+    await prisma.workingConfig.updateMany({ data: { contact_phone: contact_phone.trim() } });
+    logger.info(`Contact phone updated by manager user_id: ${req.user.user_id}`);
+    logActivity(prisma, { user_id: req.user.user_id, action: "SCHEDULE_UPDATED", entity_type: "working_config", entity_id: null });
+    res.status(200).json({ message: "Contact phone updated", contact_phone: contact_phone.trim() });
+  } catch (error) {
+    logger.error(`updateContactPhone failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -126,4 +158,7 @@ const deleteBlockedTime = async (req, res) => {
   }
 };
 
-module.exports = { getConfig, updateConfig, addBlockedTime, updateBlockedTime, deleteBlockedTime };
+module.exports = {
+  getConfig, updateConfig, getPublicContactPhone, updateContactPhone,
+  addBlockedTime, updateBlockedTime, deleteBlockedTime,
+};

@@ -14,6 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { bookingsService } from "@/services/bookings.service";
 import { toDateKey } from "@/components/BookingCalendar";
 import { CANCELLATION_CUTOFF_HOURS, hoursUntilAppointment, ACTIVE_SERVICE_STATUSES, isUpcomingBooking } from "@/lib/bookingRules";
+import { useContactPhone } from "@/hooks/useContactPhone";
 import { Calendar, Car, Clock, Eye, Loader2, Wrench } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -73,6 +74,7 @@ function fmtTime(t) {
 export default function Bookings() {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const contactPhone = useContactPhone();
     const [searchParams, setSearchParams] = useSearchParams();
     // Tab lives in the URL (not just component state) so "Back to Bookings" from a
     // booking's detail page can land on the tab that booking actually belongs to,
@@ -282,7 +284,10 @@ export default function Bookings() {
           </div>
 
           {cancelBlocked && (<p className="text-xs text-muted-foreground mt-2 sm:text-right">
-              Cancellations must be made at least {CANCELLATION_CUTOFF_HOURS}h ahead — please call us for urgent changes.
+              Cancellations must be made at least {CANCELLATION_CUTOFF_HOURS}h ahead — please{" "}
+              {contactPhone ? (<a href={`tel:${contactPhone.replace(/[^\d+]/g, "")}`} className="underline hover:text-foreground">
+                  call {contactPhone}
+                </a>) : "call us"} for urgent changes.
             </p>)}
         </CardContent>
       </Card>);

@@ -3,6 +3,8 @@ const router = express.Router();
 const {
   getConfig,
   updateConfig,
+  getPublicContactPhone,
+  updateContactPhone,
   addBlockedTime,
   updateBlockedTime,
   deleteBlockedTime,
@@ -72,6 +74,50 @@ router.get("/", verifyToken, getConfig);
  *       500: { description: Server error }
  */
 router.put("/", managerOnly, updateConfig);
+
+/**
+ * @swagger
+ * /api/config/contact:
+ *   get:
+ *     summary: Get the service center's contact phone number (public, no auth required)
+ *     tags: [Config]
+ *     responses:
+ *       200:
+ *         description: Contact phone number
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 contact_phone: { type: string, nullable: true, example: "+94 77 830 8747" }
+ *       500: { description: Server error }
+ */
+router.get("/contact", getPublicContactPhone);
+
+/**
+ * @swagger
+ * /api/config/contact:
+ *   put:
+ *     summary: Update the service center's contact phone number (Manager only)
+ *     tags: [Config]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [contact_phone]
+ *             properties:
+ *               contact_phone: { type: string, example: "+94 77 830 8747" }
+ *     responses:
+ *       200: { description: Contact phone updated }
+ *       400: { description: Validation error }
+ *       403: { description: Manager only }
+ *       500: { description: Server error }
+ */
+router.put("/contact", managerOnly, updateContactPhone);
 
 /**
  * @swagger

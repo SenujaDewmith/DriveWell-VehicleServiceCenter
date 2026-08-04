@@ -10,6 +10,7 @@ import { bookingsService } from "@/services/bookings.service";
 import { feedbackService } from "@/services/feedback.service";
 import { getCustomerStatusNote } from "@/lib/serviceStatus";
 import { CANCELLATION_CUTOFF_HOURS, canSelfCancel, bookingListTab } from "@/lib/bookingRules";
+import { useContactPhone } from "@/hooks/useContactPhone";
 import { fmtDuration } from "@/lib/packageFormat";
 import { fmtTime } from "@/lib/time";
 import { ArrowLeft, Car, Calendar, Clock, CheckCircle, Loader2, Wrench, FileText, Printer, Gauge, Copy } from "lucide-react";
@@ -54,6 +55,7 @@ export default function BookingDetails() {
     const { id } = useParams();
     const { user } = useAuth();
     const navigate = useNavigate();
+    const contactPhone = useContactPhone();
     const reservationId = id ? parseInt(id) : undefined;
     const [cancelling, setCancelling] = useState(false);
     const [booking, setBooking] = useState(null);
@@ -441,7 +443,10 @@ export default function BookingDetails() {
                 Cancel Booking
               </Button>
               <p className="text-xs text-muted-foreground text-center">
-                Cancellations must be made at least {CANCELLATION_CUTOFF_HOURS}h ahead — please call us for urgent changes.
+                Cancellations must be made at least {CANCELLATION_CUTOFF_HOURS}h ahead — please{" "}
+                {contactPhone ? (<a href={`tel:${contactPhone.replace(/[^\d+]/g, "")}`} className="underline hover:text-foreground">
+                    call {contactPhone}
+                  </a>) : "call us"} for urgent changes.
               </p>
             </div>))}
 

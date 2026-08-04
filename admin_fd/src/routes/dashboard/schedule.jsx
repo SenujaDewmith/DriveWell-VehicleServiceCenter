@@ -77,6 +77,10 @@ export function SchedulePage() {
   const [savedHours, setSavedHours] = useState(null);
   const [blockedTimes, setBlockedTimes] = useState([]);
 
+  const [contactPhone, setContactPhone] = useState("");
+  const [savedContactPhone, setSavedContactPhone] = useState("");
+  const [savingContact, setSavingContact] = useState(false);
+
   const [newBlockDate, setNewBlockDate] = useState("");
   const [newBlockStart, setNewBlockStart] = useState("");
   const [newBlockEnd, setNewBlockEnd] = useState("");
@@ -111,6 +115,8 @@ export function SchedulePage() {
         setCutoffHours(cutoff);
         setSavedHours({ workingDays: days, dayStart: start, dayEnd: end, cutoffHours: cutoff });
         setBlockedTimes(blocked_times);
+        setContactPhone(config.contact_phone ?? "");
+        setSavedContactPhone(config.contact_phone ?? "");
       })
       .catch(() => setError("Failed to load config"))
       .finally(() => setLoading(false));
@@ -155,6 +161,25 @@ export function SchedulePage() {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveContactPhone = async () => {
+    if (!contactPhone.trim()) {
+      setError("Contact phone is required");
+      return;
+    }
+    setSavingContact(true);
+    setError("");
+    setSuccess("");
+    try {
+      await api.put("/api/config/contact", { contact_phone: contactPhone.trim() });
+      setSavedContactPhone(contactPhone.trim());
+      setSuccess("Contact phone saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSavingContact(false);
     }
   };
 
@@ -374,6 +399,33 @@ export function SchedulePage() {
             becomes unavailable in the booking calendar.
           </p>
         )}
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Contact Information</h3>
+          <button
+            onClick={saveContactPhone}
+            disabled={savingContact || contactPhone.trim() === savedContactPhone}
+            className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50"
+          >
+            {savingContact ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Shown to customers on the public site and wherever they hit a self-service dead end
+          (e.g. a booking too close to its appointment time to cancel online).
+        </p>
+        <div className="space-y-1">
+          <label className="block text-sm font-medium text-muted-foreground">Support Phone Number</label>
+          <input
+            type="text"
+            value={contactPhone}
+            onChange={(e) => setContactPhone(e.target.value)}
+            placeholder="+94 77 830 8747"
+            className="w-64 border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
       </div>
 
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
