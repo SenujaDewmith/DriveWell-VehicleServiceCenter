@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Combobox } from "@/components/ui/combobox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as DatePickerCalendar } from "@/components/ui/calendar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, } from "@/components/ui/alert-dialog";
@@ -33,6 +34,24 @@ const PAST_STATUS_OPTIONS = [
     { value: "No-show", label: "No-show" },
 ];
 const ACTIVE_STATUS_OPTIONS = ACTIVE_SERVICE_STATUSES.map((status) => ({ value: status, label: status }));
+// One shared sort control for all three sections — date is the only axis that matters for a
+// list of time-based service records, so a single asc/desc toggle covers it rather than a
+// per-section pile of sort-by-field options nobody asked for.
+const SORT_OPTIONS = [
+    { value: "asc", label: "Date: Earliest First" },
+    { value: "desc", label: "Date: Latest First" },
+];
+// service_date ("YYYY-MM-DD") and slot_time ("HH:MM:SS") are both zero-padded and already in
+// sortable order as plain strings, so a lexical comparison on the combined key is correct
+// without parsing into Date objects.
+function sortByServiceDate(list, direction) {
+    const sorted = [...list].sort((a, b) => {
+        const keyA = `${a.service_date}T${a.slot_time || "00:00:00"}`;
+        const keyB = `${b.service_date}T${b.slot_time || "00:00:00"}`;
+        return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
+    });
+    return direction === "desc" ? sorted.reverse() : sorted;
+}
 // Inverse of toDateKey — builds a local-midnight Date from a "YYYY-MM-DD" key so it
 // round-trips safely regardless of the browser's timezone offset.
 function parseDateKey(key) {
@@ -71,9 +90,16 @@ export default function Bookings() {
     const [upcomingVehicleFilter, setUpcomingVehicleFilter] = useState(() => searchParams.get("vehicle") ?? "all");
     const [pastVehicleFilter, setPastVehicleFilter] = useState(() => searchParams.get("vehicle") ?? "all");
     const [upcomingPackageFilter, setUpcomingPackageFilter] = useState("all");
-    const [pastPackageFilter, setPastPackageFilter] = useState("all");
     const [pastStatusFilter, setPastStatusFilter] = useState("all");
     const [activeStatusFilter, setActiveStatusFilter] = useState("all");
+    // Default direction differs per section because "soonest first" and "most recent first"
+    // mean opposite chronological directions: Active/Upcoming care about what's coming up next,
+    // Past reads like a history log (newest entry on top) — same convention the API itself
+    // already uses for Past (service_date desc), so this default doesn't change what a user
+    // who's never touched the sort control sees for that tab.
+    const [activeSortOrder, setActiveSortOrder] = useState("asc");
+    const [upcomingSortOrder, setUpcomingSortOrder] = useState("asc");
+    const [pastSortOrder, setPastSortOrder] = useState("desc");
     const [fromPickerOpen, setFromPickerOpen] = useState(false);
     const [toPickerOpen, setToPickerOpen] = useState(false);
     const [bookings, setBookings] = useState([]);
@@ -148,7 +174,7 @@ export default function Bookings() {
     const filteredVehicleLabel = vehicleOptions.find((v) => v.value === activeVehicleFilter)?.label;
     const upcomingFiltersActive = upcomingVehicleFilter !== "all" || upcomingPackageFilter !== "all";
     const activeFiltersActive = activeStatusFilter !== "all";
-    const filtersActive = pastPackageFilter !== "all" || !!dateFrom || !!dateTo || pastVehicleFilter !== "all" || pastStatusFilter !== "all";
+    const filtersActive = !!dateFrom || !!dateTo || pastVehicleFilter !== "all" || pastStatusFilter !== "all";
     const filteredActiveServiceBookings = activeServiceBookings.filter((b) => {
         if (activeStatusFilter !== "all" && b.status !== activeStatusFilter)
             return false;
@@ -162,8 +188,6 @@ export default function Bookings() {
         return true;
     });
     const filteredPastBookings = pastBookings.filter((b) => {
-        if (pastPackageFilter !== "all" && b.package_name !== pastPackageFilter)
-            return false;
         if (dateFrom && b.service_date < dateFrom)
             return false;
         if (dateTo && b.service_date > dateTo)
@@ -174,6 +198,9 @@ export default function Bookings() {
             return false;
         return true;
     });
+    const sortedActiveServiceBookings = sortByServiceDate(filteredActiveServiceBookings, activeSortOrder);
+    const sortedUpcomingBookings = sortByServiceDate(filteredUpcomingBookings, upcomingSortOrder);
+    const sortedPastBookings = sortByServiceDate(filteredPastBookings, pastSortOrder);
     const clearUpcomingFilters = () => {
         setUpcomingVehicleFilter("all");
         setUpcomingPackageFilter("all");
@@ -182,7 +209,6 @@ export default function Bookings() {
         setActiveStatusFilter("all");
     };
     const clearFilters = () => {
-        setPastPackageFilter("all");
         setDateFrom("");
         setDateTo("");
         setPastVehicleFilter("all");
@@ -302,13 +328,24 @@ export default function Bookings() {
                       <Label className="text-xs text-muted-foreground">Status</Label>
                       <Combobox options={ACTIVE_STATUS_OPTIONS} value={activeStatusFilter === "all" ? "" : activeStatusFilter} onValueChange={(v) => setActiveStatusFilter(v || "all")} placeholder="All Statuses" searchPlaceholder="Search status..." emptyText="No matching status."/>
                     </div>
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Sort By</Label>
+                      <Select value={activeSortOrder} onValueChange={setActiveSortOrder}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SORT_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     {activeFiltersActive && (<Button variant="ghost" onClick={clearActiveFilters} className="text-muted-foreground">
                         Clear Filters
                       </Button>)}
                   </CardContent>
                 </Card>
 
-                {filteredActiveServiceBookings.length === 0 ? (<Card className="text-center py-12">
+                {sortedActiveServiceBookings.length === 0 ? (<Card className="text-center py-12">
                     <CardContent>
                       <Wrench className="h-16 w-16 text-muted-foreground mx-auto mb-4"/>
                       <h3 className="text-xl font-semibold mb-2">No bookings match your filters</h3>
@@ -318,7 +355,7 @@ export default function Bookings() {
                       </Button>
                     </CardContent>
                   </Card>) : (<div className="space-y-4">
-                    {filteredActiveServiceBookings.map((b) => (<BookingCard key={b.reservation_id} booking={b}/>))}
+                    {sortedActiveServiceBookings.map((b) => (<BookingCard key={b.reservation_id} booking={b}/>))}
                   </div>)}
               </div>)}
           </TabsContent>
@@ -344,13 +381,24 @@ export default function Bookings() {
                       <Label className="text-xs text-muted-foreground">Package</Label>
                       <Combobox options={packageOptions} value={upcomingPackageFilter === "all" ? "" : upcomingPackageFilter} onValueChange={(v) => setUpcomingPackageFilter(v || "all")} placeholder="All Packages" searchPlaceholder="Search package..." emptyText="No matching package."/>
                     </div>
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Sort By</Label>
+                      <Select value={upcomingSortOrder} onValueChange={setUpcomingSortOrder}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SORT_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     {upcomingFiltersActive && (<Button variant="ghost" onClick={clearUpcomingFilters} className="text-muted-foreground">
                         Clear Filters
                       </Button>)}
                   </CardContent>
                 </Card>
 
-                {filteredUpcomingBookings.length === 0 ? (<Card className="text-center py-12">
+                {sortedUpcomingBookings.length === 0 ? (<Card className="text-center py-12">
                     <CardContent>
                       <Calendar className="h-16 w-16 text-muted-foreground mx-auto mb-4"/>
                       <h3 className="text-xl font-semibold mb-2">No bookings match your filters</h3>
@@ -360,7 +408,7 @@ export default function Bookings() {
                       </Button>
                     </CardContent>
                   </Card>) : (<div className="space-y-4">
-                    {filteredUpcomingBookings.map((b) => (<BookingCard key={b.reservation_id} booking={b} showCancel/>))}
+                    {sortedUpcomingBookings.map((b) => (<BookingCard key={b.reservation_id} booking={b} showCancel/>))}
                   </div>)}
               </div>)}
           </TabsContent>
@@ -378,10 +426,6 @@ export default function Bookings() {
                     <div className="flex-1 space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Vehicle</Label>
                       <Combobox options={vehicleOptions} value={pastVehicleFilter === "all" ? "" : pastVehicleFilter} onValueChange={(v) => setPastVehicleFilter(v || "all")} placeholder="All Vehicles" searchPlaceholder="Search plate number..." emptyText="No matching vehicle."/>
-                    </div>
-                    <div className="flex-1 space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">Package</Label>
-                      <Combobox options={packageOptions} value={pastPackageFilter === "all" ? "" : pastPackageFilter} onValueChange={(v) => setPastPackageFilter(v || "all")} placeholder="All Packages" searchPlaceholder="Search package..." emptyText="No matching package."/>
                     </div>
                     <div className="flex-1 space-y-1.5">
                       <Label className="text-xs text-muted-foreground">Status</Label>
@@ -421,23 +465,34 @@ export default function Bookings() {
                         </PopoverContent>
                       </Popover>
                     </div>
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Sort By</Label>
+                      <Select value={pastSortOrder} onValueChange={setPastSortOrder}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SORT_OPTIONS.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     {filtersActive && (<Button variant="ghost" onClick={clearFilters} className="text-muted-foreground">
                         Clear Filters
                       </Button>)}
                   </CardContent>
                 </Card>
 
-                {filteredPastBookings.length === 0 ? (<Card className="text-center py-12">
+                {sortedPastBookings.length === 0 ? (<Card className="text-center py-12">
                     <CardContent>
                       <Clock className="h-16 w-16 text-muted-foreground mx-auto mb-4"/>
                       <h3 className="text-xl font-semibold mb-2">No bookings match your filters</h3>
-                      <p className="text-muted-foreground mb-4">Try adjusting the package or date range</p>
+                      <p className="text-muted-foreground mb-4">Try adjusting the vehicle, status, or date range</p>
                       <Button variant="outline" onClick={clearFilters}>
                         Clear Filters
                       </Button>
                     </CardContent>
                   </Card>) : (<div className="space-y-4">
-                    {filteredPastBookings.map((b) => (<BookingCard key={b.reservation_id} booking={b}/>))}
+                    {sortedPastBookings.map((b) => (<BookingCard key={b.reservation_id} booking={b}/>))}
                   </div>)}
               </div>)}
           </TabsContent>
