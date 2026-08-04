@@ -18,7 +18,7 @@ export function canSelfCancel(booking) {
 // Statuses meaning the vehicle is physically at the shop right now, or the customer still
 // has something to do (pay the invoice) before it's truly resolved — distinct from a
 // scheduled-but-not-yet-started "Booked" appointment or a fully resolved "Collected" one.
-export const ACTIVE_SERVICE_STATUSES = ["Started", "In Progress", "Completed", "Ready for Pickup"];
+export const ACTIVE_SERVICE_STATUSES = ["Started", "Completed", "Ready for Pickup"];
 // True only for a still-scheduled "Booked" appointment whose time hasn't passed yet — a
 // "Booked" appointment nobody's updated yet stops counting as upcoming once its time passes,
 // instead of silently staying "upcoming" forever until a human intervenes.
@@ -31,7 +31,7 @@ export function isUpcomingBooking(booking) {
 // Single source of truth for which of the three booking-list tabs (Active Service / Upcoming
 // / Past) a booking belongs in — shared with BookingDetails so "Back to Bookings" can return
 // to the tab that actually contains this booking, instead of always landing on Upcoming.
-// Anything neither active nor upcoming (Completed, Cancelled, No-show, or a "Booked"
+// Anything neither active nor upcoming (Collected, Cancelled, No-show, or a "Booked"
 // appointment whose time already passed) falls through to Past.
 export function bookingListTab(booking) {
     if (ACTIVE_SERVICE_STATUSES.includes(booking.status))

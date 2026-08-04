@@ -30,10 +30,11 @@ const STATUS_COLORS = {
 // even though an overdue-but-unresolved booking technically can too (see pastBookings below);
 // that's a rare edge case, not something worth a filter option of its own.
 const PAST_STATUS_OPTIONS = [
-    { value: "Completed", label: "Completed" },
+    { value: "Collected", label: "Collected" },
     { value: "Cancelled", label: "Cancelled" },
     { value: "No-show", label: "No-show" },
 ];
+const ACTIVE_STATUS_OPTIONS = ACTIVE_SERVICE_STATUSES.map((status) => ({ value: status, label: status }));
 // Inverse of toDateKey — builds a local-midnight Date from a "YYYY-MM-DD" key so it
 // round-trips safely regardless of the browser's timezone offset.
 function parseDateKey(key) {
@@ -74,6 +75,7 @@ export default function Bookings() {
     const [upcomingPackageFilter, setUpcomingPackageFilter] = useState("all");
     const [pastPackageFilter, setPastPackageFilter] = useState("all");
     const [pastStatusFilter, setPastStatusFilter] = useState("all");
+    const [activeStatusFilter, setActiveStatusFilter] = useState("all");
     const [fromPickerOpen, setFromPickerOpen] = useState(false);
     const [toPickerOpen, setToPickerOpen] = useState(false);
     const [bookings, setBookings] = useState([]);
@@ -147,7 +149,13 @@ export default function Bookings() {
     const activeVehicleFilter = activeTab === "past" ? pastVehicleFilter : upcomingVehicleFilter;
     const filteredVehicleLabel = vehicleOptions.find((v) => v.value === activeVehicleFilter)?.label;
     const upcomingFiltersActive = upcomingVehicleFilter !== "all" || upcomingPackageFilter !== "all";
+    const activeFiltersActive = activeStatusFilter !== "all";
     const filtersActive = pastPackageFilter !== "all" || !!dateFrom || !!dateTo || pastVehicleFilter !== "all" || pastStatusFilter !== "all";
+    const filteredActiveServiceBookings = activeServiceBookings.filter((b) => {
+        if (activeStatusFilter !== "all" && b.status !== activeStatusFilter)
+            return false;
+        return true;
+    });
     const filteredUpcomingBookings = upcomingBookings.filter((b) => {
         if (upcomingVehicleFilter !== "all" && String(b.vehicle_id) !== upcomingVehicleFilter)
             return false;
@@ -171,6 +179,9 @@ export default function Bookings() {
     const clearUpcomingFilters = () => {
         setUpcomingVehicleFilter("all");
         setUpcomingPackageFilter("all");
+    };
+    const clearActiveFilters = () => {
+        setActiveStatusFilter("all");
     };
     const clearFilters = () => {
         setPastPackageFilter("all");
@@ -287,7 +298,30 @@ export default function Bookings() {
                   <p className="text-muted-foreground">Nothing of yours is currently at the shop</p>
                 </CardContent>
               </Card>) : (<div className="space-y-4">
-                {activeServiceBookings.map((b) => (<BookingCard key={b.reservation_id} booking={b}/>))}
+                <Card>
+                  <CardContent className="p-4 flex flex-col sm:flex-row sm:items-end gap-4">
+                    <div className="flex-1 space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Status</Label>
+                      <Combobox options={ACTIVE_STATUS_OPTIONS} value={activeStatusFilter === "all" ? "" : activeStatusFilter} onValueChange={(v) => setActiveStatusFilter(v || "all")} placeholder="All Statuses" searchPlaceholder="Search status..." emptyText="No matching status."/>
+                    </div>
+                    {activeFiltersActive && (<Button variant="ghost" onClick={clearActiveFilters} className="text-muted-foreground">
+                        Clear Filters
+                      </Button>)}
+                  </CardContent>
+                </Card>
+
+                {filteredActiveServiceBookings.length === 0 ? (<Card className="text-center py-12">
+                    <CardContent>
+                      <Wrench className="h-16 w-16 text-muted-foreground mx-auto mb-4"/>
+                      <h3 className="text-xl font-semibold mb-2">No bookings match your filters</h3>
+                      <p className="text-muted-foreground mb-4">Try selecting a different status</p>
+                      <Button variant="outline" onClick={clearActiveFilters}>
+                        Clear Filters
+                      </Button>
+                    </CardContent>
+                  </Card>) : (<div className="space-y-4">
+                    {filteredActiveServiceBookings.map((b) => (<BookingCard key={b.reservation_id} booking={b}/>))}
+                  </div>)}
               </div>)}
           </TabsContent>
 
