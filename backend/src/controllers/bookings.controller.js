@@ -17,7 +17,8 @@ const SUPERVISOR_ROLE = 2;
 const STAFF_ROLE = 4;
 
 // Customers may self-cancel only up to this many minutes before the appointment
-// (staff/manager cancellations are exempt — this is a self-service guardrail, not a hard business rule)
+// (manager cancellations are exempt — this is a self-service guardrail, not a hard business rule.
+// Only Customer and Manager can even reach this endpoint — see authorizeRoles on the route.)
 const CANCELLATION_CUTOFF_MINUTES = 24 * 60;
 
 // A booking can only be marked No-show once its scheduled start time is at least this

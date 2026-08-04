@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 import { StatusBadge, PaymentBadge } from "@/components/manager/ManagerOverview";
 import { InvoiceViewModal } from "@/components/invoices/InvoiceView";
 import { Eye, X, AlertTriangle } from "lucide-react";
@@ -55,6 +56,7 @@ const minutesSinceStart = (b) => {
 };
 
 export function BookingsPage() {
+  const { role } = useAuth();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -68,6 +70,7 @@ export function BookingsPage() {
   const [viewInvoice, setViewInvoice] = useState(null);
   const [actionError, setActionError] = useState("");
   const [markingId, setMarkingId] = useState(null);
+  const [cancellingId, setCancellingId] = useState(null);
 
   const markNoShow = async (reservationId) => {
     setActionError("");
@@ -81,6 +84,25 @@ export function BookingsPage() {
       setActionError(err instanceof Error ? err.message : "Failed to mark as No-show");
     } finally {
       setMarkingId(null);
+    }
+  };
+
+  // Manager-only: the backend exempts the Manager role from the 24-hour self-cancel
+  // cutoff (see CANCELLATION_CUTOFF_MINUTES in bookings.controller.js), so this is for
+  // the "customer called and asked to cancel" case regardless of how close the
+  // appointment is.
+  const cancelBooking = async (reservationId) => {
+    setActionError("");
+    setCancellingId(reservationId);
+    try {
+      await api.patch(`/api/bookings/${reservationId}/cancel`);
+      setBookings((prev) =>
+        prev.map((b) => (b.reservation_id === reservationId ? { ...b, status: "Cancelled" } : b)),
+      );
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to cancel booking");
+    } finally {
+      setCancellingId(null);
     }
   };
 
@@ -276,37 +298,70 @@ export function BookingsPage() {
                       )}
                     </td>
                     <td className="py-2 px-3">
-                      {isOverdue ? (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <button
-                              disabled={markingId === b.reservation_id}
-                              className="rounded-md border border-destructive/30 px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/5 transition-colors disabled:opacity-50"
-                            >
-                              {markingId === b.reservation_id ? "Marking..." : "Mark No-show"}
-                            </button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>
-                                Mark {b.booking_ref ?? `#${b.reservation_id}`} as No-show?
-                              </AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This frees up the slot and emails {b.customer_name} that they missed
-                                their appointment.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => markNoShow(b.reservation_id)}>
-                                Mark No-show
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {isOverdue && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <button
+                                disabled={markingId === b.reservation_id}
+                                className="rounded-md border border-destructive/30 px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/5 transition-colors disabled:opacity-50"
+                              >
+                                {markingId === b.reservation_id ? "Marking..." : "Mark No-show"}
+                              </button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  Mark {b.booking_ref ?? `#${b.reservation_id}`} as No-show?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This frees up the slot and emails {b.customer_name} that they missed
+                                  their appointment.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => markNoShow(b.reservation_id)}>
+                                  Mark No-show
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                        {role === "manager" && b.status === "Booked" && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <button
+                                disabled={cancellingId === b.reservation_id}
+                                className="rounded-md bg-destructive px-2 py-1 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-50"
+                              >
+                                {cancellingId === b.reservation_id ? "Cancelling..." : "Cancel"}
+                              </button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  Cancel {b.booking_ref ?? `#${b.reservation_id}`}?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This cancels the booking and emails {b.customer_name} — use this
+                                  when a customer calls in to cancel, including inside the 24-hour
+                                  self-cancel window customers are normally held to.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Back</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => cancelBooking(b.reservation_id)}>
+                                  Cancel Booking
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                        {!isOverdue && !(role === "manager" && b.status === "Booked") && (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

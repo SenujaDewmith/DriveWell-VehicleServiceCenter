@@ -229,7 +229,7 @@ router.post("/", verifyToken, authorizeRoles("Customer"), createBooking);
  *       404: { description: Booking not found }
  *       500: { description: Server error }
  */
-router.patch("/:id/cancel", verifyToken, cancelBooking);
+router.patch("/:id/cancel", verifyToken, authorizeRoles("Customer", "Service Center Manager"), cancelBooking);
 
 /**
  * @swagger
