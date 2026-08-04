@@ -97,6 +97,16 @@ const sendPasswordResetEmail = (to, { customerName, resetUrl }) =>
     <p>If you didn't request this, you can safely ignore this email — your password will stay unchanged.</p>
   `);
 
+const sendAccountSetupEmail = (to, { fullName, roleName, setupUrl }) =>
+  sendEmail(to, "Your DriveWell Staff Account – Set Your Password", `
+    <h2>Welcome to DriveWell, ${fullName}!</h2>
+    <p>A manager has created a <strong>${roleName}</strong> account for you on the DriveWell staff portal.</p>
+    <p>Click the link below to set your password and activate your account:</p>
+    <p><a href="${setupUrl}">${setupUrl}</a></p>
+    <p>This link expires in 24 hours and can only be used once. If it expires before you use it, ask your manager to create your account again.</p>
+    <p>If you weren't expecting this, you can safely ignore this email.</p>
+  `);
+
 const sendVehicleTransferredEmail = (to, { customerName, plateNo, reason }) =>
   sendEmail(to, "Your Vehicle Has Changed Hands – DriveWell", `
     <h2>Vehicle Ownership Update</h2>
@@ -146,7 +156,7 @@ const sendVehicleCollected = (to, { customerName, bookingRef }) =>
 
 module.exports = {
   sendWelcomeEmail, sendBookingConfirmation, sendBookingCancellation, sendNoShowNotice, sendStatusUpdate,
-  sendVehicleTransferredEmail, sendPasswordResetEmail,
+  sendVehicleTransferredEmail, sendPasswordResetEmail, sendAccountSetupEmail,
   sendTransferRequestNoticeEmail, sendTransferRequestDecisionEmail,
   sendInvoiceReady, sendVehicleCollected, sendPaymentReceived, sendServiceCompleted,
 };

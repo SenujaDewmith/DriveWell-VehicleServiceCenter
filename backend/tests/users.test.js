@@ -33,6 +33,7 @@ function authedAgent(user, portal) {
     post: (url) => request(app).post(url).set(headers),
     put: (url) => request(app).put(url).set(headers),
     patch: (url) => request(app).patch(url).set(headers),
+    delete: (url) => request(app).delete(url).set(headers),
   };
 }
 
@@ -124,23 +125,42 @@ describe("GET /api/users/staff/:id", () => {
 });
 
 describe("POST /api/users/staff", () => {
-  test("manager can create a new staff account", async () => {
+  test("manager can create a new staff account — no password taken, account starts pending", async () => {
     const agent = await managerAgent();
 
     const res = await agent.post("/api/users/staff").set("X-Portal", "staff").send({
       email: "new.staff@test.local",
-      password: "Passw0rd!",
       full_name: "New Staff Member",
       role_id: 4,
       phone_no: "0771112233",
     });
 
     expect(res.status).toBe(201);
-    expect(res.body.message).toBe("Staff account created");
     expect(res.body.user.role_id).toBe(4);
 
     const staffRow = await prisma.staff.findUnique({ where: { user_id: res.body.user.user_id } });
     expect(staffRow.full_name).toBe("New Staff Member");
+
+    const userRow = await prisma.user.findUnique({ where: { user_id: res.body.user.user_id } });
+    expect(userRow.account_status).toBe("pending");
+    expect(userRow.reset_token_hash).not.toBeNull();
+    expect(userRow.reset_token_expires_at.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  test("a pending account can't log in even with a guessed password, and gets a clear message", async () => {
+    const agent = await managerAgent();
+    const created = await agent.post("/api/users/staff").set("X-Portal", "staff").send({
+      email: "pending.login@test.local", full_name: "Pending Login", role_id: 4,
+    });
+
+    const res = await request(app)
+      .post("/api/auth/staff/login")
+      .set("X-Portal", "staff")
+      .send({ email: "pending.login@test.local", password: "whatever123" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch(/set your password/i);
+    expect(created.status).toBe(201);
   });
 
   test("rejects missing required fields with 400", async () => {
@@ -153,7 +173,6 @@ describe("POST /api/users/staff", () => {
     const agent = await managerAgent();
     const res = await agent.post("/api/users/staff").set("X-Portal", "staff").send({
       email: "badrole@test.local",
-      password: "Passw0rd!",
       full_name: "Bad Role",
       role_id: 5,
     });
@@ -161,20 +180,9 @@ describe("POST /api/users/staff", () => {
     expect(res.body.message).toMatch(/role_id must be/);
   });
 
-  test("rejects a password shorter than 6 characters", async () => {
-    const agent = await managerAgent();
-    const res = await agent.post("/api/users/staff").set("X-Portal", "staff").send({
-      email: "shortpw@test.local",
-      password: "abc",
-      full_name: "Short Pw",
-      role_id: 4,
-    });
-    expect(res.status).toBe(400);
-  });
-
   test("rejects a duplicate email with 400", async () => {
     const agent = await managerAgent();
-    const body = { email: "dupe.staff@test.local", password: "Passw0rd!", full_name: "Dupe", role_id: 4 };
+    const body = { email: "dupe.staff@test.local", full_name: "Dupe", role_id: 4 };
     const first = await agent.post("/api/users/staff").set("X-Portal", "staff").send(body);
     expect(first.status).toBe(201);
 
@@ -186,13 +194,13 @@ describe("POST /api/users/staff", () => {
   test("stores the email lowercased and rejects a case-variant duplicate", async () => {
     const agent = await managerAgent();
     const res = await agent.post("/api/users/staff").set("X-Portal", "staff").send({
-      email: "Mixed.Case@Test.local", password: "Passw0rd!", full_name: "Mixed Case", role_id: 4,
+      email: "Mixed.Case@Test.local", full_name: "Mixed Case", role_id: 4,
     });
     expect(res.status).toBe(201);
     expect(res.body.user.email).toBe("mixed.case@test.local");
 
     const dupe = await agent.post("/api/users/staff").set("X-Portal", "staff").send({
-      email: "MIXED.CASE@TEST.LOCAL", password: "Passw0rd!", full_name: "Someone Else", role_id: 4,
+      email: "MIXED.CASE@TEST.LOCAL", full_name: "Someone Else", role_id: 4,
     });
     expect(dupe.status).toBe(400);
     expect(dupe.body.message).toBe("Email already registered");
@@ -202,10 +210,48 @@ describe("POST /api/users/staff", () => {
     const { agent } = await staffAgent("Supervisor", { email: "create.supervisor@test.local" });
     const res = await agent.post("/api/users/staff").set("X-Portal", "staff").send({
       email: "blocked@test.local",
-      password: "Passw0rd!",
       full_name: "Blocked",
       role_id: 4,
     });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("DELETE /api/users/staff/:id", () => {
+  test("manager can delete a pending invite", async () => {
+    const agent = await managerAgent();
+    const created = await agent.post("/api/users/staff").set("X-Portal", "staff").send({
+      email: "delete.pending@test.local", full_name: "Delete Pending", role_id: 4,
+    });
+
+    const res = await agent.delete(`/api/users/staff/${created.body.user.user_id}`).set("X-Portal", "staff");
+    expect(res.status).toBe(200);
+
+    const userRow = await prisma.user.findUnique({ where: { user_id: created.body.user.user_id } });
+    expect(userRow).toBeNull();
+  });
+
+  test("rejects deleting an already-active staff account with 400", async () => {
+    const target = await createUser("Cashier", { email: "active.notdeletable@test.local" });
+    const agent = await managerAgent();
+
+    const res = await agent.delete(`/api/users/staff/${target.user_id}`).set("X-Portal", "staff");
+    expect(res.status).toBe(400);
+
+    const userRow = await prisma.user.findUnique({ where: { user_id: target.user_id } });
+    expect(userRow).not.toBeNull();
+  });
+
+  test("returns 404 for a non-existent id", async () => {
+    const agent = await managerAgent();
+    const res = await agent.delete("/api/users/staff/999999").set("X-Portal", "staff");
+    expect(res.status).toBe(404);
+  });
+
+  test("rejects a non-manager staff account with 403", async () => {
+    const target = await createUser("Cashier", { email: "rbacdelete.target@test.local" });
+    const { agent } = await staffAgent("Supervisor", { email: "rbacdelete.supervisor@test.local" });
+    const res = await agent.delete(`/api/users/staff/${target.user_id}`).set("X-Portal", "staff");
     expect(res.status).toBe(403);
   });
 });

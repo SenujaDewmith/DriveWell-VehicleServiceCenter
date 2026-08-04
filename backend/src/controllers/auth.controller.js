@@ -4,10 +4,10 @@ const jwt = require("jsonwebtoken");
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { sendWelcomeEmail, sendPasswordResetEmail } = require("../services/email.service");
+const { hashResetToken } = require("../utils/resetToken");
 require("dotenv").config();
 
 const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
-const hashResetToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
 
 const register = async (req, res) => {
   const { name, email, password } = req.body;
@@ -75,6 +75,8 @@ const authenticate = async (req, res, { allowedRoleIds, wrongPortalMessage, cook
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return res.status(401).json({ message: "Invalid email or password" });
 
+    if (user.account_status === "pending")
+      return res.status(403).json({ message: "Set your password using the link sent to your email before logging in." });
     if (user.account_status !== "active")
       return res.status(403).json({ message: "Account is inactive. Contact the service center." });
 
@@ -213,8 +215,15 @@ const resetPassword = async (req, res) => {
     const newHash = await bcrypt.hash(new_password, 10);
     await prisma.user.update({
       where: { user_id: user.user_id },
-      // Cleared here so the same link can't be replayed after it's been used once.
-      data: { password_hash: newHash, reset_token_hash: null, reset_token_expires_at: null },
+      data: {
+        password_hash: newHash,
+        // Cleared here so the same link can't be replayed after it's been used once.
+        reset_token_hash: null,
+        reset_token_expires_at: null,
+        // This same endpoint doubles as the manager-invite first-time setup link —
+        // a pending account becomes active the moment its owner sets a password.
+        ...(user.account_status === "pending" && { account_status: "active" }),
+      },
     });
 
     logger.info(`Password reset completed — user_id: ${user.user_id}`);

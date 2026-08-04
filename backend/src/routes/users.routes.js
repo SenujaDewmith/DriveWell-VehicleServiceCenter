@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const {
-  listStaff, getStaffMember, createStaff, updateStaff,
+  listStaff, getStaffMember, createStaff, updateStaff, deleteStaff,
   setAccountStatus, resetPassword, listCustomers,
 } = require("../controllers/users.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
@@ -155,6 +155,29 @@ router.post("/staff", managerOnly, createStaff);
  *       500: { description: Server error }
  */
 router.put("/staff/:id", managerOnly, updateStaff);
+
+/**
+ * @swagger
+ * /api/users/staff/{id}:
+ *   delete:
+ *     summary: Delete a pending (not yet activated) staff invite (Manager only)
+ *     description: Only accounts still in "pending" status (invite email not yet used) can be deleted this way. Recreate the account afterward to send a fresh invite.
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Pending invite deleted }
+ *       400: { description: Account is not pending }
+ *       403: { description: Manager only }
+ *       404: { description: Staff not found }
+ *       500: { description: Server error }
+ */
+router.delete("/staff/:id", managerOnly, deleteStaff);
 
 /**
  * @swagger

@@ -1,9 +1,18 @@
+const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { logActivity } = require("../lib/activityLogger");
+const { hashResetToken } = require("../utils/resetToken");
+const { sendAccountSetupEmail } = require("../services/email.service");
 
 const STAFF_ROLES = [1, 2, 3, 4];
+const ROLE_NAMES = { 1: "Manager", 2: "Supervisor", 3: "Cashier", 4: "Service Staff" };
+
+// Invite links live longer than the 30-min self-service reset link (that one
+// guards an already-active session; this one is a one-time onboarding step),
+// but still expire — an unused invite just gets recreated by the manager.
+const SETUP_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
 const listStaff = async (req, res) => {
   try {
@@ -52,43 +61,81 @@ const getStaffMember = async (req, res) => {
 };
 
 const createStaff = async (req, res) => {
-  const { email, password, full_name, role_id, phone_no } = req.body;
+  const { email, full_name, role_id, phone_no } = req.body;
 
-  if (!email || !password || !full_name || !role_id)
-    return res.status(400).json({ message: "email, password, full_name, and role_id are required" });
+  if (!email || !full_name || !role_id)
+    return res.status(400).json({ message: "email, full_name, and role_id are required" });
   if (!STAFF_ROLES.includes(parseInt(role_id)))
     return res.status(400).json({ message: "role_id must be 1 (Manager), 2 (Supervisor), 3 (Cashier), or 4 (Service Staff)" });
-  if (password.length < 6)
-    return res.status(400).json({ message: "Password must be at least 6 characters" });
 
   // Email is treated as case-insensitive (same policy as auth.schema.js) — no Zod schema
   // guards this route, so it's normalized here instead.
   const normalizedEmail = email.trim().toLowerCase();
 
   try {
+    // The manager never chooses or sees a password — a random one is hashed
+    // and thrown away immediately, and account_status stays "pending" (blocking
+    // login) until the invite link below is used to set a real one.
+    const placeholderHash = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10);
+    const rawToken = crypto.randomBytes(32).toString("hex");
+
     const user = await prisma.$transaction(async (tx) => {
       const existing = await tx.user.findUnique({ where: { email: normalizedEmail } });
       if (existing) {
         const err = new Error("Email already registered"); err.status = 400; throw err;
       }
 
-      const hash = await bcrypt.hash(password, 10);
       return tx.user.create({
         data: {
           email: normalizedEmail,
-          password_hash: hash,
+          password_hash: placeholderHash,
           role_id: parseInt(role_id),
+          account_status: "pending",
+          reset_token_hash: hashResetToken(rawToken),
+          reset_token_expires_at: new Date(Date.now() + SETUP_TOKEN_TTL_MS),
           staff: { create: { full_name: full_name.trim(), phone_no: phone_no || null } },
         },
         select: { user_id: true, email: true, role_id: true },
       });
     });
 
-    logger.info(`Staff account created — user_id: ${user.user_id}, role_id: ${role_id}`);
-    res.status(201).json({ message: "Staff account created", user });
+    const setupUrl = `${process.env.STAFF_FRONTEND_URL}/set-password?token=${rawToken}`;
+    sendAccountSetupEmail(user.email, {
+      fullName: full_name.trim(),
+      roleName: ROLE_NAMES[user.role_id],
+      setupUrl,
+    });
+
+    logger.info(`Staff account created (pending) — user_id: ${user.user_id}, role_id: ${role_id}`);
+    res.status(201).json({ message: "Staff account created. An invite email has been sent.", user });
   } catch (error) {
     if (error.status) return res.status(error.status).json({ message: error.message });
     logger.error(`createStaff failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const deleteStaff = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const existing = await prisma.user.findFirst({
+      where: { user_id: parseInt(id), role_id: { in: STAFF_ROLES } },
+      select: { user_id: true, account_status: true },
+    });
+    if (!existing) return res.status(404).json({ message: "Staff member not found" });
+    // Only a pending invite (never logged in, no work linked to the account
+    // yet) can be deleted this way — an active/inactive staff member's history
+    // should be preserved, not removed, so this stays out of scope here.
+    if (existing.account_status !== "pending")
+      return res.status(400).json({ message: "Only a pending (not yet activated) account can be deleted this way" });
+
+    await prisma.user.delete({ where: { user_id: parseInt(id) } });
+
+    logger.info(`Pending staff invite deleted — user_id: ${id}`);
+    res.status(200).json({ message: "Pending invite deleted" });
+  } catch (error) {
+    logger.error(`deleteStaff failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -199,4 +246,7 @@ const listCustomers = async (req, res) => {
   }
 };
 
-module.exports = { listStaff, getStaffMember, createStaff, updateStaff, setAccountStatus, resetPassword, listCustomers };
+module.exports = {
+  listStaff, getStaffMember, createStaff, updateStaff, deleteStaff,
+  setAccountStatus, resetPassword, listCustomers,
+};

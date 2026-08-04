@@ -3,6 +3,7 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import { AuthProvider } from "@/hooks/useAuth";
 import { Index } from "@/routes/index";
 import { LoginPage } from "@/routes/login";
+import { SetPasswordPage } from "@/routes/set-password";
 import { DashboardRoute } from "@/routes/dashboard";
 import { DashboardIndex } from "@/routes/dashboard/index";
 import { ActivityPage } from "@/routes/dashboard/activity";
@@ -27,6 +28,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/set-password" element={<SetPasswordPage />} />
             <Route path="/dashboard" element={<DashboardRoute />}>
               <Route index element={<DashboardIndex />} />
               <Route path="activity" element={<ActivityPage />} />

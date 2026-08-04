@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Pencil, UserX, UserCheck } from "lucide-react";
+import { Plus, Pencil, UserX, UserCheck, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 
 const ROLE_OPTIONS = [
@@ -15,7 +15,6 @@ export function UsersPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({
     email: "",
-    password: "",
     full_name: "",
     role_id: 4,
     phone_no: "",
@@ -35,7 +34,7 @@ export function UsersPage() {
   useEffect(load, []);
 
   const openNew = () => {
-    setForm({ email: "", password: "", full_name: "", role_id: 4, phone_no: "" });
+    setForm({ email: "", full_name: "", role_id: 4, phone_no: "" });
     setEditing(null);
     setShowForm(true);
     setError("");
@@ -44,7 +43,6 @@ export function UsersPage() {
   const openEdit = (m) => {
     setForm({
       email: m.email,
-      password: "",
       full_name: m.full_name,
       role_id: m.role_id,
       phone_no: m.phone_no ?? "",
@@ -67,7 +65,6 @@ export function UsersPage() {
       } else {
         await api.post("/api/users/staff", {
           email: form.email,
-          password: form.password,
           full_name: form.full_name,
           role_id: form.role_id,
           phone_no: form.phone_no || null,
@@ -90,6 +87,22 @@ export function UsersPage() {
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Status update failed");
+    }
+  };
+
+  const deletePending = async (m) => {
+    if (
+      !window.confirm(
+        `Delete the pending invite for ${m.full_name}? You'll need to recreate it to send a new one.`,
+      )
+    )
+      return;
+    setError("");
+    try {
+      await api.delete(`/api/users/staff/${m.user_id}`);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed");
     }
   };
 
@@ -116,6 +129,11 @@ export function UsersPage() {
           <h3 className="text-base font-semibold text-foreground">
             {editing ? "Edit" : "New"} Staff
           </h3>
+          {!editing && (
+            <p className="text-xs text-muted-foreground">
+              An email will be sent to set their password. The account stays pending until they do.
+            </p>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input
               placeholder="Full Name"
@@ -136,15 +154,6 @@ export function UsersPage() {
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
-            {!editing && (
-              <input
-                placeholder="Password (min 6 chars)"
-                type="password"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            )}
             {!editing && (
               <select
                 value={form.role_id}
@@ -210,9 +219,15 @@ export function UsersPage() {
                   </td>
                   <td className="py-2 px-3">
                     <span
-                      className={`text-sm font-medium capitalize ${m.account_status === "active" ? "text-accent" : "text-destructive"}`}
+                      className={`text-sm font-medium capitalize ${
+                        m.account_status === "active"
+                          ? "text-accent"
+                          : m.account_status === "pending"
+                            ? "text-amber-500"
+                            : "text-destructive"
+                      }`}
                     >
-                      {m.account_status}
+                      {m.account_status === "pending" ? "Pending (invite sent)" : m.account_status}
                     </span>
                   </td>
                   <td className="py-2 px-3 flex gap-1">
@@ -222,16 +237,26 @@ export function UsersPage() {
                     >
                       <Pencil className="h-3 w-3" />
                     </button>
-                    <button
-                      onClick={() => toggleActive(m)}
-                      className="p-1 text-muted-foreground hover:text-foreground"
-                    >
-                      {m.account_status === "active" ? (
-                        <UserX className="h-3 w-3" />
-                      ) : (
-                        <UserCheck className="h-3 w-3" />
-                      )}
-                    </button>
+                    {m.account_status === "pending" ? (
+                      <button
+                        onClick={() => deletePending(m)}
+                        className="p-1 text-muted-foreground hover:text-destructive"
+                        title="Delete pending invite"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => toggleActive(m)}
+                        className="p-1 text-muted-foreground hover:text-foreground"
+                      >
+                        {m.account_status === "active" ? (
+                          <UserX className="h-3 w-3" />
+                        ) : (
+                          <UserCheck className="h-3 w-3" />
+                        )}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
