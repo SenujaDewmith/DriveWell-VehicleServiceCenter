@@ -1,4 +1,5 @@
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { toast } from "sonner";
@@ -21,7 +22,13 @@ function setup(login = vi.fn()) {
         updateProfile: vi.fn(),
     });
     const onSuccess = vi.fn();
-    const { container } = render(<LoginForm onSuccess={onSuccess}/>);
+    // LoginForm renders a react-router <Link> internally, which needs a router context to
+    // work at all — in the real app that's App.jsx's BrowserRouter; here it's a MemoryRouter.
+    const { container } = render(
+        <MemoryRouter>
+            <LoginForm onSuccess={onSuccess}/>
+        </MemoryRouter>,
+    );
     return { login, onSuccess, container };
 }
 describe("LoginForm", () => {
@@ -50,7 +57,7 @@ describe("LoginForm", () => {
         await user.type(screen.getByLabelText(/email/i), "john@example.com");
         await user.type(screen.getByLabelText(/^password$/i), "123");
         await user.click(screen.getByRole("button", { name: /sign in/i }));
-        expect(await screen.findByText(/at least 6 characters/i)).toBeInTheDocument();
+        expect(await screen.findByText(/please enter a valid password/i)).toBeInTheDocument();
     });
     it("calls login with the entered credentials on valid submit", async () => {
         const user = userEvent.setup();
