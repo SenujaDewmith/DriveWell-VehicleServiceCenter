@@ -10,7 +10,7 @@ import { bookingsService } from "@/services/bookings.service";
 import { feedbackService } from "@/services/feedback.service";
 import { Star, Send, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-const FEEDBACK_ELIGIBLE_STATUSES = ["Completed", "Ready for Pickup"];
+const FEEDBACK_ELIGIBLE_STATUSES = ["Completed", "Ready for Pickup", "Collected"];
 function fmtDate(d) {
     return new Date(d).toLocaleDateString("en-LK", {
         year: "numeric",

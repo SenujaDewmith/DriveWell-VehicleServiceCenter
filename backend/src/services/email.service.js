@@ -67,7 +67,7 @@ const sendStatusUpdate = (to, { customerName, bookingRef, status }) =>
     <p>Hi ${customerName},</p>
     <p>Your vehicle service (Ref: <strong>${bookingRef}</strong>) status has been updated to:</p>
     <h3>${status}</h3>
-    ${status === "Ready for Pickup" ? "<p>Your vehicle is ready. Please come collect it at your earliest convenience.</p>" : ""}
+    ${status === "Ready for Pickup" ? "<p>Payment received — your vehicle is ready. Please collect it from our staff at the service center.</p>" : ""}
     <p>Thank you for your patience.</p>
   `);
 
@@ -111,8 +111,18 @@ const sendTransferRequestDecisionEmail = (to, { customerName, plateNo, approved,
     }
   `);
 
+const sendInvoiceReady = (to, { customerName, bookingRef, totalAmount }) =>
+  sendEmail(to, "Your Invoice Is Ready – DriveWell", `
+    <h2>Invoice Ready</h2>
+    <p>Hi ${customerName},</p>
+    <p>The invoice for your service (Ref: <strong>${bookingRef}</strong>) is ready.</p>
+    <h3>Total: LKR ${Number(totalAmount).toLocaleString()}</h3>
+    <p>Please visit the service center to complete payment and collect your vehicle.</p>
+  `);
+
 module.exports = {
   sendWelcomeEmail, sendBookingConfirmation, sendBookingCancellation, sendNoShowNotice, sendStatusUpdate,
   sendVehicleTransferredEmail, sendPasswordResetEmail,
   sendTransferRequestNoticeEmail, sendTransferRequestDecisionEmail,
+  sendInvoiceReady,
 };

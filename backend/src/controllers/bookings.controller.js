@@ -416,7 +416,7 @@ const cancelBooking = async (req, res) => {
 const overrideStatus = async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
-  const valid = ["Booked", "Started", "In Progress", "Completed", "Ready for Pickup", "Cancelled", "No-show"];
+  const valid = ["Booked", "Started", "In Progress", "Completed", "Ready for Pickup", "Collected", "Cancelled", "No-show"];
 
   if (!status || !valid.includes(status))
     return res.status(400).json({ message: `status must be one of: ${valid.join(", ")}` });
@@ -464,6 +464,37 @@ const overrideStatus = async (req, res) => {
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ message: "Booking not found" });
     logger.error(`overrideStatus failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Supervisor's confirmation that the customer physically collected the vehicle — the
+// last step in the flow, deliberately gated on payment so a car can't leave unpaid even
+// if someone tries to call this directly instead of going through the normal handoff.
+const releaseVehicle = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const booking = await prisma.reservation.findUnique({
+      where: { reservation_id: parseInt(id) },
+      include: { invoice: { select: { payment_status: true } } },
+    });
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+
+    if (booking.status !== "Ready for Pickup")
+      return res.status(400).json({ message: `Cannot release — booking is "${booking.status}", not "Ready for Pickup"` });
+    if (!booking.invoice || booking.invoice.payment_status !== "Paid")
+      return res.status(400).json({ message: "Cannot release — invoice is not marked Paid" });
+
+    const updated = await prisma.reservation.update({
+      where: { reservation_id: parseInt(id) },
+      data: { status: "Collected" },
+    });
+
+    logActivity(prisma, { user_id: req.user.user_id, action: "VEHICLE_RELEASED", entity_type: "reservation", entity_id: parseInt(id) });
+    res.status(200).json({ message: "Vehicle released", booking: updated });
+  } catch (error) {
+    logger.error(`releaseVehicle failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -667,6 +698,6 @@ const getMonthAvailability = async (req, res) => {
 };
 
 module.exports = {
-  listBookings, getBooking, createBooking, cancelBooking, overrideStatus,
+  listBookings, getBooking, createBooking, cancelBooking, overrideStatus, releaseVehicle,
   getAvailableSlots, getMonthAvailability,
 };

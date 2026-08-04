@@ -21,6 +21,7 @@ const statuses = [
   "In Progress",
   "Completed",
   "Ready for Pickup",
+  "Collected",
   "Cancelled",
   "No-show",
 ];

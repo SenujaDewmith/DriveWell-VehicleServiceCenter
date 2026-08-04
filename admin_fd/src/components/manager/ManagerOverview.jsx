@@ -230,6 +230,7 @@ export function StatusBadge({ status }) {
       "bg-status-in-progress/10 text-status-in-progress border border-status-in-progress/20",
     Completed: "bg-status-completed/10 text-status-completed border border-status-completed/20",
     "Ready for Pickup": "bg-status-ready/10 text-status-ready border border-status-ready/20",
+    Collected: "bg-status-completed/10 text-status-completed border border-status-completed/20",
     Cancelled: "bg-status-cancelled/10 text-status-cancelled border border-status-cancelled/20",
     "No-show": "bg-status-cancelled/10 text-status-cancelled border border-status-cancelled/20",
   };

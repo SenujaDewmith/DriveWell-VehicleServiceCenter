@@ -22,6 +22,7 @@ const STATUS_COLORS = {
     "In Progress": "bg-status-inProgress/10 text-status-inProgress border-status-inProgress/20",
     "Ready for Pickup": "bg-status-ready/10 text-status-ready border-status-ready/20",
     Completed: "bg-status-completed/10 text-status-completed border-status-completed/20",
+    Collected: "bg-status-completed/10 text-status-completed border-status-completed/20",
     Cancelled: "bg-status-cancelled/10 text-status-cancelled border-status-cancelled/20",
     "No-show": "bg-status-cancelled/10 text-status-cancelled border-status-cancelled/20",
 };

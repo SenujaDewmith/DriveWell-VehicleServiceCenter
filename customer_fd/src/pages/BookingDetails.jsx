@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger, } from "@/components/ui/alert-dialog";
 import { bookingsService } from "@/services/bookings.service";
 import { feedbackService } from "@/services/feedback.service";
+import { getCustomerStatusNote } from "@/lib/serviceStatus";
 import { CANCELLATION_CUTOFF_HOURS, canSelfCancel, bookingListTab } from "@/lib/bookingRules";
 import { fmtDuration } from "@/lib/packageFormat";
 import { fmtTime } from "@/lib/time";
@@ -43,6 +44,7 @@ const STATUS_COLORS = {
     "In Progress": "bg-status-inProgress/10 text-status-inProgress border-status-inProgress/20",
     "Ready for Pickup": "bg-status-ready/10 text-status-ready border-status-ready/20",
     Completed: "bg-status-completed/10 text-status-completed border-status-completed/20",
+    Collected: "bg-status-completed/10 text-status-completed border-status-completed/20",
     Cancelled: "bg-status-cancelled/10 text-status-cancelled border-status-cancelled/20",
     "No-show": "bg-status-cancelled/10 text-status-cancelled border-status-cancelled/20",
 };
@@ -70,25 +72,34 @@ export default function BookingDetails() {
             return;
         }
         let cancelled = false;
-        setLoading(true);
-        bookingsService
-            .getBooking(reservationId)
-            .then((r) => {
-            if (!cancelled) {
-                setBooking(r.booking);
-                setNotFound(false);
-            }
-        })
-            .catch(() => {
-            if (!cancelled)
-                setNotFound(true);
-        })
-            .finally(() => {
-            if (!cancelled)
-                setLoading(false);
-        });
+        const fetchBooking = (showLoading) => {
+            if (showLoading)
+                setLoading(true);
+            bookingsService
+                .getBooking(reservationId)
+                .then((r) => {
+                if (!cancelled) {
+                    setBooking(r.booking);
+                    setNotFound(false);
+                }
+            })
+                .catch(() => {
+                if (!cancelled)
+                    setNotFound(true);
+            })
+                .finally(() => {
+                if (!cancelled && showLoading)
+                    setLoading(false);
+            });
+        };
+        fetchBooking(true);
+        // No push notifications yet — refetching when the tab regains focus is a cheap way
+        // to pick up a status/payment change (e.g. cashier marks it paid) without a manual reload.
+        const onFocus = () => fetchBooking(false);
+        window.addEventListener("focus", onFocus);
         return () => {
             cancelled = true;
+            window.removeEventListener("focus", onFocus);
         };
     }, [user, reservationId]);
     useEffect(() => {
@@ -148,6 +159,7 @@ export default function BookingDetails() {
     }
     const invoice = booking.invoice;
     const serviceRecord = booking.service_record;
+    const statusNote = getCustomerStatusNote(booking);
     // Cross-owner bookings only ever reach this page via a vehicle's Service History (the
     // backend only allows viewing another customer's booking when you currently own its
     // vehicle) — "Back" should return there, since it won't appear in "My Bookings" at all.
@@ -387,6 +399,11 @@ export default function BookingDetails() {
                   Booked on {new Date(booking.created_at).toLocaleDateString("en-LK")}
                 </p>
               </div>
+              {statusNote && (<p className={`mt-3 text-sm rounded-md border px-3 py-2 ${booking.status === "Completed"
+                ? "border-status-booked/20 bg-status-booked/5 text-status-booked"
+                : "border-status-completed/20 bg-status-completed/5 text-status-completed"}`}>
+                  {statusNote}
+                </p>)}
             </section>
           </CardContent>
         </Card>
@@ -421,7 +438,7 @@ export default function BookingDetails() {
               </p>
             </div>))}
 
-        {booking.status === "Completed" || booking.status === "Ready for Pickup" ? (<div className="space-y-3">
+        {["Completed", "Ready for Pickup", "Collected"].includes(booking.status) ? (<div className="space-y-3">
             {hasFeedback && (<p className="text-sm text-muted-foreground text-center">You've already left feedback for this service.</p>)}
             <div className="flex gap-3">
               <Button variant="outline" onClick={backToBookings}>

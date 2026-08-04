@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const {
-  listBookings, getBooking, createBooking, cancelBooking, overrideStatus,
+  listBookings, getBooking, createBooking, cancelBooking, overrideStatus, releaseVehicle,
   getAvailableSlots, getMonthAvailability,
 } = require("../controllers/bookings.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
@@ -260,7 +260,7 @@ router.patch("/:id/cancel", verifyToken, cancelBooking);
  *               status:
  *                 type: string
  *                 example: No-show
- *                 enum: [Booked, Started, "In Progress", Completed, "Ready for Pickup", Cancelled, No-show]
+ *                 enum: [Booked, Started, "In Progress", Completed, "Ready for Pickup", Collected, Cancelled, No-show]
  *     responses:
  *       200: { description: Status updated }
  *       400: { description: Invalid status }
@@ -269,5 +269,31 @@ router.patch("/:id/cancel", verifyToken, cancelBooking);
  *       500: { description: Server error }
  */
 router.patch("/:id/status", verifyToken, authorizeRoles("Service Center Manager"), overrideStatus);
+
+/**
+ * @swagger
+ * /api/bookings/{id}/release:
+ *   patch:
+ *     summary: Release the vehicle to the customer (Supervisor / Manager only)
+ *     description: >
+ *       Confirms the customer physically collected the vehicle. Only allowed when the booking
+ *       is "Ready for Pickup" and its invoice is marked Paid — the real payment gate for handover.
+ *       On success the booking status becomes "Collected".
+ *     tags: [Bookings]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Vehicle released }
+ *       400: { description: Booking not Ready for Pickup, or invoice not Paid }
+ *       403: { description: Supervisor or Manager only }
+ *       404: { description: Booking not found }
+ *       500: { description: Server error }
+ */
+router.patch("/:id/release", verifyToken, authorizeRoles("Supervisor", "Service Center Manager"), releaseVehicle);
 
 module.exports = router;

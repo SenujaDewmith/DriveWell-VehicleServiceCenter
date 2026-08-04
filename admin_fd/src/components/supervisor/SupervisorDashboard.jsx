@@ -144,6 +144,12 @@ export function SupervisorDashboard() {
   const [newItemCatalogId, setNewItemCatalogId] = useState("");
   const [noteDrafts, setNoteDrafts] = useState({});
   const [error, setError] = useState("");
+  // Paid bookings awaiting physical handover — independent of the date navigator above,
+  // since a vehicle can sit paid-and-waiting for days after its service date.
+  const [releaseQueue, setReleaseQueue] = useState([]);
+  const [releaseLoading, setReleaseLoading] = useState(true);
+  const [releasingId, setReleasingId] = useState(null);
+  const [releaseError, setReleaseError] = useState("");
   const [remarksStatus, setRemarksStatus] = useState("idle");
   const [noteStatus, setNoteStatus] = useState({});
   const [editMode, setEditMode] = useState(false);
@@ -194,6 +200,30 @@ export function SupervisorDashboard() {
     setSelectedId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewDate]);
+
+  const loadReleaseQueue = () => {
+    setReleaseLoading(true);
+    api
+      .get(`/api/bookings?status=${encodeURIComponent("Ready for Pickup")}`)
+      .then((d) => setReleaseQueue(d.bookings))
+      .catch(() => setReleaseError("Failed to load vehicles ready for release"))
+      .finally(() => setReleaseLoading(false));
+  };
+
+  useEffect(loadReleaseQueue, []);
+
+  const releaseVehicleAction = async (reservationId) => {
+    setReleasingId(reservationId);
+    setReleaseError("");
+    try {
+      await api.patch(`/api/bookings/${reservationId}/release`);
+      loadReleaseQueue();
+    } catch (err) {
+      setReleaseError(err instanceof Error ? err.message : "Failed to release vehicle");
+    } finally {
+      setReleasingId(null);
+    }
+  };
 
   useEffect(() => {
     api
@@ -646,6 +676,65 @@ export function SupervisorDashboard() {
           {error}
         </p>
       )}
+
+      {/* Paid, waiting for the customer to collect the vehicle */}
+      <div className="rounded-lg border border-border bg-card p-4">
+        <h3 className="text-sm font-semibold text-foreground mb-4">Ready for Release</h3>
+        {releaseError && (
+          <p className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md px-3 py-2 mb-3">
+            {releaseError}
+          </p>
+        )}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left py-2 px-2 font-medium text-muted-foreground">Ref</th>
+                <th className="text-left py-2 px-2 font-medium text-muted-foreground">Customer</th>
+                <th className="text-left py-2 px-2 font-medium text-muted-foreground">Vehicle</th>
+                <th className="text-left py-2 px-2 font-medium text-muted-foreground">Package</th>
+                <th className="text-left py-2 px-2 font-medium text-muted-foreground">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {releaseLoading && (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                    Loading...
+                  </td>
+                </tr>
+              )}
+              {!releaseLoading &&
+                releaseQueue.map((b) => (
+                  <tr key={b.reservation_id} className="border-b border-border last:border-0">
+                    <td className="py-2 px-2 text-muted-foreground">
+                      {b.booking_ref ?? `#${b.reservation_id}`}
+                    </td>
+                    <td className="py-2 px-2 text-foreground">{b.customer_name}</td>
+                    <td className="py-2 px-2 text-foreground">{b.plate_no}</td>
+                    <td className="py-2 px-2 text-foreground">{b.package_name}</td>
+                    <td className="py-2 px-2">
+                      <button
+                        onClick={() => releaseVehicleAction(b.reservation_id)}
+                        disabled={releasingId === b.reservation_id}
+                        className="rounded-md border border-chart-1 px-2 py-1 text-sm font-medium text-chart-1 hover:bg-chart-1 hover:text-accent-foreground transition-colors disabled:opacity-50"
+                      >
+                        {releasingId === b.reservation_id ? "..." : "Release Vehicle"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              {!releaseLoading && releaseQueue.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                    No vehicles waiting for release
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {loading && bookings.length === 0 && (

@@ -3,6 +3,7 @@ const logger = require("../utils/logger");
 const { fmtDate } = require("../lib/format");
 const { logActivity } = require("../lib/activityLogger");
 const { VEHICLE_SELECT, flattenVehicleRef } = require("../lib/vehicleFlatten");
+const { sendInvoiceReady, sendStatusUpdate } = require("../services/email.service");
 
 const CUSTOMER_ROLE = 5;
 
@@ -225,7 +226,11 @@ const createInvoice = async (req, res) => {
   try {
     const booking = await prisma.reservation.findUnique({
       where: { reservation_id: parseInt(reservation_id) },
-      select: { status: true },
+      select: {
+        status: true,
+        booking_ref: true,
+        customer_user: { select: { email: true, customer: { select: { full_name: true } } } },
+      },
     });
     if (!booking) return res.status(404).json({ message: "Booking not found" });
     if (!["Completed", "Ready for Pickup"].includes(booking.status))
@@ -251,6 +256,11 @@ const createInvoice = async (req, res) => {
 
     logger.info(`Invoice created — invoice_id: ${invoice.invoice_id}, reservation_id: ${reservation_id}`);
     logActivity(prisma, { user_id, action: "INVOICE_GENERATED", entity_type: "invoice", entity_id: invoice.invoice_id });
+    sendInvoiceReady(booking.customer_user.email, {
+      customerName: booking.customer_user.customer?.full_name,
+      bookingRef: booking.booking_ref,
+      totalAmount: invoice.total_amount,
+    });
     res.status(201).json({ message: "Invoice created", invoice });
   } catch (error) {
     if (error.code === "P2002")
@@ -268,15 +278,50 @@ const updatePaymentStatus = async (req, res) => {
     return res.status(400).json({ message: "payment_status must be 'Paid' or 'Unpaid'" });
 
   try {
-    const invoice = await prisma.invoice.update({
-      where: { invoice_id: parseInt(id) },
-      data: { payment_status, payment_method: payment_method || null },
+    const { invoice, promotedToReadyForPickup } = await prisma.$transaction(async (tx) => {
+      const updatedInvoice = await tx.invoice.update({
+        where: { invoice_id: parseInt(id) },
+        data: { payment_status, payment_method: payment_method || null },
+        include: {
+          reservation: {
+            select: {
+              status: true,
+              booking_ref: true,
+              customer_user: { select: { email: true, customer: { select: { full_name: true } } } },
+            },
+          },
+        },
+      });
+
+      // Payment is the real-world signal that the vehicle is ready to hand back —
+      // auto-advance the booking so the Supervisor's release queue and the customer's
+      // status view pick it up without a separate manual step.
+      let promoted = false;
+      if (payment_status === "Paid" && updatedInvoice.reservation.status === "Completed") {
+        await tx.reservation.update({
+          where: { reservation_id: updatedInvoice.reservation_id },
+          data: { status: "Ready for Pickup" },
+        });
+        promoted = true;
+      }
+
+      return { invoice: updatedInvoice, promotedToReadyForPickup: promoted };
     });
+
     logger.info(`Invoice ${id} payment status set to ${payment_status}`);
     if (payment_status === "Paid") {
       logActivity(prisma, { user_id: req.user.user_id, action: "PAYMENT_RECEIVED", entity_type: "invoice", entity_id: parseInt(id) });
     }
-    res.status(200).json({ message: "Payment status updated", invoice });
+    if (promotedToReadyForPickup) {
+      logActivity(prisma, { user_id: req.user.user_id, action: "STATUS_CHANGED", entity_type: "reservation", entity_id: invoice.reservation_id });
+      sendStatusUpdate(invoice.reservation.customer_user.email, {
+        customerName: invoice.reservation.customer_user.customer?.full_name,
+        bookingRef: invoice.reservation.booking_ref,
+        status: "Ready for Pickup",
+      });
+    }
+    const { reservation, ...invoiceFields } = invoice;
+    res.status(200).json({ message: "Payment status updated", invoice: invoiceFields });
   } catch (error) {
     if (error.code === "P2025") return res.status(404).json({ message: "Invoice not found" });
     logger.error(`updatePaymentStatus failed — ${error.message}`);

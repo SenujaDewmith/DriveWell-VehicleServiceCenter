@@ -20,25 +20,34 @@ export default function Invoices() {
         if (!user)
             return;
         let cancelled = false;
-        setLoading(true);
-        invoicesService
-            .getInvoices()
-            .then((r) => {
-            if (!cancelled) {
-                setInvoices(r.invoices);
-                setError("");
-            }
-        })
-            .catch(() => {
-            if (!cancelled)
-                setError("Failed to load invoices. Please try again later.");
-        })
-            .finally(() => {
-            if (!cancelled)
-                setLoading(false);
-        });
+        const fetchInvoices = (showLoading) => {
+            if (showLoading)
+                setLoading(true);
+            invoicesService
+                .getInvoices()
+                .then((r) => {
+                if (!cancelled) {
+                    setInvoices(r.invoices);
+                    setError("");
+                }
+            })
+                .catch(() => {
+                if (!cancelled)
+                    setError("Failed to load invoices. Please try again later.");
+            })
+                .finally(() => {
+                if (!cancelled && showLoading)
+                    setLoading(false);
+            });
+        };
+        fetchInvoices(true);
+        // Refetch on focus so an invoice that just became ready/paid while this tab
+        // was in the background shows up without a manual reload.
+        const onFocus = () => fetchInvoices(false);
+        window.addEventListener("focus", onFocus);
         return () => {
             cancelled = true;
+            window.removeEventListener("focus", onFocus);
         };
     }, [user]);
     if (!user)
