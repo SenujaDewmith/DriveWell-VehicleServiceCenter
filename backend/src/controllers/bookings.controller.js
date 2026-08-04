@@ -13,6 +13,7 @@ const { RESERVATION_STATUS, PAYMENT_STATUS } = require("../constants/status");
 
 const CUSTOMER_ROLE = 5;
 const MANAGER_ROLE = 1;
+const SUPERVISOR_ROLE = 2;
 const STAFF_ROLE = 4;
 
 // Customers may self-cancel only up to this many minutes before the appointment
@@ -437,6 +438,12 @@ const overrideStatus = async (req, res) => {
 
   if (!status || !valid.includes(status))
     return res.status(400).json({ message: `status must be one of: ${valid.join(", ")}` });
+
+  // The route lets both roles in, but a Supervisor's write access here is scoped to
+  // clearing a no-show slot — every other transition (cancelling, forcing Collected, etc.)
+  // stays Manager-only.
+  if (req.user.role_id === SUPERVISOR_ROLE && status !== RESERVATION_STATUS.NO_SHOW)
+    return res.status(403).json({ message: "Supervisors may only set status to No-show" });
 
   try {
     const booking = await prisma.reservation.findUnique({

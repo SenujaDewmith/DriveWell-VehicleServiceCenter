@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const statuses = [
   "Booked",
@@ -23,6 +24,23 @@ const statuses = [
   "Cancelled",
   "No-show",
 ];
+
+const SORT_OPTIONS = [
+  { value: "latest", label: "Date: Latest First" },
+  { value: "earliest", label: "Date: Earliest First" },
+];
+
+// service_date ("YYYY-MM-DD") and slot_time ("HH:MM:SS") are both zero-padded and already in
+// sortable order as plain strings, so a lexical comparison on the combined key is correct
+// without parsing into Date objects. Mirrors customer_fd/src/pages/Bookings.jsx's sort.
+function sortByServiceDate(list, order) {
+  const sorted = [...list].sort((a, b) => {
+    const keyA = `${a.service_date}T${a.slot_time || "00:00:00"}`;
+    const keyB = `${b.service_date}T${b.slot_time || "00:00:00"}`;
+    return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
+  });
+  return order === "latest" ? sorted.reverse() : sorted;
+}
 
 // Must match NO_SHOW_GRACE_MINUTES in backend/src/controllers/bookings.controller.js — kept
 // in sync so the button is only ever enabled when the backend will actually accept the call.
@@ -42,6 +60,7 @@ export function BookingsPage() {
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const [sortOrder, setSortOrder] = useState("latest");
 
   // Keyed by reservation_id so each row can look up its own invoice (if any)
   // without a separate fetch per row.
@@ -96,6 +115,7 @@ export function BookingsPage() {
     }
     return true;
   });
+  const sorted = sortByServiceDate(filtered, sortOrder);
 
   // Counts reflect the status filter only (not the search box) — so switching
   // status tabs shows how many bookings are in each, independent of search text.
@@ -157,6 +177,18 @@ export function BookingsPage() {
             </button>
           ))}
         </div>
+        <Select value={sortOrder} onValueChange={setSortOrder}>
+          <SelectTrigger className="w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SORT_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {hasFilter && (
           <button
             onClick={clearFilter}
@@ -187,7 +219,7 @@ export function BookingsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((b) => {
+              {sorted.map((b) => {
                 const invoice = invoicesByReservation[b.reservation_id];
                 const isOverdue =
                   b.status === "Booked" && minutesSinceStart(b) >= NO_SHOW_GRACE_MINUTES;
@@ -279,7 +311,7 @@ export function BookingsPage() {
                   </tr>
                 );
               })}
-              {filtered.length === 0 && (
+              {sorted.length === 0 && (
                 <tr>
                   <td colSpan={10} className="py-8 text-center text-muted-foreground">
                     No bookings match filter

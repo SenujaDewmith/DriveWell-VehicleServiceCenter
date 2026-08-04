@@ -503,6 +503,31 @@ describe("PATCH /api/bookings/:id/status", () => {
     expect(res.body.booking.status).toBe("No-show");
   });
 
+  test("Supervisor can mark a booking No-show", async () => {
+    const pkg = await seedPackage();
+    const customer = await createUser("Customer");
+    const vehicle = await createVehicle(customer.user_id);
+    const pastTime = new Date(Date.now() - 60 * 60 * 1000);
+    const reservation = await createReservation({
+      customerId: customer.user_id,
+      vehicleId: vehicle.vehicle_id,
+      packageId: pkg.package_id,
+      serviceDate: pastTime.toISOString().split("T")[0],
+      startTime: `${String(pastTime.getHours()).padStart(2, "0")}:${String(pastTime.getMinutes()).padStart(2, "0")}`,
+    });
+
+    const { agent: supervisorA } = await staffAgent("Supervisor");
+    const res = await withPortal(supervisorA, "staff")("patch", `/api/bookings/${reservation.reservation_id}/status`).send({ status: "No-show" });
+    expect(res.status).toBe(200);
+    expect(res.body.booking.status).toBe("No-show");
+  });
+
+  test("403 when Supervisor tries to override status to anything other than No-show", async () => {
+    const { agent } = await staffAgent("Supervisor");
+    const res = await withPortal(agent, "staff")("patch", "/api/bookings/1/status").send({ status: "Cancelled" });
+    expect(res.status).toBe(403);
+  });
+
   test("400 when marking No-show before the grace period has elapsed", async () => {
     const pkg = await seedPackage();
     const { customer, agent: customerA } = await customerAgent();
@@ -540,8 +565,8 @@ describe("PATCH /api/bookings/:id/status", () => {
     expect(res.status).toBe(400);
   });
 
-  test("403 when a non-manager tries to override status", async () => {
-    const { agent } = await staffAgent("Supervisor");
+  test("403 when a role with no status-override access tries to override status", async () => {
+    const { agent } = await staffAgent("Cashier");
     const res = await withPortal(agent, "staff")("patch", "/api/bookings/1/status").send({ status: "Cancelled" });
     expect(res.status).toBe(403);
   });

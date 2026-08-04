@@ -235,12 +235,13 @@ router.patch("/:id/cancel", verifyToken, cancelBooking);
  * @swagger
  * /api/bookings/{id}/status:
  *   patch:
- *     summary: Override booking status (Manager only)
+ *     summary: Override booking status (Manager, or Supervisor for No-show only)
  *     description: >
- *       Setting status to "No-show" additionally requires the booking to currently be "Booked"
- *       and its scheduled start time to be at least 15 minutes in the past — this rejects
- *       marking a future or already-resolved booking as a no-show. On success, the customer
- *       is emailed that their appointment was missed.
+ *       Managers may set any status. Supervisors may only set "No-show" — they get a 403 for
+ *       any other value. Setting status to "No-show" additionally requires the booking to
+ *       currently be "Booked" and its scheduled start time to be at least 15 minutes in the
+ *       past — this rejects marking a future or already-resolved booking as a no-show. On
+ *       success, the customer is emailed that their appointment was missed.
  *     tags: [Bookings]
  *     security:
  *       - cookieAuth: []
@@ -264,11 +265,11 @@ router.patch("/:id/cancel", verifyToken, cancelBooking);
  *     responses:
  *       200: { description: Status updated }
  *       400: { description: Invalid status }
- *       403: { description: Manager only }
+ *       403: { description: Manager only, or Supervisor setting a status other than No-show }
  *       404: { description: Booking not found }
  *       500: { description: Server error }
  */
-router.patch("/:id/status", verifyToken, authorizeRoles("Service Center Manager"), overrideStatus);
+router.patch("/:id/status", verifyToken, authorizeRoles("Service Center Manager", "Supervisor"), overrideStatus);
 
 /**
  * @swagger

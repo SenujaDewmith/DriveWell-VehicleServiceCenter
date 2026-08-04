@@ -147,6 +147,19 @@ describe("GET /api/feedback", () => {
     expect(res.body.feedback).toHaveLength(1);
     expect(res.body.feedback[0].customer_name).toBe("Sarah Jayasuriya");
   });
+
+  test("supervisor sees all feedback (view-only — feature/unfeature stays manager-only)", async () => {
+    const { reservation, customer } = await completedBookingFixture();
+    const custAgent = await agentFor(customer, "customer");
+    await custAgent.post("/api/feedback").set("X-Portal", "customer").send({ reservation_id: reservation.reservation_id, rating: 5 });
+
+    const supervisor = await createUser("Supervisor", { email: "supervisor-view-feedback@test.local" });
+    const supervisorAgent = await agentFor(supervisor, "staff");
+    const res = await supervisorAgent.get("/api/feedback").set("X-Portal", "staff");
+    expect(res.status).toBe(200);
+    expect(res.body.feedback).toHaveLength(1);
+    expect(res.body.feedback[0].customer_name).toBe("Sarah Jayasuriya");
+  });
 });
 
 describe("GET /api/feedback/booking/:booking_id", () => {

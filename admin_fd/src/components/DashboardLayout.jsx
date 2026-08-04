@@ -50,6 +50,12 @@ const managerNav = [
   { label: "Activity Log", to: "/dashboard/activity", icon: <Activity className="h-4 w-4" /> },
 ];
 
+const supervisorNav = [
+  { label: "Overview", to: "/dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
+  { label: "All Bookings", to: "/dashboard/bookings", icon: <BookOpen className="h-4 w-4" /> },
+  { label: "Feedback", to: "/dashboard/feedback", icon: <MessageSquare className="h-4 w-4" /> },
+];
+
 export function DashboardLayout({ children }) {
   const { username, role, logout } = useAuth();
   const location = useLocation();
@@ -58,7 +64,9 @@ export function DashboardLayout({ children }) {
   const [loggingOut, setLoggingOut] = useState(false);
 
   const isManager = role === "manager";
-  const navItems = isManager ? managerNav : [];
+  const isSupervisor = role === "supervisor";
+  const hasSidebar = isManager || isSupervisor;
+  const navItems = isManager ? managerNav : isSupervisor ? supervisorNav : [];
 
   const confirmLogout = async () => {
     setLoggingOut(true);
@@ -68,8 +76,8 @@ export function DashboardLayout({ children }) {
 
   return (
     <div className="h-screen flex bg-background overflow-hidden">
-      {/* Sidebar - only for manager */}
-      {isManager && (
+      {/* Sidebar - manager and supervisor only */}
+      {hasSidebar && (
         <>
           {/* Mobile overlay */}
           {sidebarOpen && (
@@ -119,7 +127,7 @@ export function DashboardLayout({ children }) {
       <div className="flex-1 flex flex-col min-h-0">
         <header className="h-16 shrink-0 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 flex items-center justify-between px-4">
           <div className="flex items-center gap-3">
-            {isManager && (
+            {hasSidebar && (
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
                 className="lg:hidden p-1 text-foreground"
@@ -127,7 +135,7 @@ export function DashboardLayout({ children }) {
                 {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
             )}
-            {!isManager && (
+            {!hasSidebar && (
               <div className="flex items-center gap-2">
                 <Logo className="h-7" />
                 <span className="text-sm text-muted-foreground">// {role}</span>
