@@ -16,6 +16,7 @@ import { RevenuePage } from "@/routes/dashboard/revenue";
 import { SchedulePage } from "@/routes/dashboard/schedule";
 import { UsersPage } from "@/routes/dashboard/users";
 import { VehicleCatalogPage } from "@/routes/dashboard/vehicle-catalog";
+import { VehicleHistoryPage } from "@/routes/dashboard/vehicle-history";
 import { VehicleTransfersPage } from "@/routes/dashboard/vehicle-transfers";
 import { VolumePage } from "@/routes/dashboard/volume";
 import { NotFoundPage } from "@/routes/NotFound";
@@ -41,6 +42,7 @@ export default function App() {
               <Route path="schedule" element={<SchedulePage />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="vehicle-catalog" element={<VehicleCatalogPage />} />
+              <Route path="vehicle-history" element={<VehicleHistoryPage />} />
               <Route path="vehicle-transfers" element={<VehicleTransfersPage />} />
               <Route path="volume" element={<VolumePage />} />
             </Route>

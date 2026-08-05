@@ -19,6 +19,7 @@ import {
   ArrowLeftRight,
   Car,
   MessageSquare,
+  History,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 
@@ -39,6 +40,11 @@ const managerNav = [
     icon: <ArrowLeftRight className="h-4 w-4" />,
   },
   { label: "Vehicle Catalog", to: "/dashboard/vehicle-catalog", icon: <Car className="h-4 w-4" /> },
+  {
+    label: "Vehicle History",
+    to: "/dashboard/vehicle-history",
+    icon: <History className="h-4 w-4" />,
+  },
   { label: "All Bookings", to: "/dashboard/bookings", icon: <BookOpen className="h-4 w-4" /> },
   { label: "Revenue Reports", to: "/dashboard/revenue", icon: <DollarSign className="h-4 w-4" /> },
   { label: "Service Volume", to: "/dashboard/volume", icon: <BarChart3 className="h-4 w-4" /> },
@@ -53,6 +59,11 @@ const managerNav = [
 const supervisorNav = [
   { label: "Overview", to: "/dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
   { label: "All Bookings", to: "/dashboard/bookings", icon: <BookOpen className="h-4 w-4" /> },
+  {
+    label: "Vehicle History",
+    to: "/dashboard/vehicle-history",
+    icon: <History className="h-4 w-4" />,
+  },
   { label: "Feedback", to: "/dashboard/feedback", icon: <MessageSquare className="h-4 w-4" /> },
 ];
 

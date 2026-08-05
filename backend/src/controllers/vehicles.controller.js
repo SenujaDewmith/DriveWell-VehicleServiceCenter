@@ -4,6 +4,9 @@ const { logActivity } = require("../lib/activityLogger");
 const { sendVehicleTransferredEmail, sendTransferRequestNoticeEmail } = require("../services/email.service");
 const { isValidPhone } = require("../lib/phone");
 const { RESERVATION_STATUS } = require("../constants/status");
+const { getLocalNow } = require("../lib/slotGenerator");
+
+const RECENT_VEHICLES_LIMIT = 10;
 
 const VEHICLE_INCLUDE = {
   make: { select: { make_id: true, name: true } },
@@ -81,6 +84,118 @@ const listVehicles = async (req, res) => {
     res.status(200).json({ vehicles: vehicles.map(flattenVehicle) });
   } catch (error) {
     logger.error(`listVehicles failed for user_id: ${user_id} — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Shared by every admin vehicle-lookup endpoint below (search, get-by-id, recent) — each
+// needs the current owner's contact info, unlike flattenVehicle's plain customer_id.
+const ADMIN_VEHICLE_INCLUDE = {
+  ...VEHICLE_INCLUDE,
+  customer: { select: { email: true, customer: { select: { full_name: true, phone: true } } } },
+};
+const flattenVehicleWithOwner = (v) => ({
+  ...flattenVehicle(v),
+  owner: v.customer
+    ? { email: v.customer.email, full_name: v.customer.customer?.full_name ?? null, phone: v.customer.customer?.phone ?? null }
+    : null,
+});
+
+// Staff-facing lookup for the manager Vehicle History page — unlike listVehicles (scoped to
+// the calling customer), this searches every vehicle regardless of current owner or detached
+// status, since a manager needs to be able to pull up a vehicle's history for a walk-in customer
+// even if it's currently unclaimed. Matches on plate number or make/model name.
+const searchVehiclesAdmin = async (req, res) => {
+  const q = (req.query.q || "").trim();
+  if (q.length < 2) return res.status(200).json({ vehicles: [] });
+
+  try {
+    const vehicles = await prisma.vehicle.findMany({
+      where: {
+        OR: [
+          { plate_no: { contains: q, mode: "insensitive" } },
+          { custom_make: { contains: q, mode: "insensitive" } },
+          { custom_model: { contains: q, mode: "insensitive" } },
+          { make: { name: { contains: q, mode: "insensitive" } } },
+          { model: { name: { contains: q, mode: "insensitive" } } },
+        ],
+      },
+      include: ADMIN_VEHICLE_INCLUDE,
+      orderBy: { plate_no: "asc" },
+      take: 20,
+    });
+
+    res.status(200).json({ vehicles: vehicles.map(flattenVehicleWithOwner) });
+  } catch (error) {
+    logger.error(`searchVehiclesAdmin failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Fetch a single vehicle by id, any owner/status — backs the manager Vehicle History page
+// so a selected vehicle survives a page refresh/deep link, not just the search step.
+const getVehicleAdmin = async (req, res) => {
+  const vehicleId = parseInt(req.params.id);
+  try {
+    const vehicle = await prisma.vehicle.findUnique({
+      where: { vehicle_id: vehicleId },
+      include: ADMIN_VEHICLE_INCLUDE,
+    });
+    if (!vehicle) return res.status(404).json({ message: "Vehicle not found" });
+    res.status(200).json({ vehicle: flattenVehicleWithOwner(vehicle) });
+  } catch (error) {
+    logger.error(`getVehicleAdmin failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Default "browse" list for the Vehicle History search page before a manager/supervisor has
+// typed anything — today's appointments first (most likely who a walk-in customer is standing
+// in front of them about), falling back to the most recently serviced vehicles overall when
+// nothing's scheduled today. `source` tells the frontend which heading to show.
+const listRecentVehiclesAdmin = async (req, res) => {
+  try {
+    const { todayKey } = getLocalNow();
+
+    const todays = await prisma.reservation.findMany({
+      where: {
+        service_date: new Date(todayKey),
+        status: { notIn: [RESERVATION_STATUS.CANCELLED, RESERVATION_STATUS.NO_SHOW] },
+      },
+      select: { vehicle_id: true },
+      distinct: ["vehicle_id"],
+      orderBy: { start_time: "asc" },
+      take: RECENT_VEHICLES_LIMIT,
+    });
+
+    let vehicleIds = todays.map((r) => r.vehicle_id);
+    let source = "today";
+
+    if (vehicleIds.length === 0) {
+      const recent = await prisma.reservation.findMany({
+        select: { vehicle_id: true },
+        distinct: ["vehicle_id"],
+        orderBy: [{ service_date: "desc" }, { created_at: "desc" }],
+        take: RECENT_VEHICLES_LIMIT,
+      });
+      vehicleIds = recent.map((r) => r.vehicle_id);
+      source = "recent";
+    }
+
+    if (vehicleIds.length === 0) return res.status(200).json({ source: "none", vehicles: [] });
+
+    const vehicles = await prisma.vehicle.findMany({
+      where: { vehicle_id: { in: vehicleIds } },
+      include: ADMIN_VEHICLE_INCLUDE,
+    });
+    // findMany's `in` filter doesn't preserve input order, so re-sort to match the
+    // most-recent-first order the id list was built in.
+    const byId = new Map(vehicles.map((v) => [v.vehicle_id, v]));
+    const ordered = vehicleIds.map((id) => byId.get(id)).filter(Boolean);
+
+    res.status(200).json({ source, vehicles: ordered.map(flattenVehicleWithOwner) });
+  } catch (error) {
+    logger.error(`listRecentVehiclesAdmin failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -512,6 +627,6 @@ module.exports = {
   listVehicles, addVehicle, updateVehicle, detachVehicle,
   lookupPlate, claimVehicle, listMyDetachedVehicles, restoreVehicle,
   submitTransferRequest, listMyTransferRequests,
-  listMakes, listModels, listVehicleTypes,
+  listMakes, listModels, listVehicleTypes, searchVehiclesAdmin, getVehicleAdmin, listRecentVehiclesAdmin,
   VEHICLE_INCLUDE, flattenVehicle, UNRESOLVED_BOOKING_STATUSES, notifyPreviousOwner,
 };
