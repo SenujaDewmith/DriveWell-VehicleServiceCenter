@@ -1,6 +1,18 @@
 import { useState, useEffect } from "react";
 import { Plus, Pencil, UserX, UserCheck, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const ROLE_OPTIONS = [
   { id: 2, label: "Supervisor" },
@@ -8,11 +20,19 @@ const ROLE_OPTIONS = [
   { id: 4, label: "Service Staff" },
 ];
 
+const STATUS_FILTERS = [
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+  { value: "pending", label: "Pending" },
+];
+
 export function UsersPage() {
+  const { userId } = useAuth();
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("All");
   const [form, setForm] = useState({
     email: "",
     full_name: "",
@@ -90,13 +110,7 @@ export function UsersPage() {
     }
   };
 
-  const deletePending = async (m) => {
-    if (
-      !window.confirm(
-        `Delete the pending invite for ${m.full_name}? You'll need to recreate it to send a new one.`,
-      )
-    )
-      return;
+  const deleteMember = async (m) => {
     setError("");
     try {
       await api.delete(`/api/users/staff/${m.user_id}`);
@@ -105,6 +119,16 @@ export function UsersPage() {
       setError(err instanceof Error ? err.message : "Delete failed");
     }
   };
+
+  const filtered =
+    statusFilter === "All" ? members : members.filter((m) => m.account_status === statusFilter);
+
+  // Counts reflect every status regardless of which tab is active, so switching
+  // tabs never changes another tab's own count.
+  const statusCounts = STATUS_FILTERS.reduce((acc, { value }) => {
+    acc[value] = members.filter((m) => m.account_status === value).length;
+    return acc;
+  }, {});
 
   return (
     <div className="space-y-6">
@@ -123,6 +147,32 @@ export function UsersPage() {
           {error}
         </p>
       )}
+
+      <div className="flex gap-1 flex-wrap">
+        <button
+          onClick={() => setStatusFilter("All")}
+          className={`rounded-md border px-2 py-1.5 text-sm font-medium transition-colors ${
+            statusFilter === "All"
+              ? "border-accent bg-accent text-accent-foreground"
+              : "border-border text-muted-foreground"
+          }`}
+        >
+          All ({members.length})
+        </button>
+        {STATUS_FILTERS.map(({ value, label }) => (
+          <button
+            key={value}
+            onClick={() => setStatusFilter(value)}
+            className={`rounded-md border px-2 py-1.5 text-sm font-medium transition-colors ${
+              statusFilter === value
+                ? "border-accent bg-accent text-accent-foreground"
+                : "border-border text-muted-foreground"
+            }`}
+          >
+            {label} ({statusCounts[value]})
+          </button>
+        ))}
+      </div>
 
       {showForm && (
         <div className="rounded-lg border border-border bg-card p-4 space-y-3">
@@ -204,7 +254,7 @@ export function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {members.map((m) => (
+              {filtered.map((m) => (
                 <tr
                   key={m.user_id}
                   className={`border-b border-border last:border-0 ${m.account_status !== "active" ? "opacity-50" : ""}`}
@@ -238,32 +288,105 @@ export function UsersPage() {
                       <Pencil className="h-3 w-3" />
                     </button>
                     {m.account_status === "pending" ? (
-                      <button
-                        onClick={() => deletePending(m)}
-                        className="p-1 text-muted-foreground hover:text-destructive"
-                        title="Delete pending invite"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <button
+                            className="p-1 text-muted-foreground hover:text-destructive"
+                            title="Delete pending invite"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              Delete the pending invite for {m.full_name}?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              You'll need to recreate the account to send a new invite.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteMember(m)}>
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     ) : (
-                      <button
-                        onClick={() => toggleActive(m)}
-                        className="p-1 text-muted-foreground hover:text-foreground"
-                      >
-                        {m.account_status === "active" ? (
-                          <UserX className="h-3 w-3" />
-                        ) : (
-                          <UserCheck className="h-3 w-3" />
+                      <>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <button className="p-1 text-muted-foreground hover:text-foreground">
+                              {m.account_status === "active" ? (
+                                <UserX className="h-3 w-3" />
+                              ) : (
+                                <UserCheck className="h-3 w-3" />
+                              )}
+                            </button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                {m.account_status === "active" ? "Deactivate" : "Activate"}{" "}
+                                {m.full_name}?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                {m.account_status === "active"
+                                  ? "They'll immediately lose access to the staff portal until reactivated."
+                                  : "They'll be able to sign in to the staff portal again."}
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => toggleActive(m)}>
+                                {m.account_status === "active" ? "Deactivate" : "Activate"}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                        {m.user_id !== userId && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <button
+                                className="p-1 text-muted-foreground hover:text-destructive"
+                                title="Permanently delete"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  Permanently delete {m.full_name}?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This cannot be undone — their account and login access will be
+                                  gone for good. Past invoices, service records, and job assignments
+                                  keep their name for record-keeping, but nothing links back to a
+                                  live account anymore. Use Deactivate instead if this might not be
+                                  final.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => deleteMember(m)}>
+                                  Permanently Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         )}
-                      </button>
+                      </>
                     )}
                   </td>
                 </tr>
               ))}
-              {members.length === 0 && (
+              {filtered.length === 0 && (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-muted-foreground">
-                    No staff found
+                    {members.length === 0 ? "No staff found" : "No staff match this filter"}
                   </td>
                 </tr>
               )}

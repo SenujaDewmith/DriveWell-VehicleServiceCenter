@@ -31,7 +31,10 @@ const flattenInvoice = (i, { includeSupervisorNotes = false } = {}) => ({
   customer_email: i.reservation?.customer_user?.email,
   ...flattenVehicleRef(i.reservation?.vehicle),
   package_name: i.reservation?.package?.name,
-  cashier_name: i.cashier?.staff?.full_name ?? null,
+  // Prefer the live join (reflects a name change while the account still
+  // exists); fall back to the snapshot taken at invoice-generation time once
+  // the cashier's account has been deleted.
+  cashier_name: i.cashier?.staff?.full_name ?? i.cashier_name ?? null,
   items: (i.items ?? []).map((it) => ({
     invoice_item_id: it.invoice_item_id,
     catalog_item_id: it.catalog_item_id,
@@ -238,10 +241,13 @@ const createInvoice = async (req, res) => {
       return res.status(400).json({ message: "Can only generate invoice for Completed bookings" });
 
     const invoice = await prisma.$transaction(async (tx) => {
+      const cashier = await tx.staff.findUnique({ where: { user_id }, select: { full_name: true } });
+
       const created = await tx.invoice.create({
         data: {
           reservation_id: parseInt(reservation_id),
           cashier_id: user_id,
+          cashier_name: cashier?.full_name ?? null,
           base_amount,
           additional_charges: additionalCharges,
           discount: dis,

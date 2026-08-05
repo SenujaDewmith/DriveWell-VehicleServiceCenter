@@ -206,7 +206,7 @@ model WorkingConfig {
   same_day_cutoff_minutes Int      @default(240)
   // Manager-editable support number shown to anonymous visitors and customers
   // hitting a self-service dead end (blocked cancellation, failed transfer request).
-  contact_phone            String?  @db.VarChar(20)
+  contact_phone           String?  @db.VarChar(20)
 
   @@map("working_config")
 }
@@ -261,6 +261,10 @@ model ServiceRecord {
   record_id             Int       @id @default(autoincrement())
   reservation_id        Int       @unique
   supervisor_id         Int?
+  // Snapshot of the supervisor's name at the time this record was started — so
+  // it keeps reading correctly even if that staff account is later deleted
+  // (supervisor_id goes null on delete, but the historical record shouldn't).
+  supervisor_name       String?   @db.VarChar(150)
   remarks               String?
   quality_checked       Boolean   @default(false)
   // Odometer reading is only collected when this service involved an oil
@@ -283,11 +287,14 @@ model ServiceRecord {
 model ServiceStaffAssignment {
   assignment_id Int     @id @default(autoincrement())
   record_id     Int
-  staff_id      Int
+  staff_id      Int?
+  // Snapshot of the assigned staff member's name at assignment time — same
+  // reasoning as ServiceRecord.supervisor_name above.
+  staff_name    String? @db.VarChar(150)
   work_note     String? @db.VarChar(255)
 
   record ServiceRecord @relation(fields: [record_id], references: [record_id], onDelete: Cascade)
-  staff  User          @relation(fields: [staff_id], references: [user_id])
+  staff  User?         @relation(fields: [staff_id], references: [user_id], onDelete: SetNull)
 
   @@unique([record_id, staff_id])
   @@map("service_staff_assignments")
@@ -327,17 +334,20 @@ model ServiceRecordItem {
 }
 
 model Invoice {
-  invoice_id         Int      @id @default(autoincrement())
-  reservation_id     Int      @unique
+  invoice_id         Int           @id @default(autoincrement())
+  reservation_id     Int           @unique
   cashier_id         Int?
-  base_amount        Decimal  @db.Decimal(10, 2)
-  additional_charges Decimal  @default(0) @db.Decimal(10, 2)
-  discount           Decimal  @default(0) @db.Decimal(10, 2)
-  total_amount       Decimal  @db.Decimal(10, 2)
+  // Snapshot of the cashier's name at the time this invoice was generated —
+  // same reasoning as ServiceRecord.supervisor_name above.
+  cashier_name       String?       @db.VarChar(150)
+  base_amount        Decimal       @db.Decimal(10, 2)
+  additional_charges Decimal       @default(0) @db.Decimal(10, 2)
+  discount           Decimal       @default(0) @db.Decimal(10, 2)
+  total_amount       Decimal       @db.Decimal(10, 2)
   payment_status     PaymentStatus @default(Unpaid)
-  payment_method     String?  @db.VarChar(30)
+  payment_method     String?       @db.VarChar(30)
   notes              String?
-  generated_at       DateTime @default(now())
+  generated_at       DateTime      @default(now())
 
   reservation Reservation   @relation(fields: [reservation_id], references: [reservation_id])
   cashier     User?         @relation("CashierInvoices", fields: [cashier_id], references: [user_id])

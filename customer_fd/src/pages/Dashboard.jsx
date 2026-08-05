@@ -23,7 +23,7 @@ function fmtDate(d) {
 function fmtDateTime(d) {
     return new Date(d).toLocaleString("en-LK", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
-// Shared row layout for the Active Service and Upcoming Bookings cards below.
+// Shared row layout for the Active Services and Upcoming Bookings cards below.
 function BookingRow({ booking, navigate }) {
     return (<div className="flex items-center justify-between gap-4 p-4 border border-border rounded-lg hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => navigate(`/bookings/${booking.reservation_id}`)}>
       <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -176,12 +176,12 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Active Service — vehicle is physically at the shop right now, so this
+          {/* Active Services — vehicle is physically at the shop right now, so this
               takes priority over merely-scheduled upcoming appointments below. */}
           {activeServiceBookings.length > 0 && (<Card className="mb-8">
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
-                  <Wrench className="h-4 w-4 text-cta"/> Active Service
+                  <Wrench className="h-4 w-4 text-cta"/> Active Services
                 </CardTitle>
                 <Button variant="ghost" size="sm" onClick={() => navigate("/bookings")}>
                   View All <ArrowRight className="ml-2 h-4 w-4"/>

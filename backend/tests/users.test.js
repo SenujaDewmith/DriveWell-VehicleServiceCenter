@@ -2,8 +2,9 @@ const request = require("supertest");
 const jwt = require("jsonwebtoken");
 const app = require("./helpers/app");
 const prisma = require("../src/lib/prisma");
-const { resetTransactionalTables } = require("./helpers/db");
+const { resetTransactionalTables, seedPackage } = require("./helpers/db");
 const { createUser } = require("./helpers/auth");
+const { createVehicle, createReservation } = require("./helpers/booking");
 
 // Not exported by helpers/auth.js — pulled straight from tests/setup/seedReferenceData.js,
 // which is the fixed manager account resetTransactionalTables() recreates every test.
@@ -231,14 +232,66 @@ describe("DELETE /api/users/staff/:id", () => {
     expect(userRow).toBeNull();
   });
 
-  test("rejects deleting an already-active staff account with 400", async () => {
-    const target = await createUser("Cashier", { email: "active.notdeletable@test.local" });
+  test("manager can permanently delete an active staff account, preserving their name on prior invoices/service records/assignments", async () => {
+    const target = await createUser("Cashier", { email: "active.deletable@test.local", full_name: "Soon Gone" });
+    const agent = await managerAgent();
+
+    const customer = await createUser("Customer", { email: "history.customer@test.local" });
+    const vehicle = await createVehicle(customer.user_id);
+    const pkg = await seedPackage();
+    const reservation = await createReservation({ customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id });
+
+    const record = await prisma.serviceRecord.create({
+      data: { reservation_id: reservation.reservation_id, supervisor_id: target.user_id, supervisor_name: "Soon Gone" },
+    });
+    const assignment = await prisma.serviceStaffAssignment.create({
+      data: { record_id: record.record_id, staff_id: target.user_id, staff_name: "Soon Gone" },
+    });
+    const invoice = await prisma.invoice.create({
+      data: {
+        reservation_id: reservation.reservation_id, cashier_id: target.user_id, cashier_name: "Soon Gone",
+        base_amount: 5000, total_amount: 5000,
+      },
+    });
+
+    const res = await agent.delete(`/api/users/staff/${target.user_id}`).set("X-Portal", "staff");
+    expect(res.status).toBe(200);
+
+    const userRow = await prisma.user.findUnique({ where: { user_id: target.user_id } });
+    expect(userRow).toBeNull();
+
+    const recordRow = await prisma.serviceRecord.findUnique({ where: { record_id: record.record_id } });
+    expect(recordRow.supervisor_id).toBeNull();
+    expect(recordRow.supervisor_name).toBe("Soon Gone");
+
+    const assignmentRow = await prisma.serviceStaffAssignment.findUnique({ where: { assignment_id: assignment.assignment_id } });
+    expect(assignmentRow.staff_id).toBeNull();
+    expect(assignmentRow.staff_name).toBe("Soon Gone");
+
+    const invoiceRow = await prisma.invoice.findUnique({ where: { invoice_id: invoice.invoice_id } });
+    expect(invoiceRow.cashier_id).toBeNull();
+    expect(invoiceRow.cashier_name).toBe("Soon Gone");
+  });
+
+  test("manager can permanently delete an inactive staff account", async () => {
+    const target = await createUser("Cashier", { email: "inactive.deletable@test.local", account_status: "inactive" });
     const agent = await managerAgent();
 
     const res = await agent.delete(`/api/users/staff/${target.user_id}`).set("X-Portal", "staff");
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
 
     const userRow = await prisma.user.findUnique({ where: { user_id: target.user_id } });
+    expect(userRow).toBeNull();
+  });
+
+  test("a manager cannot delete their own account", async () => {
+    const agent = await managerAgent();
+    const manager = await prisma.user.findUnique({ where: { email: SEEDED_MANAGER_EMAIL } });
+
+    const res = await agent.delete(`/api/users/staff/${manager.user_id}`).set("X-Portal", "staff");
+    expect(res.status).toBe(400);
+
+    const userRow = await prisma.user.findUnique({ where: { user_id: manager.user_id } });
     expect(userRow).not.toBeNull();
   });
 

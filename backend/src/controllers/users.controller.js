@@ -118,22 +118,29 @@ const createStaff = async (req, res) => {
 const deleteStaff = async (req, res) => {
   const { id } = req.params;
 
+  // Deleting your own account while acting on it would lock you out with no
+  // one left to undo it — same guard admin panels commonly apply.
+  if (parseInt(id) === req.user.user_id)
+    return res.status(400).json({ message: "You cannot delete your own account" });
+
   try {
     const existing = await prisma.user.findFirst({
       where: { user_id: parseInt(id), role_id: { in: STAFF_ROLES } },
       select: { user_id: true, account_status: true },
     });
     if (!existing) return res.status(404).json({ message: "Staff member not found" });
-    // Only a pending invite (never logged in, no work linked to the account
-    // yet) can be deleted this way — an active/inactive staff member's history
-    // should be preserved, not removed, so this stays out of scope here.
-    if (existing.account_status !== "pending")
-      return res.status(400).json({ message: "Only a pending (not yet activated) account can be deleted this way" });
 
+    // Safe to hard-delete regardless of status: ServiceRecord.supervisor_id,
+    // ServiceStaffAssignment.staff_id, and Invoice.cashier_id all go null on
+    // delete (not blocked), and each of those tables keeps a name snapshot
+    // taken at the time the record was created — so past invoices, service
+    // records, and job assignments keep reading correctly even though the
+    // account and its login access are gone for good.
     await prisma.user.delete({ where: { user_id: parseInt(id) } });
 
-    logger.info(`Pending staff invite deleted — user_id: ${id}`);
-    res.status(200).json({ message: "Pending invite deleted" });
+    logger.info(`Staff account permanently deleted — user_id: ${id}`);
+    logActivity(prisma, { user_id: req.user.user_id, action: "USER_DELETED", entity_type: "user", entity_id: parseInt(id) });
+    res.status(200).json({ message: "Staff account permanently deleted" });
   } catch (error) {
     logger.error(`deleteStaff failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });

@@ -160,8 +160,8 @@ router.put("/staff/:id", managerOnly, updateStaff);
  * @swagger
  * /api/users/staff/{id}:
  *   delete:
- *     summary: Delete a pending (not yet activated) staff invite (Manager only)
- *     description: Only accounts still in "pending" status (invite email not yet used) can be deleted this way. Recreate the account afterward to send a fresh invite.
+ *     summary: Permanently delete a staff account, of any status (Manager only)
+ *     description: Irreversible — deletes the account and revokes login access for good. Past invoices, service records, and job assignments are preserved with a name snapshot taken at the time they were created, so historical data keeps reading correctly. A manager cannot delete their own account.
  *     tags: [Users]
  *     security:
  *       - cookieAuth: []
@@ -171,8 +171,8 @@ router.put("/staff/:id", managerOnly, updateStaff);
  *         required: true
  *         schema: { type: integer }
  *     responses:
- *       200: { description: Pending invite deleted }
- *       400: { description: Account is not pending }
+ *       200: { description: Staff account permanently deleted }
+ *       400: { description: Attempted to delete your own account }
  *       403: { description: Manager only }
  *       404: { description: Staff not found }
  *       500: { description: Server error }

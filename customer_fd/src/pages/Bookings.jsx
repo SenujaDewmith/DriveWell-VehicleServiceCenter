@@ -314,7 +314,7 @@ export default function Bookings() {
           <Loader2 className="h-8 w-8 animate-spin text-cta"/>
         </div>) : (<Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6">
-            <TabsTrigger value="active">Active Service ({activeServiceBookings.length})</TabsTrigger>
+            <TabsTrigger value="active">Active Services ({activeServiceBookings.length})</TabsTrigger>
             <TabsTrigger value="upcoming">Upcoming ({upcomingBookings.length})</TabsTrigger>
             <TabsTrigger value="past">Past ({pastBookings.length})</TabsTrigger>
           </TabsList>
@@ -323,7 +323,7 @@ export default function Bookings() {
             {activeServiceBookings.length === 0 ? (<Card className="text-center py-12">
                 <CardContent>
                   <Wrench className="h-16 w-16 text-muted-foreground mx-auto mb-4"/>
-                  <h3 className="text-xl font-semibold mb-2">No active service</h3>
+                  <h3 className="text-xl font-semibold mb-2">No active services</h3>
                   <p className="text-muted-foreground">Nothing of yours is currently at the shop</p>
                 </CardContent>
               </Card>) : (<div className="space-y-4">

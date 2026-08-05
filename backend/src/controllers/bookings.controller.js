@@ -83,6 +83,20 @@ const BOOKING_DETAIL_INCLUDE = {
       started_at: true,
       completed_at: true,
       items: { select: { description: true, quantity: true } },
+      supervisor_name: true,
+      // Live-joined alongside the name snapshot (same pattern as service-records.controller.js's
+      // getServiceRecord) — the snapshot exists so history survives account deletion, but while
+      // the account is still around the current name should win over a stale snapshot.
+      supervisor: { select: { staff: { select: { full_name: true } } } },
+      assignments: {
+        select: {
+          assignment_id: true,
+          staff_id: true,
+          staff_name: true,
+          work_note: true,
+          staff: { select: { staff: { select: { full_name: true } } } },
+        },
+      },
     },
   },
   invoice: { include: { items: true } },
@@ -91,7 +105,7 @@ const BOOKING_DETAIL_INCLUDE = {
 // `includeServiceItems` gates the supervisor's itemized "additional work found" notes out
 // of the customer payload — same policy as invoices.controller.js's includeSupervisorNotes:
 // remarks are customer-facing, but the structured item list stays internal/staff-only.
-const flattenBookingDetail = (r, { includeServiceItems = false, hideCustomerIdentity = false, hidePaymentStatus = false } = {}) => ({
+const flattenBookingDetail = (r, { includeServiceItems = false, includeStaffAssignments = false, hideCustomerIdentity = false, hidePaymentStatus = false } = {}) => ({
   ...flattenBooking(r, { hideCustomerIdentity, hidePaymentStatus }),
   service_record: r.service_record
     ? {
@@ -106,6 +120,18 @@ const flattenBookingDetail = (r, { includeServiceItems = false, hideCustomerIden
         completed_at: r.service_record.completed_at,
         ...(includeServiceItems && {
           items: r.service_record.items.map((i) => ({ description: i.description, quantity: i.quantity })),
+        }),
+        // Who worked on the vehicle — decision-support for Manager/Supervisor only
+        // (same reasoning as includeServiceItems: internal staffing detail, not
+        // something a customer or the billing-only Cashier role needs to see).
+        ...(includeStaffAssignments && {
+          supervisor_name: r.service_record.supervisor?.staff?.full_name ?? r.service_record.supervisor_name,
+          assignments: r.service_record.assignments.map((a) => ({
+            assignment_id: a.assignment_id,
+            staff_id: a.staff_id,
+            staff_name: a.staff?.staff?.full_name ?? a.staff_name,
+            work_note: a.work_note,
+          })),
         }),
       }
     : null,
@@ -235,6 +261,7 @@ const getBooking = async (req, res) => {
       booking: {
         ...flattenBookingDetail(row, {
           includeServiceItems: role_id !== CUSTOMER_ROLE,
+          includeStaffAssignments: role_id === MANAGER_ROLE || role_id === SUPERVISOR_ROLE,
           hideCustomerIdentity,
           hidePaymentStatus: role_id === STAFF_ROLE,
         }),

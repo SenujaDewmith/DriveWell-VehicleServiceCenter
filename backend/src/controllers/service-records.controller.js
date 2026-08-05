@@ -79,7 +79,10 @@ const getServiceRecord = async (req, res) => {
 
     const flatRecord = {
       ...record,
-      supervisor_name: record.supervisor?.staff?.full_name ?? null,
+      // Prefer the live join (reflects a name change while the account still
+      // exists); fall back to the snapshot taken at record-creation time once
+      // the supervisor's account has been deleted.
+      supervisor_name: record.supervisor?.staff?.full_name ?? record.supervisor_name ?? null,
       supervisor: undefined,
       items: record.items.map((i) => ({
         item_id: i.item_id,
@@ -98,7 +101,7 @@ const getServiceRecord = async (req, res) => {
         record_id: a.record_id,
         staff_id: a.staff_id,
         work_note: a.work_note,
-        staff_name: a.staff?.staff?.full_name ?? null,
+        staff_name: a.staff?.staff?.full_name ?? a.staff_name ?? null,
       }));
 
     res.status(200).json({ record: flatRecord, assignments });
@@ -137,10 +140,13 @@ const createServiceRecord = async (req, res) => {
         const err = new Error("Service record already exists for this booking"); err.status = 400; throw err;
       }
 
+      const supervisor = await tx.staff.findUnique({ where: { user_id }, select: { full_name: true } });
+
       const created = await tx.serviceRecord.create({
         data: {
           reservation_id: parseInt(booking_id),
           supervisor_id: user_id,
+          supervisor_name: supervisor?.full_name ?? null,
           remarks: remarks || null,
           started_at: new Date(),
         },
@@ -304,8 +310,18 @@ const assignStaff = async (req, res) => {
     if (existingCount >= MAX_STAFF_PER_RECORD)
       return res.status(400).json({ message: `A service can have at most ${MAX_STAFF_PER_RECORD} staff contributors` });
 
+    const staffMember = await prisma.staff.findUnique({
+      where: { user_id: parseInt(staff_id) },
+      select: { full_name: true },
+    });
+
     const assignment = await prisma.serviceStaffAssignment.create({
-      data: { record_id: record.record_id, staff_id: parseInt(staff_id), work_note: work_note || null },
+      data: {
+        record_id: record.record_id,
+        staff_id: parseInt(staff_id),
+        staff_name: staffMember?.full_name ?? null,
+        work_note: work_note || null,
+      },
       include: { staff: { select: { staff: { select: { full_name: true } } } } },
     });
     logActivity(prisma, { user_id: req.user.user_id, action: "STAFF_ASSIGNED", entity_type: "service_record", entity_id: record.record_id });
@@ -316,7 +332,7 @@ const assignStaff = async (req, res) => {
         record_id: assignment.record_id,
         staff_id: assignment.staff_id,
         work_note: assignment.work_note,
-        staff_name: assignment.staff?.staff?.full_name ?? null,
+        staff_name: assignment.staff?.staff?.full_name ?? assignment.staff_name ?? null,
       },
     });
   } catch (error) {
@@ -335,10 +351,19 @@ const updateAssignment = async (req, res) => {
   try {
     await assertRecordEditableByAssignmentId(parseInt(assignment_id));
 
+    let newStaffName;
+    if (staff_id !== undefined) {
+      const staffMember = await prisma.staff.findUnique({
+        where: { user_id: parseInt(staff_id) },
+        select: { full_name: true },
+      });
+      newStaffName = staffMember?.full_name ?? null;
+    }
+
     const assignment = await prisma.serviceStaffAssignment.update({
       where: { assignment_id: parseInt(assignment_id) },
       data: {
-        ...(staff_id !== undefined && { staff_id: parseInt(staff_id) }),
+        ...(staff_id !== undefined && { staff_id: parseInt(staff_id), staff_name: newStaffName }),
         ...(work_note !== undefined && { work_note: work_note || null }),
       },
       include: { staff: { select: { staff: { select: { full_name: true } } } } },
@@ -350,7 +375,7 @@ const updateAssignment = async (req, res) => {
         record_id: assignment.record_id,
         staff_id: assignment.staff_id,
         work_note: assignment.work_note,
-        staff_name: assignment.staff?.staff?.full_name ?? null,
+        staff_name: assignment.staff?.staff?.full_name ?? assignment.staff_name ?? null,
       },
     });
   } catch (error) {

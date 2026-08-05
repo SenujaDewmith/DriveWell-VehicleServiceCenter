@@ -3,7 +3,8 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { StatusBadge, PaymentBadge } from "@/components/manager/ManagerOverview";
 import { InvoiceViewModal } from "@/components/invoices/InvoiceView";
-import { Eye, X, AlertTriangle } from "lucide-react";
+import { BookingDetailModal } from "@/components/bookings/BookingDetailModal";
+import { Eye, FileText, X, AlertTriangle } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,6 +69,7 @@ export function BookingsPage() {
   // without a separate fetch per row.
   const [invoicesByReservation, setInvoicesByReservation] = useState({});
   const [viewInvoice, setViewInvoice] = useState(null);
+  const [viewDetailsId, setViewDetailsId] = useState(null);
   const [actionError, setActionError] = useState("");
   const [markingId, setMarkingId] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
@@ -236,6 +238,7 @@ export function BookingsPage() {
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Package</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Status</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Payment</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Details</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Invoice</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Actions</th>
               </tr>
@@ -284,6 +287,14 @@ export function BookingsPage() {
                     </td>
                     <td className="py-2 px-3">
                       <PaymentBadge paymentStatus={invoice?.payment_status} />
+                    </td>
+                    <td className="py-2 px-3">
+                      <button
+                        onClick={() => setViewDetailsId(b.reservation_id)}
+                        className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                      >
+                        <FileText className="h-3 w-3" /> Details
+                      </button>
                     </td>
                     <td className="py-2 px-3">
                       {invoice ? (
@@ -368,7 +379,7 @@ export function BookingsPage() {
               })}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={11} className="py-8 text-center text-muted-foreground">
                     No bookings match filter
                   </td>
                 </tr>
@@ -380,6 +391,18 @@ export function BookingsPage() {
 
       {viewInvoice && (
         <InvoiceViewModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} />
+      )}
+
+      {viewDetailsId && (
+        <BookingDetailModal
+          reservationId={viewDetailsId}
+          invoice={invoicesByReservation[viewDetailsId]}
+          onClose={() => setViewDetailsId(null)}
+          onViewInvoice={(inv) => {
+            setViewDetailsId(null);
+            setViewInvoice(inv);
+          }}
+        />
       )}
     </div>
   );

@@ -28,7 +28,7 @@ export function isUpcomingBooking(booking) {
     const hoursUntil = hoursUntilAppointment(booking);
     return hoursUntil === null || hoursUntil >= 0;
 }
-// Single source of truth for which of the three booking-list tabs (Active Service / Upcoming
+// Single source of truth for which of the three booking-list tabs (Active Services / Upcoming
 // / Past) a booking belongs in — shared with BookingDetails so "Back to Bookings" can return
 // to the tab that actually contains this booking, instead of always landing on Upcoming.
 // Anything neither active nor upcoming (Collected, Cancelled, No-show, or a "Booked"
