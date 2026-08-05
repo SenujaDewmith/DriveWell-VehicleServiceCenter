@@ -1,6 +1,6 @@
 import { z } from "zod";
 export const loginSchema = z.object({
-  email: z.string().trim().email("Invalid email address"),
+  email: z.string().trim().toLowerCase().email("Invalid email address"),
   password: z.string().min(6, "Please enter a valid password"),
 });
 export const passwordSchema = z
@@ -15,10 +15,15 @@ export const passwordSchema = z
     "Password must contain at least one special character",
   )
   .refine((value) => !/\s/.test(value), "Password must not contain spaces");
+export const nameSchema = z
+  .string()
+  .trim()
+  .min(2, "Name must be at least 2 characters")
+  .regex(/^[A-Za-z]+(\s[A-Za-z]+)*$/, "Name can only contain letters and spaces");
 export const registerSchema = z
   .object({
-    name: z.string().min(2, "Name must be at least 2 characters"),
-    email: z.string().trim().email("Invalid email address"),
+    name: nameSchema,
+    email: z.string().trim().toLowerCase().email("Invalid email address"),
     password: passwordSchema,
     confirmPassword: z.string(),
   })

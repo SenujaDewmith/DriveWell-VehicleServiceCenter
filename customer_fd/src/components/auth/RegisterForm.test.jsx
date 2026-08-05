@@ -29,7 +29,7 @@ function setup(register = vi.fn()) {
 async function fillValidForm(user, password = VALID_PASSWORD) {
     await user.type(screen.getByLabelText(/full name/i), "John Doe");
     await user.type(screen.getByLabelText(/email/i), "john@example.com");
-    await user.type(screen.getByLabelText(/^password$/i), password);
+    await user.type(screen.getByLabelText(/^password/i), password);
     await user.type(screen.getByLabelText(/confirm password/i), password);
 }
 describe("RegisterForm", () => {
@@ -40,7 +40,7 @@ describe("RegisterForm", () => {
         setup();
         expect(screen.getByLabelText(/full name/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
-        expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/^password/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/confirm password/i)).toBeInTheDocument();
     });
     it("shows a validation error for an invalid email", async () => {
@@ -59,7 +59,7 @@ describe("RegisterForm", () => {
         const { register } = setup();
         await user.type(screen.getByLabelText(/full name/i), "John Doe");
         await user.type(screen.getByLabelText(/email/i), "john@example.com");
-        await user.type(screen.getByLabelText(/^password$/i), "weak");
+        await user.type(screen.getByLabelText(/^password/i), "weak");
         await user.type(screen.getByLabelText(/confirm password/i), "weak");
         await user.click(screen.getByRole("button", { name: /create account/i }));
         expect(await screen.findByText(/password must be at least 8 characters/i)).toBeInTheDocument();
@@ -70,7 +70,7 @@ describe("RegisterForm", () => {
         setup();
         await user.type(screen.getByLabelText(/full name/i), "John Doe");
         await user.type(screen.getByLabelText(/email/i), "john@example.com");
-        await user.type(screen.getByLabelText(/^password$/i), VALID_PASSWORD);
+        await user.type(screen.getByLabelText(/^password/i), VALID_PASSWORD);
         await user.type(screen.getByLabelText(/confirm password/i), "Different1!");
         await user.click(screen.getByRole("button", { name: /create account/i }));
         expect(await screen.findByText(/passwords do not match/i)).toBeInTheDocument();
@@ -100,6 +100,28 @@ describe("RegisterForm", () => {
         await waitFor(() => {
             expect(toast.error).toHaveBeenCalledWith("Email already in use");
         });
+    });
+    it("strips non-letter characters as they're typed into the name field", async () => {
+        const user = userEvent.setup();
+        setup();
+        const nameInput = screen.getByLabelText(/full name/i);
+        await user.type(nameInput, "J0hn D03! Doe");
+        expect(nameInput).toHaveValue("Jhn D Doe");
+    });
+    it("strips spaces as they're typed into the email and password fields", async () => {
+        const user = userEvent.setup();
+        setup();
+        const emailInput = screen.getByLabelText(/email/i);
+        const passwordInput = screen.getByLabelText(/^password/i);
+        await user.type(emailInput, "john doe@example.com");
+        await user.type(passwordInput, "Str0ng !Pass");
+        expect(emailInput).toHaveValue("johndoe@example.com");
+        expect(passwordInput).toHaveValue("Str0ng!Pass");
+    });
+    it("shows required indicators on every field label", () => {
+        setup();
+        const asterisks = screen.getAllByText("*");
+        expect(asterisks.length).toBe(4);
     });
     it("disables the submit button while submitting", async () => {
         const user = userEvent.setup();

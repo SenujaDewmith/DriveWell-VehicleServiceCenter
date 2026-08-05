@@ -18,6 +18,19 @@ export function LoginForm({ onSuccess, onSwitchToRegister }) {
     const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
         resolver: zodResolver(loginSchema),
     });
+    const emailField = register("email");
+    const stripSpaces = (e) => {
+        e.target.value = e.target.value.replace(/\s/g, "");
+        emailField.onChange(e);
+    };
+    const blockSpaceKey = (e) => {
+        if (e.key === " ") e.preventDefault();
+    };
+    const passwordField = register("password");
+    const stripPasswordSpaces = (e) => {
+        e.target.value = e.target.value.replace(/\s/g, "");
+        passwordField.onChange(e);
+    };
     const onSubmit = async (data) => {
         try {
             await login(data.email, data.password, rememberMe);
@@ -31,19 +44,19 @@ export function LoginForm({ onSuccess, onSwitchToRegister }) {
     return (<div>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" placeholder="john@example.com" autoComplete="email" autoFocus {...register("email")}/>
-          {errors.email && (<p className="text-sm text-destructive">{errors.email.message}</p>)}
+          <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
+          <Input id="email" type="email" placeholder="john@example.com" autoComplete="email" autoFocus required aria-required="true" aria-invalid={!!errors.email} {...emailField} onChange={stripSpaces} onKeyDown={blockSpaceKey}/>
+          {errors.email && (<p className="text-sm text-destructive" role="alert">{errors.email.message}</p>)}
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">Password <span className="text-destructive">*</span></Label>
           <div className="relative">
-            <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••" autoComplete="current-password" className="pr-10" {...register("password")}/>
+            <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••" autoComplete="current-password" className="pr-10" required aria-required="true" aria-invalid={!!errors.password} {...passwordField} onChange={stripPasswordSpaces} onKeyDown={blockSpaceKey}/>
             <button type="button" onClick={() => setShowPassword((prev) => !prev)} className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground" aria-label={showPassword ? "Hide password" : "Show password"} tabIndex={-1}>
               {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
             </button>
           </div>
-          {errors.password && (<p className="text-sm text-destructive">{errors.password.message}</p>)}
+          {errors.password && (<p className="text-sm text-destructive" role="alert">{errors.password.message}</p>)}
         </div>
         <div className="flex items-center justify-between text-sm">
           <label className="flex items-center gap-2 cursor-pointer">

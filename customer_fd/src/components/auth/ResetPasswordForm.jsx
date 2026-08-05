@@ -21,6 +21,15 @@ export function ResetPasswordForm() {
         resolver: zodResolver(resetPasswordSchema),
     });
     const newPassword = watch("newPassword", "");
+    const newPasswordField = register("newPassword");
+    const confirmNewPasswordField = register("confirmNewPassword");
+    const stripSpaces = (field) => (e) => {
+        e.target.value = e.target.value.replace(/\s/g, "");
+        field.onChange(e);
+    };
+    const blockSpaceKey = (e) => {
+        if (e.key === " ") e.preventDefault();
+    };
     const onSubmit = async (data) => {
         try {
             await authService.resetPassword(token, data.newPassword);
@@ -44,25 +53,25 @@ export function ResetPasswordForm() {
     }
     return (<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="newPassword">New Password</Label>
+        <Label htmlFor="newPassword">New Password <span className="text-destructive">*</span></Label>
         <div className="relative">
-          <Input id="newPassword" type={showPassword ? "text" : "password"} placeholder="••••••••" autoComplete="new-password" autoFocus className="pr-10" {...register("newPassword")}/>
+          <Input id="newPassword" type={showPassword ? "text" : "password"} placeholder="••••••••" autoComplete="new-password" autoFocus className="pr-10" required aria-required="true" aria-invalid={!!errors.newPassword} {...newPasswordField} onChange={stripSpaces(newPasswordField)} onKeyDown={blockSpaceKey}/>
           <button type="button" onClick={() => setShowPassword((prev) => !prev)} className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground" aria-label={showPassword ? "Hide password" : "Show password"} tabIndex={-1}>
             {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
           </button>
         </div>
         <PasswordHint password={newPassword}/>
-        {errors.newPassword && (<p className="text-sm text-destructive">{errors.newPassword.message}</p>)}
+        {errors.newPassword && (<p className="text-sm text-destructive" role="alert">{errors.newPassword.message}</p>)}
       </div>
       <div className="space-y-2">
-        <Label htmlFor="confirmNewPassword">Confirm New Password</Label>
+        <Label htmlFor="confirmNewPassword">Confirm New Password <span className="text-destructive">*</span></Label>
         <div className="relative">
-          <Input id="confirmNewPassword" type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" autoComplete="new-password" className="pr-10" {...register("confirmNewPassword")}/>
+          <Input id="confirmNewPassword" type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" autoComplete="new-password" className="pr-10" required aria-required="true" aria-invalid={!!errors.confirmNewPassword} {...confirmNewPasswordField} onChange={stripSpaces(confirmNewPasswordField)} onKeyDown={blockSpaceKey}/>
           <button type="button" onClick={() => setShowConfirmPassword((prev) => !prev)} className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground" aria-label={showConfirmPassword ? "Hide password" : "Show password"} tabIndex={-1}>
             {showConfirmPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
           </button>
         </div>
-        {errors.confirmNewPassword && (<p className="text-sm text-destructive">{errors.confirmNewPassword.message}</p>)}
+        {errors.confirmNewPassword && (<p className="text-sm text-destructive" role="alert">{errors.confirmNewPassword.message}</p>)}
       </div>
       <Button type="submit" className="w-full bg-cta text-cta-foreground hover:bg-cta/90" disabled={isSubmitting}>
         {isSubmitting ? "Resetting..." : "Reset Password"}

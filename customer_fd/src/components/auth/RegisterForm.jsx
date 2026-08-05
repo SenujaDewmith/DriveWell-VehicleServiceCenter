@@ -18,6 +18,21 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }) {
         resolver: zodResolver(registerSchema),
     });
     const password = watch("password", "");
+    const nameField = register("name");
+    const emailField = register("email");
+    const passwordField = register("password");
+    const confirmPasswordField = register("confirmPassword");
+    const stripInvalidName = (e) => {
+        e.target.value = e.target.value.replace(/[^A-Za-z\s]/g, "");
+        nameField.onChange(e);
+    };
+    const stripSpaces = (field) => (e) => {
+        e.target.value = e.target.value.replace(/\s/g, "");
+        field.onChange(e);
+    };
+    const blockSpaceKey = (e) => {
+        if (e.key === " ") e.preventDefault();
+    };
     const onSubmit = async (data) => {
         try {
             await registerUser({ name: data.name, email: data.email, password: data.password });
@@ -31,35 +46,35 @@ export function RegisterForm({ onSuccess, onSwitchToLogin }) {
     return (<div>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="name">Full Name</Label>
-          <Input id="name" type="text" placeholder="John Doe" autoComplete="name" autoFocus {...register("name")}/>
-          {errors.name && (<p className="text-sm text-destructive">{errors.name.message}</p>)}
+          <Label htmlFor="name">Full Name <span className="text-destructive">*</span></Label>
+          <Input id="name" type="text" placeholder="John Doe" autoComplete="name" autoFocus required aria-required="true" aria-invalid={!!errors.name} {...nameField} onChange={stripInvalidName}/>
+          {errors.name && (<p className="text-sm text-destructive" role="alert">{errors.name.message}</p>)}
         </div>
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" placeholder="john@example.com" autoComplete="email" {...register("email")}/>
-          {errors.email && (<p className="text-sm text-destructive">{errors.email.message}</p>)}
+          <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
+          <Input id="email" type="email" placeholder="john@example.com" autoComplete="email" required aria-required="true" aria-invalid={!!errors.email} {...emailField} onChange={stripSpaces(emailField)} onKeyDown={blockSpaceKey}/>
+          {errors.email && (<p className="text-sm text-destructive" role="alert">{errors.email.message}</p>)}
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">Password <span className="text-destructive">*</span></Label>
           <div className="relative">
-            <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••" autoComplete="new-password" className="pr-10" {...register("password")}/>
+            <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••" autoComplete="new-password" className="pr-10" required aria-required="true" aria-invalid={!!errors.password} {...passwordField} onChange={stripSpaces(passwordField)}/>
             <button type="button" onClick={() => setShowPassword((prev) => !prev)} className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground" aria-label={showPassword ? "Hide password" : "Show password"} tabIndex={-1}>
               {showPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
             </button>
           </div>
           <PasswordHint password={password}/>
-          {errors.password && (<p className="text-sm text-destructive">{errors.password.message}</p>)}
+          {errors.password && (<p className="text-sm text-destructive" role="alert">{errors.password.message}</p>)}
         </div>
         <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Confirm Password</Label>
+          <Label htmlFor="confirmPassword">Confirm Password <span className="text-destructive">*</span></Label>
           <div className="relative">
-            <Input id="confirmPassword" type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" autoComplete="new-password" className="pr-10" {...register("confirmPassword")}/>
+            <Input id="confirmPassword" type={showConfirmPassword ? "text" : "password"} placeholder="••••••••" autoComplete="new-password" className="pr-10" required aria-required="true" aria-invalid={!!errors.confirmPassword} {...confirmPasswordField} onChange={stripSpaces(confirmPasswordField)}/>
             <button type="button" onClick={() => setShowConfirmPassword((prev) => !prev)} className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground" aria-label={showConfirmPassword ? "Hide password" : "Show password"} tabIndex={-1}>
               {showConfirmPassword ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
             </button>
           </div>
-          {errors.confirmPassword && (<p className="text-sm text-destructive">{errors.confirmPassword.message}</p>)}
+          {errors.confirmPassword && (<p className="text-sm text-destructive" role="alert">{errors.confirmPassword.message}</p>)}
         </div>
         <Button type="submit" className="w-full bg-cta text-cta-foreground hover:bg-cta/90" disabled={isSubmitting}>
           {isSubmitting ? "Creating account..." : "Create Account"}
