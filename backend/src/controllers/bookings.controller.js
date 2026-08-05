@@ -1,3 +1,4 @@
+const { Prisma } = require("@prisma/client");
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { fmtDate, fmtTime } = require("../lib/format");
@@ -338,6 +339,28 @@ const createBooking = async (req, res) => {
         const err = new Error("Selected time overlaps a blocked/unavailable period"); err.status = 400; throw err;
       }
 
+      // A vehicle can only be in one place at a time — checked independently of package
+      // capacity below, since two different packages (or the same package with room to
+      // spare) would otherwise each "have capacity" while still double-booking the vehicle.
+      const vehicleConflicts = await tx.reservation.findMany({
+        where: {
+          vehicle_id: parseInt(vehicle_id),
+          service_date: new Date(service_date),
+          status: { notIn: ["Cancelled", "No-show"] },
+        },
+        select: { start_time: true, end_time: true, booking_ref: true },
+      });
+      const conflict = vehicleConflicts.find((r) =>
+        rangesOverlap(startMin, endMin, dateColToMinutes(r.start_time), dateColToMinutes(r.end_time)),
+      );
+      if (conflict) {
+        const err = new Error(
+          `This vehicle already has a booking at ${minutesToHHMM(dateColToMinutes(conflict.start_time))} on this date (Ref: ${conflict.booking_ref}). Please choose a different time or cancel the existing booking first.`,
+        );
+        err.status = 409;
+        throw err;
+      }
+
       const existing = await tx.reservation.findMany({
         where: {
           service_date: new Date(service_date),
@@ -379,7 +402,7 @@ const createBooking = async (req, res) => {
         startStr: minutesToHHMM(startMin),
         endStr: minutesToHHMM(endMin),
       };
-    });
+    }, { isolation: Prisma.TransactionIsolationLevel.Serializable });
 
     logger.info(`Booking created — ref: ${booking_ref}, user_id: ${user_id}`);
     logActivity(prisma, { user_id, action: "BOOKING_CREATED", entity_type: "reservation", entity_id: reservation_id });
@@ -401,6 +424,12 @@ const createBooking = async (req, res) => {
     res.status(201).json({ message: "Booking created", booking_ref, reservation_id });
   } catch (error) {
     if (error.status) return res.status(error.status).json({ message: error.message });
+    // P2034: Prisma's serializable-transaction conflict — two requests raced for the same
+    // vehicle/slot and Postgres rolled one back. From the customer's perspective this is the
+    // same "someone got there first" conflict as the explicit vehicle/capacity checks above.
+    if (error.code === "P2034") {
+      return res.status(409).json({ message: "This slot was just booked — please pick another time and try again" });
+    }
     logger.error(`createBooking failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
@@ -569,7 +598,7 @@ const releaseVehicle = async (req, res) => {
 // into back-to-back windows sized to the package's own duration, with each window's
 // capacity coming from the package's max_capacity (concurrent bookings of that package).
 const getAvailableSlots = async (req, res) => {
-  const { date, package_id } = req.query;
+  const { date, package_id, vehicle_id } = req.query;
   if (!date || !package_id)
     return res.status(400).json({ message: "date and package_id query params are required" });
 
@@ -624,14 +653,35 @@ const getAvailableSlots = async (req, res) => {
       end: dateColToMinutes(r.end_time),
     }));
 
+    // When a vehicle is specified, also flag windows where THAT vehicle already has an
+    // active booking (any package) — distinct from shop-wide package capacity, since a
+    // slot can have room to spare and still be a double-booking for this specific vehicle.
+    let vehicleRanges = [];
+    if (vehicle_id) {
+      const vehicleReservations = await prisma.reservation.findMany({
+        where: {
+          vehicle_id: parseInt(vehicle_id),
+          service_date: new Date(date),
+          status: { notIn: ["Cancelled", "No-show"] },
+        },
+        select: { start_time: true, end_time: true },
+      });
+      vehicleRanges = vehicleReservations.map((r) => ({
+        start: dateColToMinutes(r.start_time),
+        end: dateColToMinutes(r.end_time),
+      }));
+    }
+
     const slots = rawWindows.map((w) => {
       const booked_count = existingRanges.filter((r) => rangesOverlap(w.start, w.end, r.start, r.end)).length;
+      const vehicle_conflict = vehicleRanges.some((r) => rangesOverlap(w.start, w.end, r.start, r.end));
       return {
         start_time: minutesToHHMM(w.start),
         end_time: minutesToHHMM(w.end),
         capacity: pkg.max_capacity,
         booked_count,
-        remaining: Math.max(pkg.max_capacity - booked_count, 0),
+        remaining: vehicle_conflict ? 0 : Math.max(pkg.max_capacity - booked_count, 0),
+        ...(vehicle_id && { vehicle_conflict }),
       };
     });
 

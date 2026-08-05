@@ -54,6 +54,39 @@ describe("GET /api/bookings/available-slots", () => {
     expect(res.status).toBe(401);
   });
 
+  test("marks a slot vehicle_conflict when the given vehicle already has a booking there, without affecting other vehicles", async () => {
+    const pkg = await seedPackage({ estimated_duration: 60, max_capacity: 3 });
+    const { customer, agent } = await customerAgent();
+    const vehicle = await createVehicle(customer.user_id);
+    const date = nextWorkingDate();
+
+    await withPortal(agent, "customer")("post", "/api/bookings").send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkg.package_id,
+      service_date: date,
+      start_time: "09:00",
+      terms_accepted: true,
+      terms_version: "1.0",
+    });
+
+    const ownRes = await withPortal(agent, "customer")(
+      "get",
+      `/api/bookings/available-slots?date=${date}&package_id=${pkg.package_id}&vehicle_id=${vehicle.vehicle_id}`,
+    );
+    const ownSlot = ownRes.body.slots.find((s) => s.start_time === "09:00");
+    expect(ownSlot.vehicle_conflict).toBe(true);
+    expect(ownSlot.remaining).toBe(0);
+
+    const otherVehicle = await createVehicle(customer.user_id);
+    const otherRes = await withPortal(agent, "customer")(
+      "get",
+      `/api/bookings/available-slots?date=${date}&package_id=${pkg.package_id}&vehicle_id=${otherVehicle.vehicle_id}`,
+    );
+    const otherSlot = otherRes.body.slots.find((s) => s.start_time === "09:00");
+    expect(otherSlot.vehicle_conflict).toBe(false);
+    expect(otherSlot.remaining).toBeGreaterThan(0);
+  });
+
   test("not a working day returns available:false without slots", async () => {
     const pkg = await seedPackage();
     const { agent } = await customerAgent();
@@ -270,6 +303,90 @@ describe("POST /api/bookings", () => {
     expect(second.status).toBe(201);
     expect(third.status).toBe(400);
     expect(third.body.message).toMatch(/fully booked/i);
+  });
+
+  // Reproduces the reported bug: the same vehicle was booked into multiple overlapping
+  // slots because the only conflict check was per-package capacity, never the vehicle.
+  test("409 when the same vehicle is booked twice for the identical slot (even under package capacity)", async () => {
+    const pkg = await seedPackage({ estimated_duration: 60, max_capacity: 3 });
+    const { customer, agent } = await customerAgent();
+    const vehicle = await createVehicle(customer.user_id);
+    const date = nextWorkingDate();
+
+    const bookingPayload = {
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkg.package_id,
+      service_date: date,
+      start_time: "09:00",
+      terms_accepted: true,
+      terms_version: "1.0",
+    };
+
+    const first = await withPortal(agent, "customer")("post", "/api/bookings").send(bookingPayload);
+    const second = await withPortal(agent, "customer")("post", "/api/bookings").send(bookingPayload);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(409);
+    expect(second.body.message).toMatch(/already has a booking/i);
+  });
+
+  test("409 when the same vehicle overlaps a different package's booking", async () => {
+    const pkgA = await seedPackage({ estimated_duration: 60, max_capacity: 3 });
+    const pkgB = await seedPackage({ estimated_duration: 60, max_capacity: 3 });
+    const { customer, agent } = await customerAgent();
+    const vehicle = await createVehicle(customer.user_id);
+    const date = nextWorkingDate();
+
+    const first = await withPortal(agent, "customer")("post", "/api/bookings").send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkgA.package_id,
+      service_date: date,
+      start_time: "09:00",
+      terms_accepted: true,
+      terms_version: "1.0",
+    });
+    // Different package, same vehicle, overlapping time — each package individually
+    // has capacity to spare, so only a vehicle-level check catches this.
+    const second = await withPortal(agent, "customer")("post", "/api/bookings").send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkgB.package_id,
+      service_date: date,
+      start_time: "09:00",
+      terms_accepted: true,
+      terms_version: "1.0",
+    });
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(409);
+    expect(second.body.message).toMatch(/already has a booking/i);
+  });
+
+  test("allows a different vehicle to book the identical slot the first vehicle used", async () => {
+    const pkg = await seedPackage({ estimated_duration: 60, max_capacity: 3 });
+    const { customer, agent } = await customerAgent();
+    const vehicleA = await createVehicle(customer.user_id);
+    const vehicleB = await createVehicle(customer.user_id);
+    const date = nextWorkingDate();
+
+    const first = await withPortal(agent, "customer")("post", "/api/bookings").send({
+      vehicle_id: vehicleA.vehicle_id,
+      package_id: pkg.package_id,
+      service_date: date,
+      start_time: "09:00",
+      terms_accepted: true,
+      terms_version: "1.0",
+    });
+    const second = await withPortal(agent, "customer")("post", "/api/bookings").send({
+      vehicle_id: vehicleB.vehicle_id,
+      package_id: pkg.package_id,
+      service_date: date,
+      start_time: "09:00",
+      terms_accepted: true,
+      terms_version: "1.0",
+    });
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
   });
 });
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { bookingsService } from "@/services/bookings.service";
 import { toast } from "sonner";
-export function useAvailableSlots(selectedDate, packageId) {
+export function useAvailableSlots(selectedDate, packageId, vehicleId) {
     const [slots, setSlots] = useState([]);
     const [dateAvailable, setDateAvailable] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -10,7 +10,7 @@ export function useAvailableSlots(selectedDate, packageId) {
             return;
         setIsLoading(true);
         bookingsService
-            .getAvailableSlots(selectedDate, packageId)
+            .getAvailableSlots(selectedDate, packageId, vehicleId)
             .then((res) => {
             setDateAvailable(res.available);
             setSlots(res.slots);
@@ -19,6 +19,6 @@ export function useAvailableSlots(selectedDate, packageId) {
         })
             .catch(() => toast.error("Failed to check availability"))
             .finally(() => setIsLoading(false));
-    }, [selectedDate, packageId]);
+    }, [selectedDate, packageId, vehicleId]);
     return { slots, dateAvailable, isLoading };
 }

@@ -15,8 +15,8 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 const STEPS = [
     { number: 1, label: "Package" },
-    { number: 2, label: "Date & Time" },
-    { number: 3, label: "Vehicle" },
+    { number: 2, label: "Vehicle" },
+    { number: 3, label: "Date & Time" },
     { number: 4, label: "Confirm" },
 ];
 export default function BookService() {
@@ -88,7 +88,7 @@ export default function BookService() {
     // Pre-select the package passed via ?package= once its data has loaded (runs once — bails
     // out as soon as a package is selected, whether by this effect or by the user). The user
     // already chose this package from the landing/services page, so skip straight past the
-    // now-redundant package step to Date & Time.
+    // now-redundant package step to Vehicle.
     useEffect(() => {
         if (!preselectedPackage || selectedPackageId || packages.length === 0)
             return;
@@ -98,13 +98,15 @@ export default function BookService() {
             setStep(2);
         }
     }, [preselectedPackage, packages, selectedPackageId]);
-    // Clear any previously-picked slot whenever the date or package changes — covers both
-    // picking a new date and going back to pick a different (differently-timed) package.
+    // Clear any previously-picked slot whenever the date, package, or vehicle changes — covers
+    // picking a new date, going back to pick a different (differently-timed) package, and
+    // switching vehicles (availability is vehicle-specific, so a slot valid for one vehicle
+    // may not be valid for another).
     useEffect(() => {
         setSelectedStartTime(null);
         setSelectedSlotTime("");
-    }, [selectedDate, selectedPackageId]);
-    const { slots, dateAvailable, isLoading: slotsLoading } = useAvailableSlots(selectedDate, selectedPackageId);
+    }, [selectedDate, selectedPackageId, selectedVehicleId]);
+    const { slots, dateAvailable, isLoading: slotsLoading } = useAvailableSlots(selectedDate, selectedPackageId, selectedVehicleId);
     const handleSelectSlot = (slot) => {
         setSelectedStartTime(slot.start_time);
         setSelectedSlotTime(`${fmtTime(slot.start_time)} - ${fmtTime(slot.end_time)}`);
@@ -153,9 +155,9 @@ export default function BookService() {
 
       {step === 1 && (<PackageStep packages={packages} selectedPackageId={selectedPackageId} onSelect={setSelectedPackageId} onContinue={() => setStep(2)}/>)}
 
-      {step === 2 && selectedPackageId && (<DateTimeStep packageId={selectedPackageId} pkg={pkg} selectedDate={selectedDate} onSelectDate={setSelectedDate} slots={slots} slotsLoading={slotsLoading} dateAvailable={dateAvailable} selectedStartTime={selectedStartTime} onSelectSlot={handleSelectSlot} onBack={() => setStep(1)} onContinue={() => setStep(3)}/>)}
+      {step === 2 && (<VehicleStep vehicles={vehicles} dataLoading={dataLoading} selectedVehicleId={selectedVehicleId} onSelect={setSelectedVehicleId} onAddVehicle={() => setAddVehicleOpen(true)} onBack={() => setStep(1)} onContinue={() => setStep(3)}/>)}
 
-      {step === 3 && (<VehicleStep vehicles={vehicles} dataLoading={dataLoading} selectedVehicleId={selectedVehicleId} onSelect={setSelectedVehicleId} onAddVehicle={() => setAddVehicleOpen(true)} onBack={() => setStep(2)} onContinue={() => setStep(4)}/>)}
+      {step === 3 && selectedPackageId && (<DateTimeStep packageId={selectedPackageId} pkg={pkg} selectedDate={selectedDate} onSelectDate={setSelectedDate} slots={slots} slotsLoading={slotsLoading} dateAvailable={dateAvailable} selectedStartTime={selectedStartTime} onSelectSlot={handleSelectSlot} onBack={() => setStep(2)} onContinue={() => setStep(4)}/>)}
 
       {step === 4 && (<ReviewStep vehicle={vehicle} pkg={pkg} selectedDate={selectedDate} selectedSlotTime={selectedSlotTime} termsAccepted={termsAccepted} onTermsAcceptedChange={setTermsAccepted} onOpenTerms={() => setTermsOpen(true)} isSubmitting={isSubmitting} onBack={() => setStep(3)} onConfirm={handleConfirm}/>)}
 

@@ -75,4 +75,18 @@ describe("DateTimeStep", () => {
         renderStep({ dateAvailable: false, slots: [] });
         expect(screen.getByText(/no slots available on this date/i)).toBeInTheDocument();
     });
+    it("disables a vehicle_conflict slot with a distinct label instead of FULL", async () => {
+        const user = userEvent.setup();
+        const { onSelectSlot } = renderStep({
+            slots: [
+                { start_time: "09:00", end_time: "10:00", capacity: 3, booked_count: 1, remaining: 0, vehicle_conflict: true },
+            ],
+        });
+        expect(screen.getByText("YOUR VEHICLE IS BOOKED")).toBeInTheDocument();
+        expect(screen.queryByText("FULL")).not.toBeInTheDocument();
+        const conflictButton = screen.getByText("9:00 AM - 10:00 AM").closest("button");
+        expect(conflictButton).toBeDisabled();
+        await user.click(conflictButton);
+        expect(onSelectSlot).not.toHaveBeenCalled();
+    });
 });

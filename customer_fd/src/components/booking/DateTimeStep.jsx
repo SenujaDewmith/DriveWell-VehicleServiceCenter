@@ -49,10 +49,12 @@ export function DateTimeStep({ packageId, pkg, selectedDate, onSelectDate, slots
         <ScrollFade className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[22rem] overflow-y-auto overscroll-contain -m-1 p-1" deps={[slots.length]}>
                 {slots.map((slot) => {
                 const isSelected = selectedStartTime === slot.start_time;
+                const isVehicleConflict = !!slot.vehicle_conflict;
                 const isFull = slot.remaining <= 0;
-                return (<button key={slot.start_time} type="button" disabled={isFull} onClick={() => onSelectSlot(slot)} className={`text-left border-2 rounded-lg p-2.5 transition-colors ${isSelected
+                const isDisabled = isFull || isVehicleConflict;
+                return (<button key={slot.start_time} type="button" disabled={isDisabled} onClick={() => onSelectSlot(slot)} className={`text-left border-2 rounded-lg p-2.5 transition-colors ${isSelected
                         ? "border-cta bg-cta/5"
-                        : isFull
+                        : isDisabled
                             ? "opacity-50 cursor-not-allowed border-border"
                             : "border-border hover:border-cta/50"}`}>
                       <div className="flex items-start justify-between mb-1.5">
@@ -60,18 +62,20 @@ export function DateTimeStep({ packageId, pkg, selectedDate, onSelectDate, slots
                           <p className="font-semibold">{fmtTime(slot.start_time)} - {fmtTime(slot.end_time)}</p>
                           {pkg && <p className="text-xs text-muted-foreground">Est. service time: {fmtDuration(pkg.estimated_duration)}</p>}
                         </div>
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${isFull ? "bg-destructive/10 text-destructive" : "bg-cta/10 text-cta"}`}>
-                          {isFull ? "FULL" : "AVAILABLE"}
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${isDisabled ? "bg-destructive/10 text-destructive" : "bg-cta/10 text-cta"}`}>
+                          {isVehicleConflict ? "YOUR VEHICLE IS BOOKED" : isFull ? "FULL" : "AVAILABLE"}
                         </span>
                       </div>
-                      <div className="flex items-center gap-4 text-xs">
-                        <span className="text-muted-foreground">
-                          Free <span className="font-medium text-foreground">{slot.remaining}</span>
-                        </span>
-                        <span className="text-muted-foreground">
-                          Booked <span className="font-medium text-foreground">{slot.booked_count}</span>
-                        </span>
-                      </div>
+                      {isVehicleConflict ? (<p className="text-xs text-destructive">
+                          This vehicle already has a booking in this time window.
+                        </p>) : (<div className="flex items-center gap-4 text-xs">
+                          <span className="text-muted-foreground">
+                            Free <span className="font-medium text-foreground">{slot.remaining}</span>
+                          </span>
+                          <span className="text-muted-foreground">
+                            Booked <span className="font-medium text-foreground">{slot.booked_count}</span>
+                          </span>
+                        </div>)}
                       {isSelected && (<p className="text-xs text-cta font-medium mt-2 flex items-center gap-1">
                           <CheckCircle className="h-3 w-3"/> Selected
                         </p>)}
