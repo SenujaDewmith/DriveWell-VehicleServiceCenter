@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const {
-  listBookings, getBooking, createBooking, cancelBooking, overrideStatus, releaseVehicle,
+  listBookings, getBooking, createBooking, rescheduleBooking, cancelBooking, overrideStatus, releaseVehicle,
   getAvailableSlots, getMonthAvailability,
 } = require("../controllers/bookings.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
@@ -30,6 +30,10 @@ const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware"
  *         name: package_id
  *         required: true
  *         schema: { type: integer }
+ *       - in: query
+ *         name: exclude_reservation_id
+ *         schema: { type: integer }
+ *         description: Excludes this reservation from vehicle/capacity conflict checks — set by the reschedule flow so a booking's own current slot doesn't show as a self-conflict
  *     responses:
  *       200:
  *         description: Appointment windows for the date
@@ -182,7 +186,15 @@ router.get("/:id", verifyToken, getBooking);
  * @swagger
  * /api/bookings:
  *   post:
- *     summary: Create a new booking (Customer only)
+ *     summary: Create a new booking, or "Book Again" from a closed booking (Customer only)
+ *     description: >
+ *       Books directly with vehicle_id/package_id, or "Book Again" from the customer's own
+ *       Cancelled or Collected booking by additionally passing source_reservation_id — that
+ *       only gates eligibility (must be their own booking, must be Cancelled/Collected), it
+ *       never overrides vehicle_id/package_id, which are ordinary request-body values (usually
+ *       pre-filled from the source booking by the wizard, but editable). To change the date/time
+ *       of a still-live Booked appointment, use PATCH /api/bookings/{id}/reschedule instead —
+ *       that updates the existing reservation in place rather than creating a new one.
  *     tags: [Bookings]
  *     security:
  *       - cookieAuth: []
@@ -203,11 +215,52 @@ router.get("/:id", verifyToken, getBooking);
  *                 message:        { type: string }
  *                 booking_ref:    { type: string, example: "DW-2025-00001" }
  *                 reservation_id: { type: integer }
- *       400: { description: Validation error or no capacity }
- *       403: { description: Not a customer }
+ *       400: { description: Validation error, no capacity, or source booking not Cancelled/Collected }
+ *       403: { description: Not a customer, or source booking belongs to someone else }
+ *       404: { description: source_reservation_id not found }
  *       500: { description: Server error }
  */
 router.post("/", verifyToken, authorizeRoles("Customer"), createBooking);
+
+/**
+ * @swagger
+ * /api/bookings/{id}/reschedule:
+ *   patch:
+ *     summary: Move a Booked appointment to a new vehicle/package/date/time (Customer reschedules their own; Manager can reschedule any)
+ *     description: >
+ *       Updates the existing reservation in place (same booking_ref) rather than creating a
+ *       new one — only valid while the booking is still "Booked". A Customer is subject to the
+ *       same 24-hour cutoff as cancelBooking; a Manager is exempt, for the "customer called in
+ *       to reschedule" case.
+ *     tags: [Bookings]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [vehicle_id, package_id, service_date, start_time]
+ *             properties:
+ *               vehicle_id:   { type: integer, example: 2 }
+ *               package_id:   { type: integer, example: 1 }
+ *               service_date: { type: string, format: date, example: "2025-06-20" }
+ *               start_time:   { type: string, example: "09:00" }
+ *     responses:
+ *       200: { description: Booking rescheduled and email sent }
+ *       400: { description: Validation error, no capacity, or booking not in "Booked" status }
+ *       403: { description: Access denied }
+ *       404: { description: Booking not found }
+ *       409: { description: Vehicle or slot conflict at the new time }
+ *       500: { description: Server error }
+ */
+router.patch("/:id/reschedule", verifyToken, authorizeRoles("Customer", "Service Center Manager"), rescheduleBooking);
 
 /**
  * @swagger

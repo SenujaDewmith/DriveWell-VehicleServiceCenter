@@ -218,8 +218,17 @@ export default function Bookings() {
     };
     const BookingCard = ({ booking, showCancel }) => {
         const hoursUntil = showCancel ? hoursUntilAppointment(booking) : null;
-        const cancelBlocked = showCancel && booking.status === "Booked" && hoursUntil !== null && hoursUntil < CANCELLATION_CUTOFF_HOURS;
+        const cutoffBlocked = showCancel && booking.status === "Booked" && hoursUntil !== null && hoursUntil < CANCELLATION_CUTOFF_HOURS;
+        const cancelBlocked = cutoffBlocked;
         const cancelAllowed = showCancel && booking.status === "Booked" && !cancelBlocked;
+        // Reschedule moves this same still-live appointment (same 24h cutoff as Cancel — see
+        // rescheduleBooking on the backend). "Book Again" (Cancelled/Collected) instead drops
+        // the customer into the wizard to create a brand new booking. Both pre-fill vehicle/
+        // package from this booking — see BookService.jsx's ?fromBooking= handling. Neither is
+        // offered for Completed (vehicle's still at the shop) or No-show.
+        const rescheduleBlocked = cutoffBlocked;
+        const rescheduleAllowed = showCancel && booking.status === "Booked" && !rescheduleBlocked;
+        const canRebook = booking.status === "Cancelled" || booking.status === "Collected";
         return (<Card className="hover:shadow-md transition-shadow">
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -255,6 +264,12 @@ export default function Bookings() {
                 <Eye className="mr-2 h-4 w-4"/>
                 View Details
               </Button>
+              {(rescheduleAllowed || canRebook) && (<Button variant="outline" size="sm" className="text-cta hover:text-cta" onClick={() => navigate(`/book?fromBooking=${booking.reservation_id}`)}>
+                  {rescheduleAllowed ? "Reschedule" : "Book Again"}
+                </Button>)}
+              {rescheduleBlocked && (<Button variant="outline" size="sm" disabled>
+                  Reschedule
+                </Button>)}
               {cancelBlocked && (<Button variant="outline" size="sm" disabled>
                   Cancel Booking
                 </Button>)}
@@ -283,8 +298,8 @@ export default function Bookings() {
             </div>
           </div>
 
-          {cancelBlocked && (<p className="text-xs text-muted-foreground mt-2 sm:text-right">
-              Cancellations must be made at least {CANCELLATION_CUTOFF_HOURS}h ahead — please{" "}
+          {cutoffBlocked && (<p className="text-xs text-muted-foreground mt-2 sm:text-right">
+              Reschedules or cancellations must be made at least {CANCELLATION_CUTOFF_HOURS}h ahead — please{" "}
               {contactPhone ? (<a href={`tel:${contactPhone.replace(/[^\d+]/g, "")}`} className="underline hover:text-foreground">
                   call {contactPhone}
                 </a>) : "call us"} for urgent changes.

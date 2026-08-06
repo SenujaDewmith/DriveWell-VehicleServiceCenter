@@ -140,8 +140,9 @@ const options = {
           type: "object",
           required: ["vehicle_id", "package_id", "service_date", "start_time", "terms_accepted", "terms_version"],
           properties: {
-            vehicle_id:     { type: "integer", example: 2 },
-            package_id:     { type: "integer", example: 1 },
+            vehicle_id:            { type: "integer", example: 2 },
+            package_id:            { type: "integer", example: 1 },
+            source_reservation_id: { type: "integer", example: 42, description: "\"Book Again\" from the customer's own Cancelled or Collected booking — only gates eligibility, does not override vehicle_id/package_id" },
             service_date:   { type: "string",  format: "date", example: "2025-06-15" },
             start_time:     { type: "string",  example: "08:00", description: "HH:MM — must match one of the package's generated appointment windows for that date" },
             terms_accepted: { type: "boolean", example: true, description: "Must be true — explicit clickwrap consent to the Terms & Conditions" },

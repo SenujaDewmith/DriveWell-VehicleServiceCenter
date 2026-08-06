@@ -5,6 +5,7 @@ import { DownloadPdfButton } from "@/components/reports/DownloadPdfButton";
 
 const actionColors = {
   BOOKING_CREATED: "text-accent",
+  BOOKING_RESCHEDULED: "text-chart-3",
   STATUS_CHANGED: "text-primary",
   STAFF_ASSIGNED: "text-chart-2",
   QUALITY_CHECK: "text-chart-1",

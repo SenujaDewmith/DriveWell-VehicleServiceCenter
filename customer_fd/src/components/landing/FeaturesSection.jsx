@@ -30,9 +30,11 @@ export function FeaturesSection() {
           Experience the future of vehicle service
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {FEATURES.map((feature) => (<Card key={feature.title} className="border-2 hover:border-cta transition-colors">
+          {FEATURES.map((feature) => (<Card key={feature.title} className="group border-2 transition-all duration-300 ease-out hover:border-cta hover:-translate-y-1.5 hover:shadow-lg motion-reduce:transition-none">
               <CardHeader>
-                <feature.icon className="h-12 w-12 text-cta mb-4"/>
+                <div className="h-16 w-16 rounded-full bg-cta/10 flex items-center justify-center mb-4 transition-all duration-300 ease-out group-hover:scale-110 group-hover:bg-cta/20 motion-reduce:transition-none">
+                  <feature.icon className="h-7 w-7 text-cta"/>
+                </div>
                 <CardTitle>{feature.title}</CardTitle>
               </CardHeader>
               <CardContent>

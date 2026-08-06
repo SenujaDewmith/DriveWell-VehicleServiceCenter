@@ -417,33 +417,43 @@ export default function BookingDetails() {
           </CardContent>
         </Card>
 
-        {isOwnBooking && booking.status === "Booked" && (canSelfCancel(booking) ? (<AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" className="w-full text-destructive hover:text-destructive" disabled={cancelling}>
+        {isOwnBooking && booking.status === "Booked" && (canSelfCancel(booking) ? (<div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => navigate(`/book?fromBooking=${booking.reservation_id}`)}>
+                Reschedule
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" className="flex-1 text-destructive hover:text-destructive" disabled={cancelling}>
+                    Cancel Booking
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will cancel your {booking.package_name} appointment on {fmtDate(booking.service_date)}
+                      {booking.slot_time ? ` at ${fmtTime(booking.slot_time)}` : ""}. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep Booking</AlertDialogCancel>
+                    <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleCancel}>
+                      Yes, Cancel Booking
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>) : (<div className="space-y-1">
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1" disabled>
+                  Reschedule
+                </Button>
+                <Button variant="outline" className="flex-1" disabled>
                   Cancel Booking
                 </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will cancel your {booking.package_name} appointment on {fmtDate(booking.service_date)}
-                    {booking.slot_time ? ` at ${fmtTime(booking.slot_time)}` : ""}. This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Keep Booking</AlertDialogCancel>
-                  <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleCancel}>
-                    Yes, Cancel Booking
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>) : (<div className="space-y-1">
-              <Button variant="outline" className="w-full" disabled>
-                Cancel Booking
-              </Button>
+              </div>
               <p className="text-xs text-muted-foreground text-center">
-                Cancellations must be made at least {CANCELLATION_CUTOFF_HOURS}h ahead — please{" "}
+                Reschedules or cancellations must be made at least {CANCELLATION_CUTOFF_HOURS}h ahead — please{" "}
                 {contactPhone ? (<a href={`tel:${contactPhone.replace(/[^\d+]/g, "")}`} className="underline hover:text-foreground">
                     call {contactPhone}
                   </a>) : "call us"} for urgent changes.
@@ -457,10 +467,21 @@ export default function BookingDetails() {
                 <ArrowLeft className="mr-2 h-4 w-4"/>
                 Back
               </Button>
+              {isOwnBooking && (<Button className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90" onClick={() => navigate(`/book?fromBooking=${booking.reservation_id}`)}>
+                  Book Again
+                </Button>)}
               {isOwnBooking && !hasFeedback && (<Button className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90" onClick={() => navigate(`/feedback?booking=${booking.reservation_id}`)}>
                   Leave Feedback
                 </Button>)}
             </div>
+          </div>) : isOwnBooking && booking.status === "Cancelled" ? (<div className="flex gap-3">
+            <Button variant="outline" onClick={backToBookings}>
+              <ArrowLeft className="mr-2 h-4 w-4"/>
+              Back
+            </Button>
+            <Button className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90" onClick={() => navigate(`/book?fromBooking=${booking.reservation_id}`)}>
+              Book Again
+            </Button>
           </div>) : (<Button variant="outline" className="w-full" onClick={backToBookings}>
             <ArrowLeft className="mr-2 h-4 w-4"/>
             Back to Bookings

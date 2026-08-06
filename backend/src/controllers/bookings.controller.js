@@ -2,7 +2,7 @@ const { Prisma } = require("@prisma/client");
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { fmtDate, fmtTime } = require("../lib/format");
-const { sendBookingConfirmation, sendBookingCancellation, sendNoShowNotice, sendVehicleCollected } = require("../services/email.service");
+const { sendBookingConfirmation, sendBookingRescheduled, sendBookingCancellation, sendNoShowNotice, sendVehicleCollected } = require("../services/email.service");
 const { logActivity } = require("../lib/activityLogger");
 const { VEHICLE_SELECT, flattenVehicleRef } = require("../lib/vehicleFlatten");
 const {
@@ -277,7 +277,7 @@ const getBooking = async (req, res) => {
 
 const createBooking = async (req, res) => {
   const { user_id } = req.user;
-  const { vehicle_id, package_id, service_date, start_time, terms_accepted, terms_version } = req.body;
+  const { vehicle_id, package_id, service_date, start_time, terms_accepted, terms_version, source_reservation_id } = req.body;
 
   if (!vehicle_id || !package_id || !service_date || !start_time)
     return res.status(400).json({ message: "vehicle_id, package_id, service_date, and start_time are required" });
@@ -288,6 +288,23 @@ const createBooking = async (req, res) => {
     return res.status(400).json({ message: "You must accept the Terms & Conditions to place a booking" });
   if (terms_version !== CURRENT_TERMS_VERSION)
     return res.status(400).json({ message: "Our Terms & Conditions have been updated — please review and accept the latest version" });
+
+  // "Book Again" — customer self-service only, from their own Cancelled or Collected
+  // booking (see rescheduleBooking below for the separate in-place-update flow that
+  // handles a still-live Booked appointment, including staff-assisted reschedules).
+  // This is otherwise an ordinary booking creation: vehicle_id/package_id are whatever
+  // the wizard currently has selected (typically pre-filled from the source booking, but
+  // editable via its Back button), validated exactly like a from-scratch booking below —
+  // source_reservation_id only gates eligibility, it never overrides the request body.
+  if (source_reservation_id) {
+    const source = await prisma.reservation.findUnique({
+      where: { reservation_id: parseInt(source_reservation_id) },
+    });
+    if (!source) return res.status(404).json({ message: "Original booking not found" });
+    if (source.customer_id !== user_id) return res.status(403).json({ message: "Access denied" });
+    if (![RESERVATION_STATUS.CANCELLED, RESERVATION_STATUS.COLLECTED].includes(source.status))
+      return res.status(400).json({ message: `Cannot rebook a booking with status: ${source.status}` });
+  }
 
   try {
     const { reservation_id, booking_ref, pkgName, startStr, endStr } = await prisma.$transaction(async (tx) => {
@@ -404,7 +421,7 @@ const createBooking = async (req, res) => {
       };
     }, { isolation: Prisma.TransactionIsolationLevel.Serializable });
 
-    logger.info(`Booking created — ref: ${booking_ref}, user_id: ${user_id}`);
+    logger.info(`Booking created — ref: ${booking_ref}, user_id: ${user_id}${source_reservation_id ? `, source_reservation_id: ${source_reservation_id}` : ""}`);
     logActivity(prisma, { user_id, action: "BOOKING_CREATED", entity_type: "reservation", entity_id: reservation_id });
 
     // Email notification (outside transaction — non-critical)
@@ -431,6 +448,182 @@ const createBooking = async (req, res) => {
       return res.status(409).json({ message: "This slot was just booked — please pick another time and try again" });
     }
     logger.error(`createBooking failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Moves a still-live "Booked" appointment to a new vehicle/package/date/time — unlike
+// createBooking's "Book Again" (which always inserts a new row from a closed booking),
+// this updates the SAME reservation in place, so booking_ref and any downstream linkage
+// stay attached to one continuous record instead of a cancelled-then-recreated pair.
+// Customer may reschedule their own booking (subject to the same 24h cutoff as
+// cancelBooking); Manager may reschedule any booking, exempt from the cutoff — mirroring
+// cancelBooking's own Customer/Manager split exactly.
+const rescheduleBooking = async (req, res) => {
+  const { user_id, role_id } = req.user;
+  const { id } = req.params;
+  const { vehicle_id, package_id, service_date, start_time } = req.body;
+
+  if (!vehicle_id || !package_id || !service_date || !start_time)
+    return res.status(400).json({ message: "vehicle_id, package_id, service_date, and start_time are required" });
+
+  try {
+    const { pkgName, startStr, endStr, customer } = await prisma.$transaction(async (tx) => {
+      const booking = await tx.reservation.findUnique({
+        where: { reservation_id: parseInt(id) },
+      });
+      if (!booking) {
+        const err = new Error("Booking not found"); err.status = 404; throw err;
+      }
+      if (role_id === CUSTOMER_ROLE && booking.customer_id !== user_id) {
+        const err = new Error("Access denied"); err.status = 403; throw err;
+      }
+      if (booking.status !== RESERVATION_STATUS.BOOKED) {
+        const err = new Error(`Cannot reschedule a booking with status: ${booking.status}`); err.status = 400; throw err;
+      }
+
+      if (role_id === CUSTOMER_ROLE) {
+        const { todayKey, nowMinutes } = getLocalNow();
+        const daysUntil = Math.round((new Date(fmtDate(booking.service_date)) - new Date(todayKey)) / 86400000);
+        const minutesUntil = daysUntil * 1440 + (dateColToMinutes(booking.start_time) - nowMinutes);
+        if (minutesUntil < CANCELLATION_CUTOFF_MINUTES) {
+          const err = new Error(
+            "Reschedules must be made at least 24 hours before the scheduled appointment. Please contact us directly for urgent changes.",
+          );
+          err.status = 400;
+          throw err;
+        }
+      }
+
+      const vehicle = await tx.vehicle.findFirst({
+        where: { vehicle_id: parseInt(vehicle_id), customer_id: booking.customer_id },
+      });
+      if (!vehicle) {
+        const err = new Error("Vehicle not found"); err.status = 400; throw err;
+      }
+
+      const config = await tx.workingConfig.findFirst();
+      const dayOfWeek = new Date(service_date).getDay();
+      const workingDays = config.working_days.split(",").map(Number);
+      if (!workingDays.includes(dayOfWeek)) {
+        const err = new Error("Selected date is not a working day"); err.status = 400; throw err;
+      }
+
+      const pkg = await tx.servicePackage.findFirst({
+        where: { package_id: parseInt(package_id), is_active: true },
+      });
+      if (!pkg) {
+        const err = new Error("Service package not found or inactive"); err.status = 400; throw err;
+      }
+
+      const startMin = timeStrToMinutes(start_time);
+      const endMin = startMin + pkg.estimated_duration;
+      const dayStartMin = dateColToMinutes(config.day_start_time);
+      const dayEndMin = dateColToMinutes(config.day_end_time);
+      if (startMin < dayStartMin || endMin > dayEndMin) {
+        const err = new Error("Selected time does not fit within business hours for this service"); err.status = 400; throw err;
+      }
+
+      const { todayKey, nowMinutes } = getLocalNow();
+      if (service_date < todayKey) {
+        const err = new Error("Cannot book a date in the past"); err.status = 400; throw err;
+      }
+      if (service_date === todayKey) {
+        const cutoffStart = dayEndMin - config.same_day_cutoff_minutes;
+        if (nowMinutes >= cutoffStart) {
+          const err = new Error(`Same-day bookings close at ${minutesToHHMM(cutoffStart)} — please choose another date`); err.status = 400; throw err;
+        }
+        if (startMin < nowMinutes + MIN_LEAD_MINUTES) {
+          const err = new Error(`Bookings require at least ${MIN_LEAD_MINUTES} minutes advance notice`); err.status = 400; throw err;
+        }
+      }
+
+      const blocked = await getBlockedRangesForDate(tx, service_date);
+      if (blocked.some((b) => rangesOverlap(startMin, endMin, b.start, b.end))) {
+        const err = new Error("Selected time overlaps a blocked/unavailable period"); err.status = 400; throw err;
+      }
+
+      // Same vehicle-conflict / package-capacity checks as createBooking, but excluding
+      // this reservation's own id — otherwise a reschedule would always collide with the
+      // slot it currently occupies.
+      const vehicleConflicts = await tx.reservation.findMany({
+        where: {
+          vehicle_id: parseInt(vehicle_id),
+          service_date: new Date(service_date),
+          status: { notIn: ["Cancelled", "No-show"] },
+          reservation_id: { not: parseInt(id) },
+        },
+        select: { start_time: true, end_time: true, booking_ref: true },
+      });
+      const conflict = vehicleConflicts.find((r) =>
+        rangesOverlap(startMin, endMin, dateColToMinutes(r.start_time), dateColToMinutes(r.end_time)),
+      );
+      if (conflict) {
+        const err = new Error(
+          `This vehicle already has a booking at ${minutesToHHMM(dateColToMinutes(conflict.start_time))} on this date (Ref: ${conflict.booking_ref}). Please choose a different time or cancel the existing booking first.`,
+        );
+        err.status = 409;
+        throw err;
+      }
+
+      const existing = await tx.reservation.findMany({
+        where: {
+          service_date: new Date(service_date),
+          package_id: parseInt(package_id),
+          status: { notIn: ["Cancelled", "No-show"] },
+          reservation_id: { not: parseInt(id) },
+        },
+        select: { start_time: true, end_time: true },
+      });
+      const overlapCount = existing.filter((r) =>
+        rangesOverlap(startMin, endMin, dateColToMinutes(r.start_time), dateColToMinutes(r.end_time)),
+      ).length;
+      if (overlapCount >= pkg.max_capacity) {
+        const err = new Error("This time is fully booked for the selected package — please choose another time"); err.status = 400; throw err;
+      }
+
+      await tx.reservation.update({
+        where: { reservation_id: parseInt(id) },
+        data: {
+          vehicle_id: parseInt(vehicle_id),
+          package_id: parseInt(package_id),
+          start_time: minutesToTimeDate(startMin),
+          end_time: minutesToTimeDate(endMin),
+          service_date: new Date(service_date),
+        },
+      });
+
+      const customerRow = await tx.user.findUnique({
+        where: { user_id: booking.customer_id },
+        select: { email: true, customer: { select: { full_name: true } } },
+      });
+
+      return {
+        pkgName: pkg.name,
+        startStr: minutesToHHMM(startMin),
+        endStr: minutesToHHMM(endMin),
+        customer: { bookingRef: booking.booking_ref, email: customerRow.email, name: customerRow.customer?.full_name },
+      };
+    }, { isolation: Prisma.TransactionIsolationLevel.Serializable });
+
+    logger.info(`Booking rescheduled — reservation_id: ${id}, by user_id: ${user_id}`);
+    logActivity(prisma, { user_id, action: "BOOKING_RESCHEDULED", entity_type: "reservation", entity_id: parseInt(id) });
+
+    sendBookingRescheduled(customer.email, {
+      customerName: customer.name,
+      bookingRef: customer.bookingRef,
+      packageName: pkgName,
+      serviceDate: service_date,
+      slotTime: `${startStr} - ${endStr}`,
+    });
+
+    res.status(200).json({ message: "Booking rescheduled" });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    if (error.code === "P2034") {
+      return res.status(409).json({ message: "This slot was just booked — please pick another time and try again" });
+    }
+    logger.error(`rescheduleBooking failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -598,7 +791,7 @@ const releaseVehicle = async (req, res) => {
 // into back-to-back windows sized to the package's own duration, with each window's
 // capacity coming from the package's max_capacity (concurrent bookings of that package).
 const getAvailableSlots = async (req, res) => {
-  const { date, package_id, vehicle_id } = req.query;
+  const { date, package_id, vehicle_id, exclude_reservation_id } = req.query;
   if (!date || !package_id)
     return res.status(400).json({ message: "date and package_id query params are required" });
 
@@ -640,11 +833,18 @@ const getAvailableSlots = async (req, res) => {
       rawWindows = rawWindows.filter((w) => w.start >= minStart);
     }
 
+    // exclude_reservation_id lets a reschedule-in-progress see its own current slot as
+    // available rather than a self-conflict — set by the reschedule flow (see
+    // rescheduleBooking) to whichever booking is currently being moved; unused when
+    // browsing slots for a fresh booking.
+    const excludeId = exclude_reservation_id ? parseInt(exclude_reservation_id) : null;
+
     const existing = await prisma.reservation.findMany({
       where: {
         service_date: new Date(date),
         package_id: parseInt(package_id),
         status: { notIn: ["Cancelled", "No-show"] },
+        ...(excludeId && { reservation_id: { not: excludeId } }),
       },
       select: { start_time: true, end_time: true },
     });
@@ -663,6 +863,7 @@ const getAvailableSlots = async (req, res) => {
           vehicle_id: parseInt(vehicle_id),
           service_date: new Date(date),
           status: { notIn: ["Cancelled", "No-show"] },
+          ...(excludeId && { reservation_id: { not: excludeId } }),
         },
         select: { start_time: true, end_time: true },
       });
@@ -814,6 +1015,6 @@ const getMonthAvailability = async (req, res) => {
 };
 
 module.exports = {
-  listBookings, getBooking, createBooking, cancelBooking, overrideStatus, releaseVehicle,
+  listBookings, getBooking, createBooking, rescheduleBooking, cancelBooking, overrideStatus, releaseVehicle,
   getAvailableSlots, getMonthAvailability,
 };

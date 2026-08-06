@@ -792,3 +792,234 @@ describe("PATCH /api/bookings/:id/release", () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe("POST /api/bookings with source_reservation_id (Book Again)", () => {
+  test("customer can rebook their own Cancelled booking, creating a new reservation", async () => {
+    const pkg = await seedPackage();
+    const { customer, agent } = await customerAgent();
+    const vehicle = await createVehicle(customer.user_id);
+    const cancelled = await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Cancelled",
+    });
+
+    const res = await withPortal(agent, "customer")("post", "/api/bookings").send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkg.package_id,
+      source_reservation_id: cancelled.reservation_id,
+      service_date: nextWorkingDate(10),
+      start_time: "09:00",
+      terms_accepted: true,
+      terms_version: "1.0",
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.reservation_id).not.toBe(cancelled.reservation_id);
+
+    const original = await prisma.reservation.findUnique({ where: { reservation_id: cancelled.reservation_id } });
+    expect(original.status).toBe("Cancelled"); // untouched — rebook never mutates the source row
+  });
+
+  test("customer can rebook their own Collected booking", async () => {
+    const pkg = await seedPackage();
+    const { customer, agent } = await customerAgent();
+    const vehicle = await createVehicle(customer.user_id);
+    const collected = await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Collected",
+    });
+
+    const res = await withPortal(agent, "customer")("post", "/api/bookings").send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkg.package_id,
+      source_reservation_id: collected.reservation_id,
+      service_date: nextWorkingDate(10),
+      start_time: "09:00",
+      terms_accepted: true,
+      terms_version: "1.0",
+    });
+    expect(res.status).toBe(201);
+  });
+
+  test("400 when rebooking from a still-Booked source", async () => {
+    const pkg = await seedPackage();
+    const { customer, agent } = await customerAgent();
+    const vehicle = await createVehicle(customer.user_id);
+    const booked = await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Booked",
+    });
+
+    const res = await withPortal(agent, "customer")("post", "/api/bookings").send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkg.package_id,
+      source_reservation_id: booked.reservation_id,
+      service_date: nextWorkingDate(10),
+      start_time: "10:00",
+      terms_accepted: true,
+      terms_version: "1.0",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("403 when rebooking someone else's cancelled booking", async () => {
+    const pkg = await seedPackage();
+    const owner = await createUser("Customer");
+    const vehicle = await createVehicle(owner.user_id);
+    const cancelled = await createReservation({
+      customerId: owner.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Cancelled",
+    });
+
+    const { agent: intruderAgent } = await customerAgent({ email: "intruder3@test.local" });
+    const res = await withPortal(intruderAgent, "customer")("post", "/api/bookings").send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkg.package_id,
+      source_reservation_id: cancelled.reservation_id,
+      service_date: nextWorkingDate(10),
+      start_time: "09:00",
+      terms_accepted: true,
+      terms_version: "1.0",
+    });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("PATCH /api/bookings/:id/reschedule", () => {
+  test("customer can reschedule their own Booked appointment in place (same reservation_id/booking_ref)", async () => {
+    const pkg = await seedPackage();
+    const { customer, agent } = await customerAgent();
+    const vehicle = await createVehicle(customer.user_id);
+    const booked = await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id,
+      serviceDate: nextWorkingDate(10), startTime: "09:00",
+    });
+
+    const newDate = nextWorkingDate(15);
+    const res = await withPortal(agent, "customer")("patch", `/api/bookings/${booked.reservation_id}/reschedule`).send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkg.package_id,
+      service_date: newDate,
+      start_time: "11:00",
+    });
+    expect(res.status).toBe(200);
+
+    const updated = await prisma.reservation.findUnique({ where: { reservation_id: booked.reservation_id } });
+    expect(updated.booking_ref).toBe(booked.booking_ref); // same row, not a new one
+    expect(updated.status).toBe("Booked");
+    expect(updated.service_date.toISOString().split("T")[0]).toBe(newDate);
+  });
+
+  test("rescheduling to the same date/time it already occupies does not self-conflict", async () => {
+    const pkg = await seedPackage();
+    const { customer, agent } = await customerAgent();
+    const vehicle = await createVehicle(customer.user_id);
+    const date = nextWorkingDate(10);
+    const booked = await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id,
+      serviceDate: date, startTime: "09:00",
+    });
+
+    const res = await withPortal(agent, "customer")("patch", `/api/bookings/${booked.reservation_id}/reschedule`).send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkg.package_id,
+      service_date: date,
+      start_time: "09:00",
+    });
+    expect(res.status).toBe(200);
+  });
+
+  test("400 when rescheduling a Cancelled booking", async () => {
+    const pkg = await seedPackage();
+    const { customer, agent } = await customerAgent();
+    const vehicle = await createVehicle(customer.user_id);
+    const cancelled = await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Cancelled",
+    });
+
+    const res = await withPortal(agent, "customer")("patch", `/api/bookings/${cancelled.reservation_id}/reschedule`).send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkg.package_id,
+      service_date: nextWorkingDate(10),
+      start_time: "09:00",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("400 when a customer reschedules within the 24-hour cutoff", async () => {
+    const pkg = await seedPackage();
+    const { customer, agent } = await customerAgent();
+    const vehicle = await createVehicle(customer.user_id);
+    const today = new Date().toISOString().split("T")[0];
+    const booked = await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id,
+      serviceDate: today, startTime: "08:00",
+    });
+
+    const res = await withPortal(agent, "customer")("patch", `/api/bookings/${booked.reservation_id}/reschedule`).send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkg.package_id,
+      service_date: nextWorkingDate(10),
+      start_time: "09:00",
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/24 hours/i);
+  });
+
+  test("manager can reschedule any booking, exempt from the 24-hour cutoff", async () => {
+    const pkg = await seedPackage();
+    const customer = await createUser("Customer");
+    const vehicle = await createVehicle(customer.user_id);
+    const today = new Date().toISOString().split("T")[0];
+    const booked = await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id,
+      serviceDate: today, startTime: "08:00",
+    });
+
+    const { agent } = await staffAgent("Service Center Manager");
+    const res = await withPortal(agent, "staff")("patch", `/api/bookings/${booked.reservation_id}/reschedule`).send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkg.package_id,
+      service_date: nextWorkingDate(10),
+      start_time: "09:00",
+    });
+    expect(res.status).toBe(200);
+  });
+
+  test("403 when a customer reschedules someone else's booking", async () => {
+    const pkg = await seedPackage();
+    const owner = await createUser("Customer");
+    const vehicle = await createVehicle(owner.user_id);
+    const booked = await createReservation({
+      customerId: owner.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id,
+      serviceDate: nextWorkingDate(10), startTime: "09:00",
+    });
+
+    const { agent: intruderAgent } = await customerAgent({ email: "intruder4@test.local" });
+    const res = await withPortal(intruderAgent, "customer")("patch", `/api/bookings/${booked.reservation_id}/reschedule`).send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkg.package_id,
+      service_date: nextWorkingDate(15),
+      start_time: "09:00",
+    });
+    expect(res.status).toBe(403);
+  });
+
+  test("409 when the new slot conflicts with the vehicle's other booking", async () => {
+    const pkg = await seedPackage({ estimated_duration: 60 });
+    const { customer, agent } = await customerAgent();
+    const vehicle = await createVehicle(customer.user_id);
+    const date = nextWorkingDate(10);
+    await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id,
+      serviceDate: date, startTime: "10:00", estimatedDuration: 60,
+    });
+    const toReschedule = await createReservation({
+      customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id,
+      serviceDate: nextWorkingDate(15), startTime: "09:00", estimatedDuration: 60,
+    });
+
+    const res = await withPortal(agent, "customer")("patch", `/api/bookings/${toReschedule.reservation_id}/reschedule`).send({
+      vehicle_id: vehicle.vehicle_id,
+      package_id: pkg.package_id,
+      service_date: date,
+      start_time: "10:00",
+    });
+    expect(res.status).toBe(409);
+  });
+});

@@ -4,7 +4,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { StatusBadge, PaymentBadge } from "@/components/manager/ManagerOverview";
 import { InvoiceViewModal } from "@/components/invoices/InvoiceView";
 import { BookingDetailModal } from "@/components/bookings/BookingDetailModal";
-import { Eye, FileText, X, AlertTriangle } from "lucide-react";
+import { RescheduleBookingModal } from "@/components/bookings/RescheduleBookingModal";
+import { Eye, FileText, X, AlertTriangle, CalendarClock } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,6 +74,7 @@ export function BookingsPage() {
   const [actionError, setActionError] = useState("");
   const [markingId, setMarkingId] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
+  const [rescheduleBooking, setRescheduleBooking] = useState(null);
 
   const markNoShow = async (reservationId) => {
     setActionError("");
@@ -108,12 +110,16 @@ export function BookingsPage() {
     }
   };
 
-  useEffect(() => {
+  const loadBookings = () => {
     api
       .get("/api/bookings")
       .then((d) => setBookings(d.bookings))
       .catch(() => setError("Failed to load bookings"))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadBookings();
 
     api
       .get("/api/invoices")
@@ -340,6 +346,14 @@ export function BookingsPage() {
                           </AlertDialog>
                         )}
                         {role === "manager" && b.status === "Booked" && (
+                          <button
+                            onClick={() => setRescheduleBooking(b)}
+                            className="flex items-center gap-1 rounded-md border border-accent px-2 py-1 text-xs font-medium text-accent hover:bg-accent/10 transition-colors"
+                          >
+                            <CalendarClock className="h-3 w-3" /> Reschedule
+                          </button>
+                        )}
+                        {role === "manager" && b.status === "Booked" && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <button
@@ -401,6 +415,17 @@ export function BookingsPage() {
           onViewInvoice={(inv) => {
             setViewDetailsId(null);
             setViewInvoice(inv);
+          }}
+        />
+      )}
+
+      {rescheduleBooking && (
+        <RescheduleBookingModal
+          booking={rescheduleBooking}
+          onClose={() => setRescheduleBooking(null)}
+          onRescheduled={() => {
+            setRescheduleBooking(null);
+            loadBookings();
           }}
         />
       )}

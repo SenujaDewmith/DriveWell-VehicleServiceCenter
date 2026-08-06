@@ -58,7 +58,7 @@ export function TestimonialsSection() {
                     <Skeleton className="h-4 w-3/4"/>
                   </CardContent>
                 </Card>))
-            : testimonials.map((testimonial) => (<Card key={testimonial.feedback_id} className="border-2">
+            : testimonials.map((testimonial) => (<Card key={testimonial.feedback_id} className="border-2 transition-transform duration-300 ease-out hover:scale-105 hover:shadow-lg motion-reduce:transition-none">
                   <CardHeader>
                     <div className="flex items-center gap-4 mb-3">
                       <div className="h-12 w-12 rounded-full bg-cta flex items-center justify-center text-cta-foreground font-semibold">

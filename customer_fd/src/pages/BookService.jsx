@@ -24,6 +24,13 @@ export default function BookService() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const preselectedPackage = searchParams.get("package");
+    // Two different flows share this ?fromBooking= entry point, distinguished by the source
+    // booking's status once loaded (see `mode` below): a "Booked" booking gets a true
+    // Reschedule (moves the same appointment); a Cancelled/Collected one gets "Book Again"
+    // (creates a fresh booking). Both skip straight to Date & Time with vehicle/package
+    // pre-filled from that booking — but Back still works normally through Vehicle/Package,
+    // since the prefill is just a head start, not a lock.
+    const fromBookingId = searchParams.get("fromBooking");
     const [step, setStep] = useState(1);
     const [selectedVehicleId, setSelectedVehicleId] = useState(null);
     const [selectedPackageId, setSelectedPackageId] = useState(null);
@@ -34,6 +41,8 @@ export default function BookService() {
     const [addVehicleOpen, setAddVehicleOpen] = useState(false);
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [termsOpen, setTermsOpen] = useState(false);
+    const [sourceBooking, setSourceBooking] = useState(null);
+    const [sourceBookingLoading, setSourceBookingLoading] = useState(!!fromBookingId);
     // Gate booking behind an inline modal instead of redirecting to /login, so an
     // unauthenticated visitor never loses their place in the booking flow (e.g. a
     // preselected package from ?package=) — they authenticate and keep going right here.
@@ -85,6 +94,43 @@ export default function BookService() {
             cancelled = true;
         };
     }, [user]);
+    // Load the source booking for ?fromBooking= and pre-fill vehicle/package from it —
+    // eligible from "Booked" (Reschedule), "Cancelled", or "Collected" (Book Again); the
+    // backend re-validates this independently when the booking is actually submitted.
+    useEffect(() => {
+        if (!user || !fromBookingId)
+            return;
+        let cancelled = false;
+        bookingsService
+            .getBooking(fromBookingId)
+            .then((r) => {
+            if (cancelled)
+                return;
+            const booking = r.booking;
+            if (!["Booked", "Cancelled", "Collected"].includes(booking.status)) {
+                toast.error("This booking can no longer be rescheduled");
+                navigate("/bookings");
+                return;
+            }
+            setSourceBooking(booking);
+            setSelectedVehicleId(booking.vehicle_id);
+            setSelectedPackageId(booking.package_id);
+            setStep(3);
+        })
+            .catch(() => {
+            if (!cancelled) {
+                toast.error("Couldn't load that booking");
+                navigate("/bookings");
+            }
+        })
+            .finally(() => {
+            if (!cancelled)
+                setSourceBookingLoading(false);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [user, fromBookingId, navigate]);
     // Pre-select the package passed via ?package= once its data has loaded (runs once — bails
     // out as soon as a package is selected, whether by this effect or by the user). The user
     // already chose this package from the landing/services page, so skip straight past the
@@ -106,29 +152,49 @@ export default function BookService() {
         setSelectedStartTime(null);
         setSelectedSlotTime("");
     }, [selectedDate, selectedPackageId, selectedVehicleId]);
-    const { slots, dateAvailable, isLoading: slotsLoading } = useAvailableSlots(selectedDate, selectedPackageId, selectedVehicleId);
+    // "create" = ordinary new booking. "reschedule" = moving a still-live "Booked"
+    // appointment in place (PATCH .../reschedule). "rebook" = "Book Again" from a closed
+    // Cancelled/Collected booking (POST, creates a new reservation).
+    const mode = sourceBooking ? (sourceBooking.status === "Booked" ? "reschedule" : "rebook") : "create";
+    // Only a true reschedule needs to exclude its own reservation from the vehicle-conflict
+    // check — a "Book Again" always creates a different row, so it can never self-conflict.
+    const { slots, dateAvailable, isLoading: slotsLoading } = useAvailableSlots(selectedDate, selectedPackageId, selectedVehicleId, mode === "reschedule" ? sourceBooking.reservation_id : undefined);
     const handleSelectSlot = (slot) => {
         setSelectedStartTime(slot.start_time);
         setSelectedSlotTime(`${fmtTime(slot.start_time)} - ${fmtTime(slot.end_time)}`);
     };
     const handleConfirm = async () => {
-        if (!selectedVehicleId || !selectedPackageId || !selectedDate || !selectedStartTime || !termsAccepted)
+        if (!selectedVehicleId || !selectedPackageId || !selectedDate || !selectedStartTime)
+            return;
+        if (mode !== "reschedule" && !termsAccepted)
             return;
         setIsSubmitting(true);
         try {
-            const res = await bookingsService.createBooking({
-                vehicle_id: selectedVehicleId,
-                package_id: selectedPackageId,
-                service_date: selectedDate,
-                start_time: selectedStartTime,
-                terms_accepted: true,
-                terms_version: TERMS_VERSION,
-            });
-            toast.success(`Booking confirmed! Ref: ${res.booking_ref}`);
+            if (mode === "reschedule") {
+                await bookingsService.rescheduleBooking(sourceBooking.reservation_id, {
+                    vehicle_id: selectedVehicleId,
+                    package_id: selectedPackageId,
+                    service_date: selectedDate,
+                    start_time: selectedStartTime,
+                });
+                toast.success("Booking rescheduled");
+            }
+            else {
+                const res = await bookingsService.createBooking({
+                    vehicle_id: selectedVehicleId,
+                    package_id: selectedPackageId,
+                    service_date: selectedDate,
+                    start_time: selectedStartTime,
+                    terms_accepted: true,
+                    terms_version: TERMS_VERSION,
+                    ...(mode === "rebook" && { source_reservation_id: sourceBooking.reservation_id }),
+                });
+                toast.success(`Booking confirmed! Ref: ${res.booking_ref}`);
+            }
             navigate("/bookings");
         }
         catch (error) {
-            toast.error(error instanceof Error ? error.message : "Booking failed");
+            toast.error(error instanceof Error ? error.message : mode === "reschedule" ? "Reschedule failed" : "Booking failed");
         }
         finally {
             setIsSubmitting(false);
@@ -143,13 +209,15 @@ export default function BookService() {
     // Mirrors ProtectedRoute's loading guard — /book is intentionally NOT wrapped in
     // ProtectedRoute (see App.tsx) so an unauthenticated visit renders this page with
     // an AuthModal instead of bouncing to /login.
-    if (isLoading) {
+    if (isLoading || sourceBookingLoading) {
         return (<div className="flex justify-center items-center py-24">
         <Loader2 className="h-8 w-8 animate-spin text-cta"/>
       </div>);
     }
+    const pageTitle = mode === "reschedule" ? "Reschedule Booking" : mode === "rebook" ? "Book Again" : "Book a Service";
+    const confirmLabel = mode === "reschedule" ? "Confirm Reschedule" : "Confirm Booking";
     return (<div className="container mx-auto px-4 py-8 max-w-4xl">
-      <h1 className="text-3xl font-bold mb-5 text-center">Book a Service</h1>
+      <h1 className="text-3xl font-bold mb-5 text-center">{pageTitle}</h1>
 
       <BookingStepper steps={STEPS} currentStep={step}/>
 
@@ -159,7 +227,7 @@ export default function BookService() {
 
       {step === 3 && selectedPackageId && (<DateTimeStep packageId={selectedPackageId} pkg={pkg} selectedDate={selectedDate} onSelectDate={setSelectedDate} slots={slots} slotsLoading={slotsLoading} dateAvailable={dateAvailable} selectedStartTime={selectedStartTime} onSelectSlot={handleSelectSlot} onBack={() => setStep(2)} onContinue={() => setStep(4)}/>)}
 
-      {step === 4 && (<ReviewStep vehicle={vehicle} pkg={pkg} selectedDate={selectedDate} selectedSlotTime={selectedSlotTime} termsAccepted={termsAccepted} onTermsAcceptedChange={setTermsAccepted} onOpenTerms={() => setTermsOpen(true)} isSubmitting={isSubmitting} onBack={() => setStep(3)} onConfirm={handleConfirm}/>)}
+      {step === 4 && (<ReviewStep vehicle={vehicle} pkg={pkg} selectedDate={selectedDate} selectedSlotTime={selectedSlotTime} termsAccepted={termsAccepted} onTermsAcceptedChange={setTermsAccepted} onOpenTerms={() => setTermsOpen(true)} isSubmitting={isSubmitting} onBack={() => setStep(3)} onConfirm={handleConfirm} confirmLabel={confirmLabel} requireTerms={mode !== "reschedule"}/>)}
 
       <AddVehicleDialog open={addVehicleOpen} onOpenChange={setAddVehicleOpen} onVehicleAdded={handleVehicleAdded}/>
 

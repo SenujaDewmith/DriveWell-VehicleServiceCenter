@@ -1,10 +1,10 @@
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-const HERO_IMAGE_URL = "https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?q=80&w=2000";
+import heroImage from "@/assets/landing/hero.jpg";
 export function Hero() {
     const navigate = useNavigate();
-    return (<section className="relative h-[600px] flex items-center justify-center overflow-hidden">
-      <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url('${HERO_IMAGE_URL}')` }}>
+    return (<section className="relative h-[calc(100vh-4rem)] flex items-center justify-center overflow-hidden">
+      <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${heroImage})` }}>
         <div className="absolute inset-0 bg-gradient-to-r from-primary/90 to-secondary/80"/>
       </div>
       <div className="relative z-10 container mx-auto px-4 text-center">

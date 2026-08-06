@@ -4,7 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { fmtDuration } from "@/lib/packageFormat";
 import { CANCELLATION_CUTOFF_HOURS } from "@/lib/bookingRules";
 import { Car, CheckCircle, Clock, Loader2 } from "lucide-react";
-export function ReviewStep({ vehicle, pkg, selectedDate, selectedSlotTime, termsAccepted, onTermsAcceptedChange, onOpenTerms, isSubmitting, onBack, onConfirm, }) {
+export function ReviewStep({ vehicle, pkg, selectedDate, selectedSlotTime, termsAccepted, onTermsAcceptedChange, onOpenTerms, isSubmitting, onBack, onConfirm, confirmLabel = "Confirm Booking", requireTerms = true, }) {
     return (<Card>
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2">
@@ -63,8 +63,11 @@ export function ReviewStep({ vehicle, pkg, selectedDate, selectedSlotTime, terms
           </div>
         </div>
         {/* Clickwrap consent — unticked by default; gates the Confirm button and is
-            re-validated server-side. Replaces the old passive "by confirming…" text. */}
-        <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3">
+            re-validated server-side. Replaces the old passive "by confirming…" text.
+            Skipped for a reschedule of an already-Booked appointment: the customer
+            already accepted these terms when the booking was first made, and moving
+            its date/time doesn't create a new agreement to re-consent to. */}
+        {requireTerms && (<div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3">
           <Checkbox id="accept-terms" checked={termsAccepted} onCheckedChange={(checked) => onTermsAcceptedChange(checked === true)} className="mt-0.5"/>
           <div className="space-y-0.5">
             <label htmlFor="accept-terms" className="block cursor-pointer text-sm font-medium leading-snug">
@@ -81,17 +84,17 @@ export function ReviewStep({ vehicle, pkg, selectedDate, selectedSlotTime, terms
               for extra work discovered during service.
             </p>
           </div>
-        </div>
+        </div>)}
         {/* Sticky action bar — pins Back/Confirm on short viewports. The summary
             above stays in normal flow (not scroll-capped) so every detail the
             user is confirming remains scannable. */}
         <div className="sticky bottom-0 -mx-6 -mb-6 rounded-b-lg border-t bg-card px-6 py-4 flex gap-3">
           <Button variant="outline" onClick={onBack} className="flex-1">Back</Button>
-          <Button className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90" onClick={onConfirm} disabled={isSubmitting || !termsAccepted}>
+          <Button className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90" onClick={onConfirm} disabled={isSubmitting || (requireTerms && !termsAccepted)}>
             {isSubmitting ? (<>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
                 Confirming...
-              </>) : ("Confirm Booking")}
+              </>) : (confirmLabel)}
           </Button>
         </div>
       </CardContent>

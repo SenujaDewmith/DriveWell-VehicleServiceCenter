@@ -10,6 +10,7 @@ import { Layout } from "@/components/Layout";
 import Landing from "./pages/Landing";
 import About from "./pages/About";
 import FAQ from "./pages/FAQ";
+import Terms from "./pages/Terms";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -76,6 +77,7 @@ const App = () => (<ThemeProvider>
                 <Route path="/services" element={<Services />}/>
                 <Route path="/about" element={<About />}/>
                 <Route path="/faq" element={<FAQ />}/>
+                <Route path="/terms" element={<Terms />}/>
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>}/>
                 <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>}/>
                 <Route path="/vehicles" element={<ProtectedRoute><Vehicles /></ProtectedRoute>}/>

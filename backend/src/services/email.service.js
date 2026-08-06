@@ -53,6 +53,20 @@ const sendBookingCancellation = (to, { customerName, bookingRef, serviceDate }) 
     <p>If this was a mistake, please contact us to rebook.</p>
   `);
 
+const sendBookingRescheduled = (to, { customerName, bookingRef, packageName, serviceDate, slotTime }) =>
+  sendEmail(to, "Booking Rescheduled – DriveWell", `
+    <h2>Booking Rescheduled</h2>
+    <p>Hi ${customerName},</p>
+    <p>Your booking has been moved to a new date and time.</p>
+    <table>
+      <tr><td><strong>Booking Ref:</strong></td><td>${bookingRef}</td></tr>
+      <tr><td><strong>Service:</strong></td><td>${packageName}</td></tr>
+      <tr><td><strong>New Date:</strong></td><td>${serviceDate}</td></tr>
+      <tr><td><strong>New Time:</strong></td><td>${slotTime}</td></tr>
+    </table>
+    <p>Thank you for choosing DriveWell!</p>
+  `);
+
 const sendNoShowNotice = (to, { customerName, bookingRef, serviceDate }) =>
   sendEmail(to, "We Missed You – DriveWell", `
     <h2>Missed Appointment</h2>
@@ -155,7 +169,7 @@ const sendVehicleCollected = (to, { customerName, bookingRef }) =>
   `);
 
 module.exports = {
-  sendWelcomeEmail, sendBookingConfirmation, sendBookingCancellation, sendNoShowNotice, sendStatusUpdate,
+  sendWelcomeEmail, sendBookingConfirmation, sendBookingRescheduled, sendBookingCancellation, sendNoShowNotice, sendStatusUpdate,
   sendVehicleTransferredEmail, sendPasswordResetEmail, sendAccountSetupEmail,
   sendTransferRequestNoticeEmail, sendTransferRequestDecisionEmail,
   sendInvoiceReady, sendVehicleCollected, sendPaymentReceived, sendServiceCompleted,
