@@ -93,6 +93,23 @@ export default function Profile() {
         resolver: zodResolver(changePasswordSchema),
     });
     const newPassword = watchPasswordField("newPassword", "");
+    const blockSpaceKey = (e) => {
+        if (e.key === " ") {
+            e.preventDefault();
+        }
+    };
+    const stripSpacesOnPaste = (e) => {
+        const pasted = e.clipboardData.getData("text");
+        if (/\s/.test(pasted)) {
+            e.preventDefault();
+            const target = e.target;
+            const { selectionStart, selectionEnd, value } = target;
+            const sanitized = pasted.replace(/\s/g, "");
+            const newValue = value.slice(0, selectionStart) + sanitized + value.slice(selectionEnd);
+            target.value = newValue;
+            target.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+    };
     const onChangePassword = async (data) => {
         try {
             await authService.changePassword(data.currentPassword, data.newPassword);
@@ -270,7 +287,7 @@ export default function Profile() {
                 <div className="space-y-1.5">
                   <Label htmlFor="current-password">Current Password</Label>
                   <div className="relative">
-                    <Input id="current-password" type={showCurrentPassword ? "text" : "password"} className="pr-10" {...registerPasswordField("currentPassword")}/>
+                    <Input id="current-password" type={showCurrentPassword ? "text" : "password"} className="pr-10" onKeyDown={blockSpaceKey} onPaste={stripSpacesOnPaste} {...registerPasswordField("currentPassword")}/>
                     <button type="button" onClick={() => setShowCurrentPassword((prev) => !prev)} className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground" aria-label={showCurrentPassword ? "Hide password" : "Show password"} tabIndex={-1}>
                       {showCurrentPassword ? (<EyeOff className="h-4 w-4"/>) : (<Eye className="h-4 w-4"/>)}
                     </button>
@@ -282,7 +299,7 @@ export default function Profile() {
                 <div className="space-y-1.5">
                   <Label htmlFor="new-password">New Password</Label>
                   <div className="relative">
-                    <Input id="new-password" type={showNewPassword ? "text" : "password"} className="pr-10" {...registerPasswordField("newPassword")}/>
+                    <Input id="new-password" type={showNewPassword ? "text" : "password"} className="pr-10" onKeyDown={blockSpaceKey} onPaste={stripSpacesOnPaste} {...registerPasswordField("newPassword")}/>
                     <button type="button" onClick={() => setShowNewPassword((prev) => !prev)} className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground" aria-label={showNewPassword ? "Hide password" : "Show password"} tabIndex={-1}>
                       {showNewPassword ? (<EyeOff className="h-4 w-4"/>) : (<Eye className="h-4 w-4"/>)}
                     </button>
@@ -292,7 +309,7 @@ export default function Profile() {
                 <div className="space-y-1.5">
                   <Label htmlFor="confirm-password">Confirm New Password</Label>
                   <div className="relative">
-                    <Input id="confirm-password" type={showConfirmNewPassword ? "text" : "password"} className="pr-10" {...registerPasswordField("confirmNewPassword")}/>
+                    <Input id="confirm-password" type={showConfirmNewPassword ? "text" : "password"} className="pr-10" onKeyDown={blockSpaceKey} onPaste={stripSpacesOnPaste} {...registerPasswordField("confirmNewPassword")}/>
                     <button type="button" onClick={() => setShowConfirmNewPassword((prev) => !prev)} className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground" aria-label={showConfirmNewPassword
             ? "Hide password"
             : "Show password"} tabIndex={-1}>

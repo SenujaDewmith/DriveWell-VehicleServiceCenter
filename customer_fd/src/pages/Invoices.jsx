@@ -5,13 +5,43 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { invoicesService } from "@/services/invoices.service";
-import { FileText, Printer, Loader2, Gauge } from "lucide-react";
+import { generateInvoicePdf } from "@/lib/invoicePdf";
+import { FileText, Download, Loader2, Gauge } from "lucide-react";
 export default function Invoices() {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [downloadingId, setDownloadingId] = useState(null);
+    const downloadInvoice = (invoice) => {
+        setDownloadingId(invoice.invoice_id);
+        try {
+            generateInvoicePdf({
+                invoiceId: invoice.invoice_id,
+                bookingRef: invoice.booking_ref,
+                make: invoice.make,
+                model: invoice.model,
+                plateNo: invoice.plate_no,
+                packageName: invoice.package_name,
+                serviceDate: invoice.service_date,
+                paymentStatus: invoice.payment_status,
+                paymentMethod: invoice.payment_method,
+                baseAmount: invoice.base_amount,
+                items: invoice.items,
+                discount: invoice.discount,
+                totalAmount: invoice.total_amount,
+                notes: invoice.notes,
+                generatedAt: invoice.generated_at,
+                hasOilChange: invoice.has_oil_change,
+                currentOdometer: invoice.current_odometer,
+                nextServiceOdometer: invoice.next_service_odometer,
+            });
+        }
+        finally {
+            setDownloadingId(null);
+        }
+    };
     useEffect(() => {
         if (!user)
             navigate("/login");
@@ -147,9 +177,9 @@ export default function Invoices() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 lg:w-48">
-                    <Button variant="outline" className="w-full" onClick={() => window.print()}>
-                      <Printer className="mr-2 h-4 w-4"/>
-                      Print
+                    <Button variant="outline" className="w-full" onClick={() => downloadInvoice(invoice)} disabled={downloadingId === invoice.invoice_id}>
+                      {downloadingId === invoice.invoice_id ? (<Loader2 className="mr-2 h-4 w-4 animate-spin"/>) : (<Download className="mr-2 h-4 w-4"/>)}
+                      Download PDF
                     </Button>
                   </div>
                 </div>

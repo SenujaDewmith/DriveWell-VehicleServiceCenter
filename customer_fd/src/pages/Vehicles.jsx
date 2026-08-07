@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import { PlateNumberInput } from "@/components/ui/plate-number-input";
 import { PhoneNumberInput } from "@/components/ui/phone-number-input";
 import { isValidSriLankanPhone } from "@/lib/phoneNumber";
 import { useContactPhone } from "@/hooks/useContactPhone";
-import { Car, Edit, Trash2, Plus, Loader2, Wrench, ChevronRight, RotateCcw, FileUp } from "lucide-react";
+import { Car, Edit, Trash2, Plus, Loader2, Wrench, ChevronRight, RotateCcw, FileUp, X } from "lucide-react";
 import { toast } from "sonner";
 function TransferRequestStatusBadge({ status }) {
     if (status === "Approved") {
@@ -27,6 +27,7 @@ function TransferRequestStatusBadge({ status }) {
     }
     return <Badge variant="outline" className="text-amber-600 border-amber-600">Pending Review</Badge>;
 }
+const ALLOWED_TRANSFER_DOC_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 function validateForm(data) {
     const errors = {};
     if (data.useCustomMake) {
@@ -76,6 +77,8 @@ export default function Vehicles() {
     const [transferRequestPlate, setTransferRequestPlate] = useState("");
     const [registrationBookFile, setRegistrationBookFile] = useState(null);
     const [nicFile, setNicFile] = useState(null);
+    const registrationBookInputRef = useRef(null);
+    const nicInputRef = useRef(null);
     const [submittingTransferRequest, setSubmittingTransferRequest] = useState(false);
     const [transferRequestError, setTransferRequestError] = useState("");
     const [contactPhoneChoice, setContactPhoneChoice] = useState("new");
@@ -97,6 +100,7 @@ export default function Vehicles() {
     const [customModel, setCustomModel] = useState("");
     const [formErrors, setFormErrors] = useState({});
     const [saving, setSaving] = useState(false);
+    const [editSnapshot, setEditSnapshot] = useState(null);
     useEffect(() => {
         if (!user)
             navigate("/login");
@@ -149,12 +153,16 @@ export default function Vehicles() {
             return;
         }
         setLoadingModels(true);
+        const isInitialEditLoad = !!pendingModelId;
         vehiclesService
             .getModels(parseInt(makeId))
             .then(({ models }) => {
             setModels(models);
             if (pendingModelId && models.some((m) => m.model_id.toString() === pendingModelId)) {
                 setModelId(pendingModelId);
+                if (isInitialEditLoad) {
+                    setEditSnapshot((prev) => (prev ? { ...prev, modelId: pendingModelId } : prev));
+                }
             }
             else {
                 setModelId("");
@@ -177,6 +185,7 @@ export default function Vehicles() {
         setFormErrors({});
         setPendingModelId(null);
         setPlateBlockedElsewhere(false);
+        setEditSnapshot(null);
     };
     const openAdd = () => {
         setEditingVehicle(null);
@@ -186,23 +195,46 @@ export default function Vehicles() {
     const openEdit = (vehicle) => {
         setEditingVehicle(vehicle);
         setFormErrors({});
-        setVehicleTypeId(vehicle.vehicle_type_id.toString());
-        setYear(vehicle.year ? String(vehicle.year) : "");
-        setPlateNo(vehicle.plate_no);
+        const vehicleTypeIdVal = vehicle.vehicle_type_id.toString();
+        const yearVal = vehicle.year ? String(vehicle.year) : "";
+        const plateNoVal = vehicle.plate_no;
+        setVehicleTypeId(vehicleTypeIdVal);
+        setYear(yearVal);
+        setPlateNo(plateNoVal);
+        let snapshot;
         if (vehicle.pending_catalog_review) {
             setPendingModelId(null);
             setUseCustomModel(true);
-            setCustomModel(vehicle.custom_model ?? "");
+            const customModelVal = vehicle.custom_model ?? "";
+            setCustomModel(customModelVal);
+            let makeIdVal = "";
+            let customMakeVal = "";
+            let useCustomMakeVal;
             if (vehicle.make_id) {
+                useCustomMakeVal = false;
                 setUseCustomMake(false);
                 setCustomMake("");
-                setMakeId(vehicle.make_id.toString());
+                makeIdVal = vehicle.make_id.toString();
+                setMakeId(makeIdVal);
             }
             else {
+                useCustomMakeVal = true;
                 setUseCustomMake(true);
-                setCustomMake(vehicle.custom_make ?? "");
+                customMakeVal = vehicle.custom_make ?? "";
+                setCustomMake(customMakeVal);
                 setMakeId("");
             }
+            snapshot = {
+                makeId: makeIdVal,
+                modelId: "",
+                vehicleTypeId: vehicleTypeIdVal,
+                year: yearVal,
+                plateNo: plateNoVal,
+                useCustomMake: useCustomMakeVal,
+                customMake: customMakeVal,
+                useCustomModel: true,
+                customModel: customModelVal,
+            };
         }
         else {
             setUseCustomMake(false);
@@ -211,7 +243,19 @@ export default function Vehicles() {
             setCustomModel("");
             setPendingModelId(vehicle.model_id.toString());
             setMakeId(vehicle.make_id.toString());
+            snapshot = {
+                makeId: vehicle.make_id.toString(),
+                modelId: vehicle.model_id.toString(),
+                vehicleTypeId: vehicleTypeIdVal,
+                year: yearVal,
+                plateNo: plateNoVal,
+                useCustomMake: false,
+                customMake: "",
+                useCustomModel: false,
+                customModel: "",
+            };
         }
+        setEditSnapshot(snapshot);
         setDialogOpen(true);
     };
     const closeDialog = (open) => {
@@ -358,6 +402,21 @@ export default function Vehicles() {
         : contactPhoneChoice === "secondary"
             ? user?.secondaryPhone ?? ""
             : newContactPhone;
+    const handleTransferFileChange = (e, setter) => {
+        const file = e.target.files?.[0] ?? null;
+        if (file && !ALLOWED_TRANSFER_DOC_TYPES.includes(file.type)) {
+            toast.error(`"${file.name}" isn't a supported image type — please choose a JPEG, PNG, WEBP, or GIF.`);
+            e.target.value = "";
+            setter(null);
+            return;
+        }
+        setter(file);
+    };
+    const clearTransferFile = (setter, ref) => {
+        setter(null);
+        if (ref.current)
+            ref.current.value = "";
+    };
     const submitTransferRequest = async () => {
         if (!registrationBookFile || !nicFile) {
             setTransferRequestError("Both a vehicle's registration book photo and an NIC photo are required");
@@ -410,6 +469,10 @@ export default function Vehicles() {
             setRestoringId(null);
         }
     };
+    const isEditFormDirty = !editSnapshot || makeId !== editSnapshot.makeId || modelId !== editSnapshot.modelId ||
+        vehicleTypeId !== editSnapshot.vehicleTypeId || year !== editSnapshot.year || plateNo.trim() !== editSnapshot.plateNo ||
+        useCustomMake !== editSnapshot.useCustomMake || useCustomModel !== editSnapshot.useCustomModel ||
+        (useCustomMake && customMake !== editSnapshot.customMake) || (useCustomModel && customModel !== editSnapshot.customModel);
     if (!user)
         return null;
     return (<div className="container mx-auto px-4 py-8">
@@ -610,8 +673,8 @@ export default function Vehicles() {
                     </p>)}
                   {plateBlockedElsewhere && (<Button type="button" variant="outline" size="sm" className="mt-1" onClick={() => {
                     setTransferRequestPlate(plateNo.trim());
-                    setRegistrationBookFile(null);
-                    setNicFile(null);
+                    clearTransferFile(setRegistrationBookFile, registrationBookInputRef);
+                    clearTransferFile(setNicFile, nicInputRef);
                     setTransferRequestError("");
                     setNewContactPhone("");
                     setContactPhoneChoice(user?.phone ? "primary" : user?.secondaryPhone ? "secondary" : "new");
@@ -626,7 +689,7 @@ export default function Vehicles() {
                 <Button type="button" variant="outline" disabled={saving || lookingUpPlate} onClick={() => closeDialog(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" className="bg-cta text-cta-foreground hover:bg-cta/90" disabled={saving || lookingUpPlate}>
+                <Button type="submit" className="bg-cta text-cta-foreground hover:bg-cta/90" disabled={saving || lookingUpPlate || (editingVehicle && !isEditFormDirty)}>
                   {saving || lookingUpPlate ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin"/>{lookingUpPlate ? "Checking plate..." : editingVehicle ? "Updating..." : "Adding..."}</>) : (editingVehicle ? "Update Vehicle" : "Add Vehicle")}
                 </Button>
               </div>
@@ -748,11 +811,21 @@ export default function Vehicles() {
 
             <div className="space-y-2">
               <Label htmlFor="registration_book_photo">Vehicle's Registration Book Photo <span className="text-destructive">*</span></Label>
-              <Input id="registration_book_photo" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => setRegistrationBookFile(e.target.files?.[0] ?? null)}/>
+              <div className="flex items-center gap-2">
+                <Input id="registration_book_photo" ref={registrationBookInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => handleTransferFileChange(e, setRegistrationBookFile)}/>
+                {registrationBookFile && (<Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0" onClick={() => clearTransferFile(setRegistrationBookFile, registrationBookInputRef)} aria-label="Clear registration book photo">
+                    <X className="h-4 w-4"/>
+                  </Button>)}
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="nic_photo">Your NIC Photo <span className="text-destructive">*</span></Label>
-              <Input id="nic_photo" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => setNicFile(e.target.files?.[0] ?? null)}/>
+              <div className="flex items-center gap-2">
+                <Input id="nic_photo" ref={nicInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => handleTransferFileChange(e, setNicFile)}/>
+                {nicFile && (<Button type="button" variant="ghost" size="icon" className="h-10 w-10 shrink-0" onClick={() => clearTransferFile(setNicFile, nicInputRef)} aria-label="Clear NIC photo">
+                    <X className="h-4 w-4"/>
+                  </Button>)}
+              </div>
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">

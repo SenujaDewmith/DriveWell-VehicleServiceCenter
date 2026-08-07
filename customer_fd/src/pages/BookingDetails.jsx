@@ -11,9 +11,10 @@ import { feedbackService } from "@/services/feedback.service";
 import { getCustomerStatusNote } from "@/lib/serviceStatus";
 import { CANCELLATION_CUTOFF_HOURS, canSelfCancel, bookingListTab } from "@/lib/bookingRules";
 import { useContactPhone } from "@/hooks/useContactPhone";
-import { fmtDuration } from "@/lib/packageFormat";
+import { fmtDuration, getBullets } from "@/lib/packageFormat";
 import { fmtTime } from "@/lib/time";
-import { ArrowLeft, Car, Calendar, Clock, CheckCircle, Loader2, Wrench, FileText, Printer, Gauge, Copy } from "lucide-react";
+import { generateInvoicePdf } from "@/lib/invoicePdf";
+import { ArrowLeft, Car, Calendar, Clock, CheckCircle, Loader2, Wrench, FileText, Download, Gauge, Copy } from "lucide-react";
 import { toast } from "sonner";
 function fmtDate(d) {
     return new Date(d).toLocaleDateString("en-LK", {
@@ -58,6 +59,7 @@ export default function BookingDetails() {
     const contactPhone = useContactPhone();
     const reservationId = id ? parseInt(id) : undefined;
     const [cancelling, setCancelling] = useState(false);
+    const [downloadingInvoice, setDownloadingInvoice] = useState(false);
     const [booking, setBooking] = useState(null);
     const [loading, setLoading] = useState(true);
     const [notFound, setNotFound] = useState(false);
@@ -128,6 +130,36 @@ export default function BookingDetails() {
             .then(() => toast.success("Booking reference copied"))
             .catch(() => toast.error("Couldn't copy — please copy it manually"));
     };
+    const downloadInvoice = () => {
+        if (!booking?.invoice)
+            return;
+        setDownloadingInvoice(true);
+        try {
+            generateInvoicePdf({
+                invoiceId: booking.invoice.invoice_id,
+                bookingRef: booking.booking_ref,
+                make: booking.make,
+                model: booking.model,
+                plateNo: booking.plate_no,
+                packageName: booking.package_name,
+                serviceDate: booking.service_date,
+                paymentStatus: booking.invoice.payment_status,
+                paymentMethod: booking.invoice.payment_method,
+                baseAmount: booking.invoice.base_amount,
+                items: booking.invoice.items,
+                discount: booking.invoice.discount,
+                totalAmount: booking.invoice.total_amount,
+                notes: booking.invoice.notes,
+                generatedAt: booking.invoice.generated_at,
+                hasOilChange: booking.service_record?.has_oil_change,
+                currentOdometer: booking.service_record?.current_odometer,
+                nextServiceOdometer: booking.service_record?.next_service_odometer,
+            });
+        }
+        finally {
+            setDownloadingInvoice(false);
+        }
+    };
     const handleCancel = async () => {
         if (!booking)
             return;
@@ -163,6 +195,7 @@ export default function BookingDetails() {
     }
     const invoice = booking.invoice;
     const serviceRecord = booking.service_record;
+    const packageBullets = getBullets(booking.package_description);
     const statusNote = getCustomerStatusNote(booking);
     // Cross-owner bookings only ever reach this page via a vehicle's Service History (the
     // backend only allows viewing another customer's booking when you currently own its
@@ -241,6 +274,15 @@ export default function BookingDetails() {
                     <p className="text-xs text-muted-foreground">Upwards — see invoice for final amount</p>
                   </div>)}
               </div>
+              {packageBullets.length > 0 && (<div className="mt-4">
+                  <p className="text-sm text-muted-foreground mb-2">What's included:</p>
+                  <ul className="space-y-1.5">
+                    {packageBullets.map((item, i) => (<li key={i} className="flex items-start gap-2">
+                        <CheckCircle className="h-4 w-4 text-cta shrink-0 mt-0.5"/>
+                        <span className="text-sm">{item}</span>
+                      </li>))}
+                  </ul>
+                </div>)}
             </section>
 
             <Separator />
@@ -386,9 +428,9 @@ export default function BookingDetails() {
                   {invoice.payment_method && (<p className="text-xs text-muted-foreground mt-3">Paid via {invoice.payment_method}</p>)}
                   {invoice.notes && (<p className="text-xs text-muted-foreground pt-3 mt-3 border-t">{invoice.notes}</p>)}
 
-                  <Button variant="outline" className="w-full mt-4" onClick={() => window.print()}>
-                    <Printer className="mr-2 h-4 w-4"/>
-                    Print Invoice
+                  <Button variant="outline" className="w-full mt-4" onClick={downloadInvoice} disabled={downloadingInvoice}>
+                    {downloadingInvoice ? (<Loader2 className="mr-2 h-4 w-4 animate-spin"/>) : (<Download className="mr-2 h-4 w-4"/>)}
+                    Download Invoice
                   </Button>
                 </section>
               </>)}

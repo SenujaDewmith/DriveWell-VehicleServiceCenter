@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -29,10 +29,18 @@ export default function Feedback() {
     const [bookings, setBookings] = useState([]);
     const [feedback, setFeedback] = useState([]);
     const [loading, setLoading] = useState(true);
+    const feedbackFormRef = useRef(null);
     useEffect(() => {
         if (!user)
             navigate("/login");
     }, [user, navigate]);
+    // Arriving here from a specific booking's "Leave Feedback" button should land the
+    // customer directly on the form, not the average-rating summary above it.
+    useEffect(() => {
+        if (!loading && searchParams.get("booking") && feedbackFormRef.current) {
+            feedbackFormRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    }, [loading, searchParams]);
     const loadFeedback = () => feedbackService.getFeedback().then((r) => setFeedback(r.feedback));
     useEffect(() => {
         if (!user)
@@ -117,7 +125,7 @@ export default function Feedback() {
             </CardContent>
           </Card>
 
-          {eligibleBookings.length > 0 && (<Card className="mb-8">
+          {eligibleBookings.length > 0 && (<Card ref={feedbackFormRef} className="mb-8 scroll-mt-24">
               <CardHeader>
                 <CardTitle>Leave Feedback</CardTitle>
               </CardHeader>
