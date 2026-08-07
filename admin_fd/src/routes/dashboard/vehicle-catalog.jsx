@@ -47,6 +47,7 @@ function MakesTab() {
   const [nameError, setNameError] = useState("");
   const [saving, setSaving] = useState(false);
   const [pageError, setPageError] = useState("");
+  const [search, setSearch] = useState(""); // added: search bar state
 
   const load = () => {
     setLoading(true);
@@ -116,9 +117,15 @@ function MakesTab() {
     }
   };
 
+  // added: derive the filtered list shown in the table from the search box
+  const filteredMakes = makes.filter((make) =>
+    make.name.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      {/* added: flex-wrap gap-3 so the search bar below can wrap on small screens */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="text-sm text-muted-foreground">
           Vehicle makes available to customers when registering a vehicle
         </p>
@@ -129,6 +136,14 @@ function MakesTab() {
           <Plus className="h-4 w-4" /> Add Make
         </button>
       </div>
+
+      {/* added: search bar for filtering makes by name */}
+      <input
+        placeholder="Search makes..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring w-64"
+      />
 
       {pageError && (
         <p className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md px-3 py-2">
@@ -190,7 +205,8 @@ function MakesTab() {
               </tr>
             </thead>
             <tbody>
-              {makes.map((make) => (
+              {/* added: render filteredMakes instead of makes */}
+              {filteredMakes.map((make) => (
                 <tr
                   key={make.make_id}
                   className="border-b border-border last:border-0 hover:bg-muted/20"
@@ -234,10 +250,11 @@ function MakesTab() {
                   </td>
                 </tr>
               ))}
-              {makes.length === 0 && (
+              {/* added: check filteredMakes and show a distinct message when search has no results */}
+              {filteredMakes.length === 0 && (
                 <tr>
                   <td colSpan={4} className="py-8 text-center text-muted-foreground">
-                    No makes yet.
+                    {makes.length === 0 ? "No makes yet." : "No makes match your search."}
                   </td>
                 </tr>
               )}
