@@ -20,6 +20,7 @@ import {
   Wrench,
   ArrowLeftRight,
   Car,
+  Contact,
   MessageSquare,
   History,
   ChevronsLeft,
@@ -38,6 +39,11 @@ const managerNav = [
   },
   { label: "Schedule Config", to: "/dashboard/schedule", icon: <Calendar className="h-4 w-4" /> },
   { label: "Staff Management", to: "/dashboard/users", icon: <Users className="h-4 w-4" /> },
+  {
+    label: "Customer Management",
+    to: "/dashboard/customers",
+    icon: <Contact className="h-4 w-4" />,
+  },
   {
     label: "Vehicle Transfers",
     to: "/dashboard/vehicle-transfers",
@@ -69,6 +75,12 @@ const supervisorNav = [
     icon: <History className="h-4 w-4" />,
   },
   { label: "Feedback", to: "/dashboard/feedback", icon: <MessageSquare className="h-4 w-4" /> },
+  {
+    // Read-only for supervisors — the page itself hides Add/Edit/Activate based on role.
+    label: "Customer Management",
+    to: "/dashboard/customers",
+    icon: <Contact className="h-4 w-4" />,
+  },
 ];
 
 export function DashboardLayout({ children }) {
@@ -191,9 +203,10 @@ export function DashboardLayout({ children }) {
             <ThemeToggle />
             <button
               onClick={() => setShowLogoutConfirm(true)}
-              className="p-2 rounded-md border border-border bg-card text-foreground hover:bg-muted transition-colors"
+              className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors"
             >
               <LogOut className="h-4 w-4" />
+              Logout
             </button>
           </div>
         </header>

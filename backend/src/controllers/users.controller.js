@@ -4,9 +4,12 @@ const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
 const { logActivity } = require("../lib/activityLogger");
 const { hashResetToken } = require("../utils/resetToken");
-const { sendAccountSetupEmail } = require("../services/email.service");
+const { sendAccountSetupEmail, sendCustomerAccountSetupEmail } = require("../services/email.service");
+const { isValidPhone, isValidSriLankanPhone } = require("../lib/phone");
 
 const STAFF_ROLES = [1, 2, 3, 4];
+const CUSTOMER_ROLE_ID = 5;
+const MANAGEABLE_ROLES = [...STAFF_ROLES, CUSTOMER_ROLE_ID];
 const ROLE_NAMES = { 1: "Manager", 2: "Supervisor", 3: "Cashier", 4: "Service Staff" };
 
 // Invite links live longer than the 30-min self-service reset link (that one
@@ -186,10 +189,10 @@ const setAccountStatus = async (req, res) => {
 
   try {
     const user = await prisma.user.updateMany({
-      where: { user_id: parseInt(id), role_id: { in: STAFF_ROLES } },
+      where: { user_id: parseInt(id), role_id: { in: MANAGEABLE_ROLES } },
       data: { account_status },
     });
-    if (user.count === 0) return res.status(404).json({ message: "Staff member not found" });
+    if (user.count === 0) return res.status(404).json({ message: "Account not found" });
 
     logger.info(`User ${id} status set to ${account_status}`);
     if (account_status === "inactive") {
@@ -234,7 +237,7 @@ const resetPassword = async (req, res) => {
 const listCustomers = async (req, res) => {
   try {
     const users = await prisma.user.findMany({
-      where: { role_id: 5 },
+      where: { role_id: CUSTOMER_ROLE_ID },
       include: { customer: { select: { full_name: true, phone: true, address: true } } },
       orderBy: { created_at: "desc" },
     });
@@ -253,7 +256,172 @@ const listCustomers = async (req, res) => {
   }
 };
 
+const getCustomer = async (req, res) => {
+  try {
+    const user = await prisma.user.findFirst({
+      where: { user_id: parseInt(req.params.id), role_id: CUSTOMER_ROLE_ID },
+      include: {
+        customer: true,
+        vehicles: {
+          select: {
+            vehicle_id: true,
+            plate_no: true,
+            year: true,
+            make: { select: { name: true } },
+            model: { select: { name: true } },
+            custom_make: true,
+            custom_model: true,
+          },
+          orderBy: { vehicle_id: "desc" },
+        },
+        reservations: {
+          select: {
+            reservation_id: true,
+            booking_ref: true,
+            service_date: true,
+            status: true,
+            package: { select: { name: true } },
+          },
+          orderBy: { service_date: "desc" },
+          take: 5,
+        },
+      },
+    });
+    if (!user) return res.status(404).json({ message: "Customer not found" });
+
+    const { customer: c, vehicles, reservations, ...rest } = user;
+    res.status(200).json({
+      customer: {
+        ...rest,
+        full_name: c?.full_name ?? null,
+        phone: c?.phone ?? null,
+        secondary_phone: c?.secondary_phone ?? null,
+        address: c?.address ?? null,
+        vehicles: vehicles.map((v) => ({
+          vehicle_id: v.vehicle_id,
+          plate_no: v.plate_no,
+          year: v.year,
+          make: v.make?.name ?? v.custom_make ?? null,
+          model: v.model?.name ?? v.custom_model ?? null,
+        })),
+        recent_bookings: reservations.map((r) => ({
+          reservation_id: r.reservation_id,
+          booking_ref: r.booking_ref,
+          service_date: r.service_date,
+          status: r.status,
+          package_name: r.package?.name ?? null,
+        })),
+      },
+    });
+  } catch (error) {
+    logger.error(`getCustomer failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const createCustomer = async (req, res) => {
+  const { email, full_name, phone, secondary_phone, address } = req.body;
+
+  if (!email || !full_name || !phone)
+    return res.status(400).json({ message: "email, full_name, and phone are required" });
+  if (!isValidSriLankanPhone(phone))
+    return res.status(400).json({ message: "Enter a valid phone number, e.g. +94771234567" });
+  if (secondary_phone && !isValidPhone(secondary_phone))
+    return res.status(400).json({ message: "Enter a valid secondary phone number" });
+
+  // Email is treated as case-insensitive (same policy as auth.schema.js) — no Zod schema
+  // guards this route, so it's normalized here instead.
+  const normalizedEmail = email.trim().toLowerCase();
+
+  try {
+    // Same pattern as createStaff — the manager never chooses or sees a password, and
+    // account_status stays "pending" (blocking login) until the invite link is used.
+    const placeholderHash = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10);
+    const rawToken = crypto.randomBytes(32).toString("hex");
+
+    const user = await prisma.$transaction(async (tx) => {
+      const existing = await tx.user.findUnique({ where: { email: normalizedEmail } });
+      if (existing) {
+        const err = new Error("Email already registered"); err.status = 400; throw err;
+      }
+
+      return tx.user.create({
+        data: {
+          email: normalizedEmail,
+          password_hash: placeholderHash,
+          role_id: CUSTOMER_ROLE_ID,
+          account_status: "pending",
+          reset_token_hash: hashResetToken(rawToken),
+          reset_token_expires_at: new Date(Date.now() + SETUP_TOKEN_TTL_MS),
+          customer: {
+            create: {
+              full_name: full_name.trim(),
+              phone: phone || null,
+              secondary_phone: secondary_phone || null,
+              address: address || null,
+            },
+          },
+        },
+        select: { user_id: true, email: true, role_id: true },
+      });
+    });
+
+    // Customers set their password through the same /reset-password page a
+    // self-service "forgot password" link points to — no separate customer setup page exists.
+    const setupUrl = `${process.env.FRONTEND_URL}/reset-password?token=${rawToken}`;
+    sendCustomerAccountSetupEmail(user.email, { fullName: full_name.trim(), setupUrl });
+
+    logger.info(`Customer account created (pending) — user_id: ${user.user_id}`);
+    res.status(201).json({ message: "Customer account created. An invite email has been sent.", user });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    logger.error(`createCustomer failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+const updateCustomer = async (req, res) => {
+  const { id } = req.params;
+  const { full_name, phone, secondary_phone, address, email } = req.body;
+
+  if (!full_name || !phone)
+    return res.status(400).json({ message: "full_name and phone are required" });
+  if (!isValidSriLankanPhone(phone))
+    return res.status(400).json({ message: "Enter a valid phone number, e.g. +94771234567" });
+  if (secondary_phone && !isValidPhone(secondary_phone))
+    return res.status(400).json({ message: "Enter a valid secondary phone number" });
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (email) {
+        await tx.user.update({ where: { user_id: parseInt(id) }, data: { email: email.trim().toLowerCase() } });
+      }
+      const existing = await tx.customer.findUnique({ where: { user_id: parseInt(id) } });
+      if (!existing) {
+        const err = new Error("Customer not found"); err.status = 404; throw err;
+      }
+      await tx.customer.update({
+        where: { user_id: parseInt(id) },
+        data: {
+          full_name: full_name.trim(),
+          phone: phone || null,
+          secondary_phone: secondary_phone || null,
+          address: address || null,
+        },
+      });
+    });
+
+    const updated = await prisma.customer.findUnique({ where: { user_id: parseInt(id) } });
+    res.status(200).json({ message: "Customer updated", customer: updated });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    logger.error(`updateCustomer failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 module.exports = {
   listStaff, getStaffMember, createStaff, updateStaff, deleteStaff,
   setAccountStatus, resetPassword, listCustomers,
+  getCustomer, createCustomer, updateCustomer,
 };

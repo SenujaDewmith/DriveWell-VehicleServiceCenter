@@ -92,9 +92,196 @@ describe("GET /api/users/customers", () => {
     expect(customer.phone).toBe("0711112222");
   });
 
-  test("rejects a non-manager staff account with 403", async () => {
-    const { agent } = await staffAgent("Supervisor", { email: "customers.supervisor@test.local" });
+  test("supervisor can also list customer accounts (read-only access)", async () => {
+    await createUser("Customer", { email: "supervisorlist.customer@test.local", full_name: "Supervisor List Customer" });
+    const { agent } = await staffAgent("Supervisor", { email: "supervisorlist.supervisor@test.local" });
+
     const res = await agent.get("/api/users/customers").set("X-Portal", "staff");
+
+    expect(res.status).toBe(200);
+    expect(res.body.customers.find((c) => c.email === "supervisorlist.customer@test.local")).toBeTruthy();
+  });
+
+  test("rejects a non-manager, non-supervisor staff account with 403", async () => {
+    const { agent } = await staffAgent("Cashier", { email: "customers.cashier@test.local" });
+    const res = await agent.get("/api/users/customers").set("X-Portal", "staff");
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("GET /api/users/customers/:id", () => {
+  test("returns a customer's profile, vehicles, and recent bookings", async () => {
+    const customer = await createUser("Customer", { email: "detail.customer@test.local", full_name: "Detail Customer" });
+    const vehicle = await createVehicle(customer.user_id);
+    const pkg = await seedPackage({ name: "Detail Package" });
+    const reservation = await createReservation({ customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id });
+    const agent = await managerAgent();
+
+    const res = await agent.get(`/api/users/customers/${customer.user_id}`).set("X-Portal", "staff");
+
+    expect(res.status).toBe(200);
+    expect(res.body.customer.full_name).toBe("Detail Customer");
+    expect(res.body.customer.vehicles).toHaveLength(1);
+    expect(res.body.customer.vehicles[0].plate_no).toBe(vehicle.plate_no);
+    expect(res.body.customer.recent_bookings.map((b) => b.reservation_id)).toContain(reservation.reservation_id);
+  });
+
+  test("returns 404 for a non-existent id", async () => {
+    const agent = await managerAgent();
+    const res = await agent.get("/api/users/customers/999999").set("X-Portal", "staff");
+    expect(res.status).toBe(404);
+  });
+
+  test("returns 404 when the id belongs to staff, not a customer", async () => {
+    const staff = await createUser("Cashier", { email: "notcustomer@test.local" });
+    const agent = await managerAgent();
+    const res = await agent.get(`/api/users/customers/${staff.user_id}`).set("X-Portal", "staff");
+    expect(res.status).toBe(404);
+  });
+
+  test("supervisor can also view a customer's details (read-only access)", async () => {
+    const customer = await createUser("Customer", { email: "supervisordetail.customer@test.local", full_name: "Supervisor Detail Customer" });
+    const { agent } = await staffAgent("Supervisor", { email: "supervisordetail.supervisor@test.local" });
+
+    const res = await agent.get(`/api/users/customers/${customer.user_id}`).set("X-Portal", "staff");
+
+    expect(res.status).toBe(200);
+    expect(res.body.customer.full_name).toBe("Supervisor Detail Customer");
+  });
+
+  test("rejects a non-manager, non-supervisor staff account with 403", async () => {
+    const customer = await createUser("Customer", { email: "detailrbac.customer@test.local" });
+    const { agent } = await staffAgent("Cashier", { email: "detailrbac.cashier@test.local" });
+    const res = await agent.get(`/api/users/customers/${customer.user_id}`).set("X-Portal", "staff");
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("POST /api/users/customers", () => {
+  test("manager can create a new customer account — no password taken, account starts pending", async () => {
+    const agent = await managerAgent();
+
+    const res = await agent.post("/api/users/customers").set("X-Portal", "staff").send({
+      email: "new.customer@test.local",
+      full_name: "New Customer",
+      phone: "+94771234567",
+      address: "12 Galle Road, Colombo",
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.user.role_id).toBe(5);
+
+    const customerRow = await prisma.customer.findUnique({ where: { user_id: res.body.user.user_id } });
+    expect(customerRow.full_name).toBe("New Customer");
+    expect(customerRow.phone).toBe("+94771234567");
+    expect(customerRow.address).toBe("12 Galle Road, Colombo");
+
+    const userRow = await prisma.user.findUnique({ where: { user_id: res.body.user.user_id } });
+    expect(userRow.account_status).toBe("pending");
+    expect(userRow.reset_token_hash).not.toBeNull();
+    expect(userRow.reset_token_expires_at.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  test("rejects missing required fields with 400", async () => {
+    const agent = await managerAgent();
+    const res = await agent.post("/api/users/customers").set("X-Portal", "staff").send({ email: "incomplete@test.local" });
+    expect(res.status).toBe(400);
+  });
+
+  test("rejects a missing phone number with 400", async () => {
+    const agent = await managerAgent();
+    const res = await agent.post("/api/users/customers").set("X-Portal", "staff").send({
+      email: "nophone@test.local",
+      full_name: "No Phone",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("rejects an invalid phone number", async () => {
+    const agent = await managerAgent();
+    const res = await agent.post("/api/users/customers").set("X-Portal", "staff").send({
+      email: "badphone@test.local",
+      full_name: "Bad Phone",
+      phone: "12345",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("rejects a duplicate email with 400", async () => {
+    const agent = await managerAgent();
+    const body = { email: "dupe.customer@test.local", full_name: "Dupe", phone: "+94771234567" };
+    const first = await agent.post("/api/users/customers").set("X-Portal", "staff").send(body);
+    expect(first.status).toBe(201);
+
+    const second = await agent.post("/api/users/customers").set("X-Portal", "staff").send(body);
+    expect(second.status).toBe(400);
+    expect(second.body.message).toBe("Email already registered");
+  });
+
+  test("rejects a non-manager staff account with 403", async () => {
+    const { agent } = await staffAgent("Supervisor", { email: "createcustomerrbac.supervisor@test.local" });
+    const res = await agent.post("/api/users/customers").set("X-Portal", "staff").send({
+      email: "blocked.customer@test.local",
+      full_name: "Blocked",
+    });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("PUT /api/users/customers/:id", () => {
+  test("manager can update a customer's details, including email", async () => {
+    const target = await createUser("Customer", { email: "before.customer.update@test.local", full_name: "Before" });
+    const agent = await managerAgent();
+
+    const res = await agent.put(`/api/users/customers/${target.user_id}`).set("X-Portal", "staff").send({
+      full_name: "After Update",
+      phone: "+94771112222",
+      email: "after.customer.update@test.local",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.customer.full_name).toBe("After Update");
+
+    const userRow = await prisma.user.findUnique({ where: { user_id: target.user_id } });
+    expect(userRow.email).toBe("after.customer.update@test.local");
+  });
+
+  test("requires full_name", async () => {
+    const target = await createUser("Customer", { email: "nofullname.customer@test.local" });
+    const agent = await managerAgent();
+    const res = await agent.put(`/api/users/customers/${target.user_id}`).set("X-Portal", "staff").send({});
+    expect(res.status).toBe(400);
+  });
+
+  test("requires phone", async () => {
+    const target = await createUser("Customer", { email: "nophone.customer@test.local" });
+    const agent = await managerAgent();
+    const res = await agent.put(`/api/users/customers/${target.user_id}`).set("X-Portal", "staff").send({
+      full_name: "No Phone",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("returns 404 and rolls back the email change when the id is not a customer", async () => {
+    const staff = await createUser("Cashier", { email: "rollback.staff@test.local" });
+    const agent = await managerAgent();
+
+    const res = await agent.put(`/api/users/customers/${staff.user_id}`).set("X-Portal", "staff").send({
+      full_name: "Should Not Apply",
+      email: "should.not.apply.staff@test.local",
+      phone: "+94770000000",
+    });
+
+    expect(res.status).toBe(404);
+
+    const userRow = await prisma.user.findUnique({ where: { user_id: staff.user_id } });
+    expect(userRow.email).toBe("rollback.staff@test.local");
+  });
+
+  test("rejects a non-manager staff account with 403", async () => {
+    const target = await createUser("Customer", { email: "updatecustomerrbac.target@test.local" });
+    const { agent } = await staffAgent("Supervisor", { email: "updatecustomerrbac.supervisor@test.local" });
+    const res = await agent.put(`/api/users/customers/${target.user_id}`).set("X-Portal", "staff").send({ full_name: "X" });
     expect(res.status).toBe(403);
   });
 });
@@ -395,16 +582,23 @@ describe("PATCH /api/users/:id/status", () => {
     expect(res.status).toBe(404);
   });
 
-  // Despite the route doc saying "any user account", setAccountStatus queries
-  // role_id IN [1,2,3,4] — a customer id is invisible to this endpoint.
-  test("returns 404 for a customer id — this endpoint only reaches staff-role accounts", async () => {
+  test("manager can deactivate and reactivate a customer account", async () => {
     const customer = await createUser("Customer", { email: "statuscustomer@test.local" });
     const agent = await managerAgent();
-    const res = await agent
+
+    const deactivate = await agent
       .patch(`/api/users/${customer.user_id}/status`)
       .set("X-Portal", "staff")
       .send({ account_status: "inactive" });
-    expect(res.status).toBe(404);
+    expect(deactivate.status).toBe(200);
+    expect(deactivate.body.user.account_status).toBe("inactive");
+
+    const reactivate = await agent
+      .patch(`/api/users/${customer.user_id}/status`)
+      .set("X-Portal", "staff")
+      .send({ account_status: "active" });
+    expect(reactivate.status).toBe(200);
+    expect(reactivate.body.user.account_status).toBe("active");
   });
 
   test("rejects a non-manager staff account with 403", async () => {

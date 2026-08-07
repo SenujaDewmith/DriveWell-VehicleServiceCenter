@@ -3,10 +3,14 @@ const router = express.Router();
 const {
   listStaff, getStaffMember, createStaff, updateStaff, deleteStaff,
   setAccountStatus, resetPassword, listCustomers,
+  getCustomer, createCustomer, updateCustomer,
 } = require("../controllers/users.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
 
 const managerOnly = [verifyToken, authorizeRoles("Service Center Manager")];
+// Supervisors get read-only access to customer lookups (useful during a walk-in/call) —
+// everything that creates, edits, or changes access on an account stays manager-only.
+const managerOrSupervisor = [verifyToken, authorizeRoles("Service Center Manager", "Supervisor")];
 
 /**
  * @swagger
@@ -44,7 +48,7 @@ router.get("/staff", managerOnly, listStaff);
  * @swagger
  * /api/users/customers:
  *   get:
- *     summary: List all customer accounts (Manager only)
+ *     summary: List all customer accounts (Manager or Supervisor)
  *     tags: [Users]
  *     security:
  *       - cookieAuth: []
@@ -67,10 +71,96 @@ router.get("/staff", managerOnly, listStaff);
  *                       full_name:      { type: string }
  *                       phone:          { type: string }
  *                       address:        { type: string }
+ *       403: { description: Manager or Supervisor only }
+ *       500: { description: Server error }
+ */
+router.get("/customers", managerOrSupervisor, listCustomers);
+
+/**
+ * @swagger
+ * /api/users/customers/{id}:
+ *   get:
+ *     summary: Get a single customer's profile, vehicles, and recent bookings (Manager or Supervisor)
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Customer details }
+ *       403: { description: Manager or Supervisor only }
+ *       404: { description: Customer not found }
+ *       500: { description: Server error }
+ */
+router.get("/customers/:id", managerOrSupervisor, getCustomer);
+
+/**
+ * @swagger
+ * /api/users/customers:
+ *   post:
+ *     summary: Create a new customer account (Manager only)
+ *     description: No password is taken from the manager — an invite email is sent so the customer sets their own password, same as staff account creation.
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, full_name, phone]
+ *             properties:
+ *               email:           { type: string, example: kamal@example.com }
+ *               full_name:       { type: string, example: Kamal Silva }
+ *               phone:           { type: string, example: "+94771234567" }
+ *               secondary_phone: { type: string, example: "0711234567" }
+ *               address:         { type: string, example: "12 Galle Road, Colombo" }
+ *     responses:
+ *       201: { description: Customer account created }
+ *       400: { description: Validation error or email taken }
  *       403: { description: Manager only }
  *       500: { description: Server error }
  */
-router.get("/customers", managerOnly, listCustomers);
+router.post("/customers", managerOnly, createCustomer);
+
+/**
+ * @swagger
+ * /api/users/customers/{id}:
+ *   put:
+ *     summary: Update a customer's contact details (Manager only)
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [full_name, phone]
+ *             properties:
+ *               full_name:       { type: string, example: Kamal Silva }
+ *               email:           { type: string, example: kamal@example.com }
+ *               phone:           { type: string, example: "+94771234567" }
+ *               secondary_phone: { type: string, example: "0711234567" }
+ *               address:         { type: string, example: "12 Galle Road, Colombo" }
+ *     responses:
+ *       200: { description: Customer updated }
+ *       400: { description: Validation error }
+ *       403: { description: Manager only }
+ *       404: { description: Customer not found }
+ *       500: { description: Server error }
+ */
+router.put("/customers/:id", managerOnly, updateCustomer);
 
 /**
  * @swagger
@@ -183,7 +273,7 @@ router.delete("/staff/:id", managerOnly, deleteStaff);
  * @swagger
  * /api/users/{id}/status:
  *   patch:
- *     summary: Activate or deactivate any user account (Manager only)
+ *     summary: Activate or deactivate any staff or customer account (Manager only)
  *     tags: [Users]
  *     security:
  *       - cookieAuth: []
