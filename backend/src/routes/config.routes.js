@@ -67,6 +67,7 @@ router.get("/", verifyToken, getConfig);
  *               day_start_time:          { type: string, example: "08:00", description: "HH:MM format" }
  *               day_end_time:            { type: string, example: "18:00", description: "HH:MM format; must be after day_start_time" }
  *               same_day_cutoff_minutes: { type: integer, example: 240, description: "Minutes before closing that same-day bookings stop being accepted" }
+ *               max_advance_days:        { type: integer, example: 60, description: "How many days into the future a customer may book" }
  *     responses:
  *       200: { description: Config updated }
  *       400: { description: Validation error }

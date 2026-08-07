@@ -77,6 +77,7 @@ export function SchedulePage() {
   const [dayStart, setDayStart] = useState("");
   const [dayEnd, setDayEnd] = useState("");
   const [cutoffHours, setCutoffHours] = useState(4);
+  const [maxAdvanceDays, setMaxAdvanceDays] = useState(60);
   const [savedHours, setSavedHours] = useState(null);
   const [blockedTimes, setBlockedTimes] = useState([]);
 
@@ -112,11 +113,13 @@ export function SchedulePage() {
         const start = toHHMM(config.day_start_time);
         const end = toHHMM(config.day_end_time);
         const cutoff = config.same_day_cutoff_minutes / 60;
+        const advanceDays = config.max_advance_days;
         setWorkingDays(days);
         setDayStart(start);
         setDayEnd(end);
         setCutoffHours(cutoff);
-        setSavedHours({ workingDays: days, dayStart: start, dayEnd: end, cutoffHours: cutoff });
+        setMaxAdvanceDays(advanceDays);
+        setSavedHours({ workingDays: days, dayStart: start, dayEnd: end, cutoffHours: cutoff, maxAdvanceDays: advanceDays });
         setBlockedTimes(blocked_times);
         setContactPhone(config.contact_phone ?? "");
         setSavedContactPhone(config.contact_phone ?? "");
@@ -144,6 +147,10 @@ export function SchedulePage() {
       setError("Same-day cutoff cannot be negative");
       return;
     }
+    if (!Number.isInteger(maxAdvanceDays) || maxAdvanceDays < 1) {
+      setError("Advance booking window must be a whole number of at least 1 day");
+      return;
+    }
     setSaving(true);
     setError("");
     setSuccess("");
@@ -157,8 +164,9 @@ export function SchedulePage() {
         day_start_time: dayStart,
         day_end_time: dayEnd,
         same_day_cutoff_minutes: Math.round(cutoffHours * 60),
+        max_advance_days: maxAdvanceDays,
       });
-      setSavedHours({ workingDays, dayStart, dayEnd, cutoffHours });
+      setSavedHours({ workingDays, dayStart, dayEnd, cutoffHours, maxAdvanceDays });
       setSuccess("Business hours saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
@@ -283,7 +291,8 @@ export function SchedulePage() {
     (!sameDays(workingDays, savedHours.workingDays) ||
       dayStart !== savedHours.dayStart ||
       dayEnd !== savedHours.dayEnd ||
-      cutoffHours !== savedHours.cutoffHours);
+      cutoffHours !== savedHours.cutoffHours ||
+      maxAdvanceDays !== savedHours.maxAdvanceDays);
 
   const holidays = blockedTimes
     .filter(isHoliday)
@@ -393,6 +402,19 @@ export function SchedulePage() {
               className="w-40 border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-muted-foreground">
+              Advance Booking Window (days)
+            </label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={maxAdvanceDays}
+              onChange={(e) => setMaxAdvanceDays(Number(e.target.value))}
+              className="w-40 border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
         </div>
 
         {dayEnd && cutoffHours >= 0 && (
@@ -400,6 +422,12 @@ export function SchedulePage() {
             Same-day bookings will close at{" "}
             {fmt12h(subtractMinutes(dayEnd, Math.round(cutoffHours * 60)))} — after that, today
             becomes unavailable in the booking calendar.
+          </p>
+        )}
+        {maxAdvanceDays >= 1 && (
+          <p className="text-sm text-accent">
+            Customers can book up to {maxAdvanceDays} day{maxAdvanceDays === 1 ? "" : "s"} ahead —
+            dates beyond that won't show as bookable in the calendar.
           </p>
         )}
       </div>

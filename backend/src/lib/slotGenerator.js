@@ -64,8 +64,16 @@ const getLocalNow = () => {
   return { todayKey, nowMinutes };
 };
 
+// Latest date key ("YYYY-MM-DD") a booking may fall on, given the configured advance-booking
+// window — today + max_advance_days. Same local-timezone assumption as getLocalNow.
+const getMaxAdvanceDateKey = (maxAdvanceDays) => {
+  const d = new Date();
+  d.setDate(d.getDate() + maxAdvanceDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 module.exports = {
   timeStrToMinutes, dateColToMinutes, minutesToTimeDate, minutesToHHMM,
   getBlockedRangesForDate, generateWindows, rangesOverlap,
-  MIN_LEAD_MINUTES, getLocalNow,
+  MIN_LEAD_MINUTES, getLocalNow, getMaxAdvanceDateKey,
 };

@@ -9,7 +9,7 @@ const { VEHICLE_SELECT, flattenVehicleRef } = require("../lib/vehicleFlatten");
 const {
   timeStrToMinutes, dateColToMinutes, minutesToTimeDate, minutesToHHMM,
   getBlockedRangesForDate, generateWindows, rangesOverlap,
-  MIN_LEAD_MINUTES, getLocalNow,
+  MIN_LEAD_MINUTES, getLocalNow, getMaxAdvanceDateKey,
 } = require("../lib/slotGenerator");
 const { RESERVATION_STATUS, PAYMENT_STATUS } = require("../constants/status");
 
@@ -370,6 +370,10 @@ const createBooking = async (req, res) => {
       if (service_date < todayKey) {
         const err = new Error("Cannot book a date in the past"); err.status = 400; throw err;
       }
+      const maxDateKey = getMaxAdvanceDateKey(config.max_advance_days);
+      if (service_date > maxDateKey) {
+        const err = new Error(`Bookings can only be made up to ${config.max_advance_days} days in advance`); err.status = 400; throw err;
+      }
       if (service_date === todayKey) {
         const cutoffStart = dayEndMin - config.same_day_cutoff_minutes;
         if (nowMinutes >= cutoffStart) {
@@ -573,6 +577,10 @@ const rescheduleBooking = async (req, res) => {
       const { todayKey, nowMinutes } = getLocalNow();
       if (service_date < todayKey) {
         const err = new Error("Cannot book a date in the past"); err.status = 400; throw err;
+      }
+      const maxDateKey = getMaxAdvanceDateKey(config.max_advance_days);
+      if (service_date > maxDateKey) {
+        const err = new Error(`Bookings can only be made up to ${config.max_advance_days} days in advance`); err.status = 400; throw err;
       }
       if (service_date === todayKey) {
         const cutoffStart = dayEndMin - config.same_day_cutoff_minutes;
@@ -861,6 +869,12 @@ const getAvailableSlots = async (req, res) => {
     const { todayKey, nowMinutes } = getLocalNow();
     if (date < todayKey)
       return res.status(200).json({ available: false, reason: "This date has already passed", slots: [] });
+    if (date > getMaxAdvanceDateKey(config.max_advance_days))
+      return res.status(200).json({
+        available: false,
+        reason: `Bookings can only be made up to ${config.max_advance_days} days in advance`,
+        slots: [],
+      });
 
     const dayStartMin = dateColToMinutes(config.day_start_time);
     const dayEndMin = dateColToMinutes(config.day_end_time);
@@ -1020,6 +1034,7 @@ const getMonthAvailability = async (req, res) => {
     });
 
     const { todayKey, nowMinutes } = getLocalNow();
+    const maxDateKey = getMaxAdvanceDateKey(config.max_advance_days);
     const daysInMonth = endDate.getUTCDate();
     const days = [];
 
@@ -1028,7 +1043,7 @@ const getMonthAvailability = async (req, res) => {
       const key = date.toISOString().split("T")[0];
       const isWorkingDay = workingDays.includes(date.getUTCDay());
 
-      if (key < todayKey || !isWorkingDay) {
+      if (key < todayKey || key > maxDateKey || !isWorkingDay) {
         days.push({ date: key, status: "closed", remaining_capacity: 0, total_windows: 0 });
         continue;
       }

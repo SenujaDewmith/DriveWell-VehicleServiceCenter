@@ -204,6 +204,8 @@ model WorkingConfig {
   // Same-day bookings stop being accepted this many minutes before closing —
   // e.g. 240 (4h) with an 18:00 close means no new same-day bookings after 14:00.
   same_day_cutoff_minutes Int      @default(240)
+  // How far into the future a customer may book — e.g. 60 means today plus up to 60 days.
+  max_advance_days        Int      @default(60)
   // Manager-editable support number shown to anonymous visitors and customers
   // hitting a self-service dead end (blocked cancellation, failed transfer request).
   contact_phone           String?  @db.VarChar(20)

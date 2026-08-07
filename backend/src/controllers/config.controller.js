@@ -35,13 +35,15 @@ const getConfig = async (req, res) => {
 };
 
 const updateConfig = async (req, res) => {
-  const { working_days, day_start_time, day_end_time, same_day_cutoff_minutes } = req.body;
+  const { working_days, day_start_time, day_end_time, same_day_cutoff_minutes, max_advance_days } = req.body;
   if (!working_days || !day_start_time || !day_end_time)
     return res.status(400).json({ message: "working_days, day_start_time, and day_end_time are required" });
   if (normalizeTime(day_end_time) <= normalizeTime(day_start_time))
     return res.status(400).json({ message: "day_end_time must be after day_start_time" });
   if (same_day_cutoff_minutes !== undefined && (!Number.isInteger(same_day_cutoff_minutes) || same_day_cutoff_minutes < 0))
     return res.status(400).json({ message: "same_day_cutoff_minutes must be a non-negative whole number" });
+  if (max_advance_days !== undefined && (!Number.isInteger(max_advance_days) || max_advance_days < 1))
+    return res.status(400).json({ message: "max_advance_days must be a whole number of at least 1" });
 
   try {
     await prisma.workingConfig.updateMany({
@@ -50,6 +52,7 @@ const updateConfig = async (req, res) => {
         day_start_time: toTimeDate(day_start_time),
         day_end_time: toTimeDate(day_end_time),
         ...(same_day_cutoff_minutes !== undefined && { same_day_cutoff_minutes }),
+        ...(max_advance_days !== undefined && { max_advance_days }),
       },
     });
     logger.info(`Working config updated by manager user_id: ${req.user.user_id}`);
