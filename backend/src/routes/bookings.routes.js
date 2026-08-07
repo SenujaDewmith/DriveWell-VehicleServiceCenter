@@ -231,7 +231,9 @@ router.post("/", verifyToken, authorizeRoles("Customer"), createBooking);
  *       Updates the existing reservation in place (same booking_ref) rather than creating a
  *       new one — only valid while the booking is still "Booked". A Customer is subject to the
  *       same 24-hour cutoff as cancelBooking; a Manager is exempt, for the "customer called in
- *       to reschedule" case.
+ *       to reschedule" case. contact_phone is required from a Customer (also backfills their
+ *       profile, same as on create) but optional from a Manager, whose reschedule modal only
+ *       changes date/time and leaves the booking's existing contact_phone snapshot untouched.
  *     tags: [Bookings]
  *     security:
  *       - cookieAuth: []
@@ -252,6 +254,7 @@ router.post("/", verifyToken, authorizeRoles("Customer"), createBooking);
  *               package_id:   { type: integer, example: 1 }
  *               service_date: { type: string, format: date, example: "2025-06-20" }
  *               start_time:   { type: string, example: "09:00" }
+ *               contact_phone: { type: string, example: "+94771234567", description: "Required when called by a Customer; ignored/optional for a Manager reschedule" }
  *     responses:
  *       200: { description: Booking rescheduled and email sent }
  *       400: { description: Validation error, no capacity, or booking not in "Booked" status }

@@ -246,6 +246,12 @@ model Reservation {
   // Nullable because reservations created before this feature carry no acceptance.
   terms_version     String?   @db.VarChar(10)
   terms_accepted_at DateTime?
+  // Snapshot of the contact number the customer gave when booking/rescheduling — so
+  // staff can always reach whoever made this specific booking, even if their profile
+  // phone changes later. Null for reservations created before this field existed, and
+  // untouched by a manager-initiated reschedule (admin_fd's RescheduleBookingModal
+  // doesn't collect a phone number, only date/time).
+  contact_phone     String?   @db.VarChar(20)
 
   customer_user  User           @relation("CustomerReservations", fields: [customer_id], references: [user_id])
   vehicle        Vehicle        @relation(fields: [vehicle_id], references: [vehicle_id])

@@ -10,6 +10,7 @@ import { AuthModal } from "@/components/auth/AuthModal";
 import { BookingStepper, PackageStep, DateTimeStep, VehicleStep, ReviewStep } from "@/components/booking";
 import { useAvailableSlots } from "@/hooks/useAvailableSlots";
 import { TERMS_VERSION } from "@/lib/terms";
+import { isValidSriLankanPhone } from "@/lib/phoneNumber";
 import { fmtTime } from "@/lib/time";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -41,6 +42,8 @@ export default function BookService() {
     const [addVehicleOpen, setAddVehicleOpen] = useState(false);
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [termsOpen, setTermsOpen] = useState(false);
+    const [contactPhoneChoice, setContactPhoneChoice] = useState("new");
+    const [newContactPhone, setNewContactPhone] = useState("");
     const [sourceBooking, setSourceBooking] = useState(null);
     const [sourceBookingLoading, setSourceBookingLoading] = useState(!!fromBookingId);
     // Gate booking behind an inline modal instead of redirecting to /login, so an
@@ -51,6 +54,15 @@ export default function BookService() {
         if (!isLoading && !user)
             setAuthModalOpen(true);
     }, [isLoading, user]);
+    // Defaults the contact-phone choice to whatever's already on the profile (primary,
+    // else secondary, else prompt for a new one) — same as the transfer-ownership dialog
+    // in Vehicles.jsx. Keyed on user?.id rather than the whole user object so it only
+    // resets on a fresh login, not on every unrelated profile-context re-render mid-flow.
+    useEffect(() => {
+        if (user)
+            setContactPhoneChoice(user.phone ? "primary" : user.secondaryPhone ? "secondary" : "new");
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.id]);
     // If the session goes away mid-flow (expired cookie, logged out in another tab —
     // caught here via the same 401 that clears `user`), the wizard's own step/selection
     // state is plain useState and wouldn't otherwise reset: without this, the user is
@@ -65,6 +77,8 @@ export default function BookService() {
             setSelectedStartTime(null);
             setSelectedSlotTime("");
             setTermsAccepted(false);
+            setContactPhoneChoice("new");
+            setNewContactPhone("");
         }
     }, [isLoading, user]);
     const [vehicles, setVehicles] = useState([]);
@@ -163,8 +177,21 @@ export default function BookService() {
         setSelectedStartTime(slot.start_time);
         setSelectedSlotTime(`${fmtTime(slot.start_time)} - ${fmtTime(slot.end_time)}`);
     };
+    const resolvedContactPhone = contactPhoneChoice === "primary"
+        ? user?.phone ?? ""
+        : contactPhoneChoice === "secondary"
+            ? user?.secondaryPhone ?? ""
+            : newContactPhone;
+    // Primary/secondary come from already-saved profile data (which may pre-date this
+    // format), so only the freshly-typed option is held to the strict +94 shape here —
+    // same reasoning as the transfer-ownership dialog in Vehicles.jsx.
+    const isContactPhoneValid = contactPhoneChoice === "new"
+        ? isValidSriLankanPhone(resolvedContactPhone)
+        : !!resolvedContactPhone;
     const handleConfirm = async () => {
         if (!selectedVehicleId || !selectedPackageId || !selectedDate || !selectedStartTime)
+            return;
+        if (!isContactPhoneValid)
             return;
         if (mode !== "reschedule" && !termsAccepted)
             return;
@@ -176,6 +203,7 @@ export default function BookService() {
                     package_id: selectedPackageId,
                     service_date: selectedDate,
                     start_time: selectedStartTime,
+                    contact_phone: resolvedContactPhone,
                 });
                 toast.success("Booking rescheduled");
             }
@@ -187,6 +215,7 @@ export default function BookService() {
                     start_time: selectedStartTime,
                     terms_accepted: true,
                     terms_version: TERMS_VERSION,
+                    contact_phone: resolvedContactPhone,
                     ...(mode === "rebook" && { source_reservation_id: sourceBooking.reservation_id }),
                 });
                 toast.success(`Booking confirmed! Ref: ${res.booking_ref}`);
@@ -227,7 +256,7 @@ export default function BookService() {
 
       {step === 3 && selectedPackageId && (<DateTimeStep packageId={selectedPackageId} pkg={pkg} selectedDate={selectedDate} onSelectDate={setSelectedDate} slots={slots} slotsLoading={slotsLoading} dateAvailable={dateAvailable} selectedStartTime={selectedStartTime} onSelectSlot={handleSelectSlot} onBack={() => setStep(2)} onContinue={() => setStep(4)}/>)}
 
-      {step === 4 && (<ReviewStep vehicle={vehicle} pkg={pkg} selectedDate={selectedDate} selectedSlotTime={selectedSlotTime} termsAccepted={termsAccepted} onTermsAcceptedChange={setTermsAccepted} onOpenTerms={() => setTermsOpen(true)} isSubmitting={isSubmitting} onBack={() => setStep(3)} onConfirm={handleConfirm} confirmLabel={confirmLabel} requireTerms={mode !== "reschedule"}/>)}
+      {step === 4 && (<ReviewStep vehicle={vehicle} pkg={pkg} selectedDate={selectedDate} selectedSlotTime={selectedSlotTime} user={user} contactPhoneChoice={contactPhoneChoice} onContactPhoneChoiceChange={setContactPhoneChoice} newContactPhone={newContactPhone} onNewContactPhoneChange={setNewContactPhone} contactPhoneValid={isContactPhoneValid} termsAccepted={termsAccepted} onTermsAcceptedChange={setTermsAccepted} onOpenTerms={() => setTermsOpen(true)} isSubmitting={isSubmitting} onBack={() => setStep(3)} onConfirm={handleConfirm} confirmLabel={confirmLabel} requireTerms={mode !== "reschedule"}/>)}
 
       <AddVehicleDialog open={addVehicleOpen} onOpenChange={setAddVehicleOpen} onVehicleAdded={handleVehicleAdded}/>
 

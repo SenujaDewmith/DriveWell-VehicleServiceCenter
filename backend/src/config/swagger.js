@@ -133,12 +133,13 @@ const options = {
             status:         { type: "string",  example: "Booked", enum: ["Booked", "Started", "Completed", "Collected", "Cancelled", "No-show"] },
             payment_status: { type: "string",  example: "Unpaid", nullable: true, enum: ["Unpaid", "Paid", null], description: "Null until an invoice exists. Omitted entirely for Service Staff." },
             created_at:     { type: "string",  format: "date-time" },
+            contact_phone:  { type: "string",  example: "+94771234567", nullable: true, description: "Snapshot of the number given when this booking was made/rescheduled — preferred over the customer's profile phone for display" },
             customer_no_show_count: { type: "integer", example: 0, description: "This customer's total No-show count, across all bookings — staff/manager views only" },
           },
         },
         ReservationInput: {
           type: "object",
-          required: ["vehicle_id", "package_id", "service_date", "start_time", "terms_accepted", "terms_version"],
+          required: ["vehicle_id", "package_id", "service_date", "start_time", "terms_accepted", "terms_version", "contact_phone"],
           properties: {
             vehicle_id:            { type: "integer", example: 2 },
             package_id:            { type: "integer", example: 1 },
@@ -147,6 +148,7 @@ const options = {
             start_time:     { type: "string",  example: "08:00", description: "HH:MM — must match one of the package's generated appointment windows for that date" },
             terms_accepted: { type: "boolean", example: true, description: "Must be true — explicit clickwrap consent to the Terms & Conditions" },
             terms_version:  { type: "string",  example: "1.0", description: "T&C version shown to the customer — must match the current version" },
+            contact_phone:  { type: "string",  example: "+94771234567", description: "Number to reach the customer about this booking — also backfills their profile (primary if blank, else secondary) when it's new" },
           },
         },
         // ── Charge Catalog ──────────────────────────────────────

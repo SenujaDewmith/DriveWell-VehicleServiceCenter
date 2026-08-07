@@ -29,7 +29,9 @@ const flattenInvoice = (i, { includeSupervisorNotes = false } = {}) => ({
   booking_status: i.reservation?.status,
   customer_name: i.reservation?.customer_user?.customer?.full_name,
   customer_email: i.reservation?.customer_user?.email,
-  customer_phone: i.reservation?.customer_user?.customer?.phone,
+  // Prefer the number given for this specific booking over the (possibly since-changed)
+  // profile phone — see bookings.controller.js's flattenBooking for the same policy.
+  customer_phone: i.reservation?.contact_phone ?? i.reservation?.customer_user?.customer?.phone,
   ...flattenVehicleRef(i.reservation?.vehicle),
   package_name: i.reservation?.package?.name,
   // Prefer the live join (reflects a name change while the account still
@@ -65,6 +67,7 @@ const INVOICE_INCLUDE = {
       booking_ref: true,
       service_date: true,
       status: true,
+      contact_phone: true,
       customer_user: {
         select: {
           email: true,
@@ -180,7 +183,7 @@ const getInvoiceDraft = async (req, res) => {
       reservation_id: booking.reservation_id,
       booking_ref: booking.booking_ref,
       customer_name: booking.customer_user?.customer?.full_name,
-      customer_phone: booking.customer_user?.customer?.phone,
+      customer_phone: booking.contact_phone ?? booking.customer_user?.customer?.phone,
       ...flattenVehicleRef(booking.vehicle),
       package_name: booking.package?.name,
       package_price: booking.package?.price,

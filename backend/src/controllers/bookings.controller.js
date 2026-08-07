@@ -1,6 +1,7 @@
 const { Prisma } = require("@prisma/client");
 const prisma = require("../lib/prisma");
 const logger = require("../utils/logger");
+const { isValidPhone } = require("../lib/phone");
 const { fmtDate, fmtTime } = require("../lib/format");
 const { sendBookingConfirmation, sendBookingRescheduled, sendBookingCancellation, sendNoShowNotice, sendVehicleCollected } = require("../services/email.service");
 const { logActivity } = require("../lib/activityLogger");
@@ -48,7 +49,10 @@ const flattenBooking = (r, { hideCustomerIdentity = false, hidePaymentStatus = f
   package_id: r.package_id,
   customer_name: hideCustomerIdentity ? undefined : r.customer_user?.customer?.full_name,
   customer_email: hideCustomerIdentity ? undefined : r.customer_user?.email,
-  customer_phone: hideCustomerIdentity ? undefined : r.customer_user?.customer?.phone,
+  // Prefer the number the customer actually gave for this specific booking over their
+  // (possibly since-changed) profile phone — falls back to the profile for reservations
+  // created before contact_phone existed.
+  customer_phone: hideCustomerIdentity ? undefined : (r.contact_phone ?? r.customer_user?.customer?.phone),
   ...flattenVehicleRef(r.vehicle),
   package_name: r.package?.name,
   package_price: r.package?.price,
@@ -166,6 +170,23 @@ const flattenBookingDetail = (r, { includeServiceItems = false, includeStaffAssi
 // Computed on demand rather than stored as a counter column — a stored counter would need
 // careful decrementing if a manager ever corrects a mistaken No-show back to another status,
 // and this table is small enough that a grouped count is cheap.
+// Fills in a customer's profile phone from a booking-time contact number: primary if
+// still blank, otherwise a genuinely new number becomes the secondary contact — never
+// overwrites an existing primary. Mirrors the same policy vehicles.controller.js's
+// submitTransferRequest uses for transfer-request contact numbers.
+const savePhoneToProfile = async (user_id, normalizedPhone) => {
+  const customer = await prisma.customer.findUnique({
+    where: { user_id },
+    select: { phone: true, secondary_phone: true },
+  });
+  if (!customer) return;
+  if (!customer.phone) {
+    await prisma.customer.update({ where: { user_id }, data: { phone: normalizedPhone } });
+  } else if (customer.phone !== normalizedPhone && customer.secondary_phone !== normalizedPhone) {
+    await prisma.customer.update({ where: { user_id }, data: { secondary_phone: normalizedPhone } });
+  }
+};
+
 const getNoShowCounts = async (customerIds) => {
   const uniqueIds = [...new Set(customerIds)];
   if (uniqueIds.length === 0) return {};
@@ -278,10 +299,15 @@ const getBooking = async (req, res) => {
 
 const createBooking = async (req, res) => {
   const { user_id } = req.user;
-  const { vehicle_id, package_id, service_date, start_time, terms_accepted, terms_version, source_reservation_id } = req.body;
+  const { vehicle_id, package_id, service_date, start_time, terms_accepted, terms_version, source_reservation_id, contact_phone } = req.body;
 
   if (!vehicle_id || !package_id || !service_date || !start_time)
     return res.status(400).json({ message: "vehicle_id, package_id, service_date, and start_time are required" });
+
+  // Mandatory so staff always have a live number to reach the customer about this
+  // specific booking — see savePhoneToProfile below for how it also backfills the profile.
+  if (!contact_phone || !isValidPhone(contact_phone))
+    return res.status(400).json({ message: "A valid contact phone number is required" });
 
   // Consent is enforced server-side (not just a disabled button in the UI) and the
   // accepted version is recorded on the reservation for later dispute resolution.
@@ -289,6 +315,8 @@ const createBooking = async (req, res) => {
     return res.status(400).json({ message: "You must accept the Terms & Conditions to place a booking" });
   if (terms_version !== CURRENT_TERMS_VERSION)
     return res.status(400).json({ message: "Our Terms & Conditions have been updated — please review and accept the latest version" });
+
+  const normalizedPhone = contact_phone.trim();
 
   // "Book Again" — customer self-service only, from their own Cancelled or Collected
   // booking (see rescheduleBooking below for the separate in-place-update flow that
@@ -404,6 +432,7 @@ const createBooking = async (req, res) => {
           service_date: new Date(service_date),
           terms_version,
           terms_accepted_at: new Date(),
+          contact_phone: normalizedPhone,
         },
       });
 
@@ -424,6 +453,12 @@ const createBooking = async (req, res) => {
 
     logger.info(`Booking created — ref: ${booking_ref}, user_id: ${user_id}${source_reservation_id ? `, source_reservation_id: ${source_reservation_id}` : ""}`);
     logActivity(prisma, { user_id, action: "BOOKING_CREATED", entity_type: "reservation", entity_id: reservation_id });
+
+    // Non-critical, same as the email below — a failure here shouldn't fail the booking
+    // that already succeeded.
+    savePhoneToProfile(user_id, normalizedPhone).catch((err) =>
+      logger.error(`savePhoneToProfile failed for user_id: ${user_id} — ${err.message}`),
+    );
 
     // Email notification (outside transaction — non-critical)
     const customer = await prisma.user.findUnique({
@@ -463,10 +498,20 @@ const createBooking = async (req, res) => {
 const rescheduleBooking = async (req, res) => {
   const { user_id, role_id } = req.user;
   const { id } = req.params;
-  const { vehicle_id, package_id, service_date, start_time } = req.body;
+  const { vehicle_id, package_id, service_date, start_time, contact_phone } = req.body;
 
   if (!vehicle_id || !package_id || !service_date || !start_time)
     return res.status(400).json({ message: "vehicle_id, package_id, service_date, and start_time are required" });
+
+  // Mandatory for a customer's own self-service reschedule (customer_fd's ReviewStep
+  // collects it, same as a fresh booking) — but admin_fd's manager-side
+  // RescheduleBookingModal only ever changes date/time, so a manager-initiated
+  // reschedule leaves the reservation's existing contact_phone snapshot untouched.
+  if (role_id === CUSTOMER_ROLE && (!contact_phone || !isValidPhone(contact_phone)))
+    return res.status(400).json({ message: "A valid contact phone number is required" });
+  if (contact_phone && !isValidPhone(contact_phone))
+    return res.status(400).json({ message: "A valid contact phone number is required" });
+  const normalizedPhone = contact_phone ? contact_phone.trim() : null;
 
   try {
     const { pkgName, startStr, endStr, customer } = await prisma.$transaction(async (tx) => {
@@ -591,6 +636,7 @@ const rescheduleBooking = async (req, res) => {
           start_time: minutesToTimeDate(startMin),
           end_time: minutesToTimeDate(endMin),
           service_date: new Date(service_date),
+          ...(normalizedPhone && { contact_phone: normalizedPhone }),
         },
       });
 
@@ -609,6 +655,14 @@ const rescheduleBooking = async (req, res) => {
 
     logger.info(`Booking rescheduled — reservation_id: ${id}, by user_id: ${user_id}`);
     logActivity(prisma, { user_id, action: "BOOKING_RESCHEDULED", entity_type: "reservation", entity_id: parseInt(id) });
+
+    // Only a customer's own self-service reschedule supplies a phone number, and only
+    // that flow should be able to update their profile from it.
+    if (role_id === CUSTOMER_ROLE && normalizedPhone) {
+      savePhoneToProfile(user_id, normalizedPhone).catch((err) =>
+        logger.error(`savePhoneToProfile failed for user_id: ${user_id} — ${err.message}`),
+      );
+    }
 
     sendBookingRescheduled(customer.email, {
       customerName: customer.name,

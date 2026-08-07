@@ -1,10 +1,12 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { PhoneNumberInput } from "@/components/ui/phone-number-input";
 import { fmtDuration } from "@/lib/packageFormat";
 import { CANCELLATION_CUTOFF_HOURS } from "@/lib/bookingRules";
-import { Car, CheckCircle, Clock, Loader2 } from "lucide-react";
-export function ReviewStep({ vehicle, pkg, selectedDate, selectedSlotTime, termsAccepted, onTermsAcceptedChange, onOpenTerms, isSubmitting, onBack, onConfirm, confirmLabel = "Confirm Booking", requireTerms = true, }) {
+import { Car, CheckCircle, Clock, Phone, Loader2 } from "lucide-react";
+export function ReviewStep({ vehicle, pkg, selectedDate, selectedSlotTime, user, contactPhoneChoice, onContactPhoneChoiceChange, newContactPhone, onNewContactPhoneChange, contactPhoneValid, termsAccepted, onTermsAcceptedChange, onOpenTerms, isSubmitting, onBack, onConfirm, confirmLabel = "Confirm Booking", requireTerms = true, }) {
     return (<Card>
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2">
@@ -62,6 +64,36 @@ export function ReviewStep({ vehicle, pkg, selectedDate, selectedSlotTime, terms
             </span>
           </div>
         </div>
+        {/* Collected here rather than earlier in the wizard — it's the last thing standing
+            between the customer and submission, same as the transfer-ownership request
+            dialog in Vehicles.jsx, which this mirrors: check the profile first, only ask
+            for a new number if neither is on file. */}
+        <div className="space-y-2 rounded-lg border p-3">
+          <Label className="flex items-center gap-1.5">
+            <Phone className="h-4 w-4 text-muted-foreground"/>
+            Contact Phone Number <span className="text-destructive">*</span>
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            DriveWell staff will use this number to reach you about this booking.
+          </p>
+          <div className="space-y-2">
+            {user?.phone && (<label className="flex items-center gap-2 text-sm">
+                <input type="radio" name="booking_contact_phone_choice" checked={contactPhoneChoice === "primary"} onChange={() => onContactPhoneChoiceChange("primary")}/>
+                Primary: {user.phone}
+              </label>)}
+            {user?.secondaryPhone && (<label className="flex items-center gap-2 text-sm">
+                <input type="radio" name="booking_contact_phone_choice" checked={contactPhoneChoice === "secondary"} onChange={() => onContactPhoneChoiceChange("secondary")}/>
+                Secondary: {user.secondaryPhone}
+              </label>)}
+            <label className="flex items-center gap-2 text-sm">
+              <input type="radio" name="booking_contact_phone_choice" checked={contactPhoneChoice === "new"} onChange={() => onContactPhoneChoiceChange("new")}/>
+              Use a different number
+            </label>
+            {contactPhoneChoice === "new" && (<div className="mt-1">
+                <PhoneNumberInput id="booking-new-contact-phone" value={newContactPhone} onChange={onNewContactPhoneChange}/>
+              </div>)}
+          </div>
+        </div>
         {/* Clickwrap consent — unticked by default; gates the Confirm button and is
             re-validated server-side. Replaces the old passive "by confirming…" text.
             Skipped for a reschedule of an already-Booked appointment: the customer
@@ -90,7 +122,7 @@ export function ReviewStep({ vehicle, pkg, selectedDate, selectedSlotTime, terms
             user is confirming remains scannable. */}
         <div className="sticky bottom-0 -mx-6 -mb-6 rounded-b-lg border-t bg-card px-6 py-4 flex gap-3">
           <Button variant="outline" onClick={onBack} className="flex-1">Back</Button>
-          <Button className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90" onClick={onConfirm} disabled={isSubmitting || (requireTerms && !termsAccepted)}>
+          <Button className="flex-1 bg-cta text-cta-foreground hover:bg-cta/90" onClick={onConfirm} disabled={isSubmitting || !contactPhoneValid || (requireTerms && !termsAccepted)}>
             {isSubmitting ? (<>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
                 Confirming...
