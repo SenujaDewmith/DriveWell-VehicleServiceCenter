@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Plus, Pencil, UserX, UserCheck, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +26,103 @@ const STATUS_FILTERS = [
   { value: "inactive", label: "Inactive" },
   { value: "pending", label: "Pending" },
 ];
+
+// Shared between the desktop table's Actions column and the mobile/tablet card
+// list's action row, so the confirmation copy only lives in one place.
+function MemberActions({ member: m, currentUserId, onEdit, onToggleActive, onDelete }) {
+  return (
+    <div className="flex gap-1">
+      <button onClick={() => onEdit(m)} className="p-1 text-muted-foreground hover:text-foreground">
+        <Pencil className="h-3 w-3" />
+      </button>
+      {m.account_status === "pending" ? (
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button
+              className="p-1 text-muted-foreground hover:text-destructive"
+              title="Delete pending invite"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete the pending invite for {m.full_name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                You'll need to recreate the account to send a new invite.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => onDelete(m)}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : (
+        <>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button className="p-1 text-muted-foreground hover:text-foreground">
+                {m.account_status === "active" ? (
+                  <UserX className="h-3 w-3" />
+                ) : (
+                  <UserCheck className="h-3 w-3" />
+                )}
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {m.account_status === "active" ? "Deactivate" : "Activate"} {m.full_name}?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {m.account_status === "active"
+                    ? "They'll immediately lose access to the staff portal until reactivated."
+                    : "They'll be able to sign in to the staff portal again."}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => onToggleActive(m)}>
+                  {m.account_status === "active" ? "Deactivate" : "Activate"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          {m.user_id !== currentUserId && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <button
+                  className="p-1 text-muted-foreground hover:text-destructive"
+                  title="Permanently delete"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Permanently delete {m.full_name}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This cannot be undone — their account and login access will be gone for good.
+                    Past invoices, service records, and job assignments keep their name for
+                    record-keeping, but nothing links back to a live account anymore. Use
+                    Deactivate instead if this might not be final.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => onDelete(m)}>
+                    Permanently Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 export function UsersPage() {
   const { userId } = useAuth();
@@ -236,10 +334,14 @@ export function UsersPage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-card overflow-x-auto">
-        {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
-        ) : (
+      {loading ? (
+        <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          Loading...
+        </div>
+      ) : (
+        <>
+      {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+      <div className="hidden lg:block rounded-lg border border-border bg-card overflow-x-auto scroll-fade-x">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
@@ -280,106 +382,14 @@ export function UsersPage() {
                       {m.account_status === "pending" ? "Pending (invite sent)" : m.account_status}
                     </span>
                   </td>
-                  <td className="py-2 px-3 flex gap-1">
-                    <button
-                      onClick={() => openEdit(m)}
-                      className="p-1 text-muted-foreground hover:text-foreground"
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </button>
-                    {m.account_status === "pending" ? (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <button
-                            className="p-1 text-muted-foreground hover:text-destructive"
-                            title="Delete pending invite"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              Delete the pending invite for {m.full_name}?
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              You'll need to recreate the account to send a new invite.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => deleteMember(m)}>
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    ) : (
-                      <>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <button className="p-1 text-muted-foreground hover:text-foreground">
-                              {m.account_status === "active" ? (
-                                <UserX className="h-3 w-3" />
-                              ) : (
-                                <UserCheck className="h-3 w-3" />
-                              )}
-                            </button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>
-                                {m.account_status === "active" ? "Deactivate" : "Activate"}{" "}
-                                {m.full_name}?
-                              </AlertDialogTitle>
-                              <AlertDialogDescription>
-                                {m.account_status === "active"
-                                  ? "They'll immediately lose access to the staff portal until reactivated."
-                                  : "They'll be able to sign in to the staff portal again."}
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => toggleActive(m)}>
-                                {m.account_status === "active" ? "Deactivate" : "Activate"}
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                        {m.user_id !== userId && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <button
-                                className="p-1 text-muted-foreground hover:text-destructive"
-                                title="Permanently delete"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  Permanently delete {m.full_name}?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This cannot be undone — their account and login access will be
-                                  gone for good. Past invoices, service records, and job assignments
-                                  keep their name for record-keeping, but nothing links back to a
-                                  live account anymore. Use Deactivate instead if this might not be
-                                  final.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => deleteMember(m)}>
-                                  Permanently Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
-                      </>
-                    )}
+                  <td className="py-2 px-3">
+                    <MemberActions
+                      member={m}
+                      currentUserId={userId}
+                      onEdit={openEdit}
+                      onToggleActive={toggleActive}
+                      onDelete={deleteMember}
+                    />
                   </td>
                 </tr>
               ))}
@@ -392,8 +402,60 @@ export function UsersPage() {
               )}
             </tbody>
           </table>
+      </div>
+
+      {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+      <div className="lg:hidden space-y-3">
+        {filtered.map((m) => (
+          <DataCard
+            key={m.user_id}
+            className={m.account_status !== "active" ? "opacity-50" : ""}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-semibold text-foreground">{m.full_name}</p>
+                <p className="text-xs text-muted-foreground">{m.role_name}</p>
+              </div>
+              <span
+                className={`text-sm font-medium capitalize text-right shrink-0 ${
+                  m.account_status === "active"
+                    ? "text-accent"
+                    : m.account_status === "pending"
+                      ? "text-amber-500"
+                      : "text-destructive"
+                }`}
+              >
+                {m.account_status === "pending" ? "Pending" : m.account_status}
+              </span>
+            </div>
+
+            <DataCardField label="ID" value={m.user_id} />
+            <DataCardField label="Email" value={m.email} />
+            <DataCardField label="Phone" value={m.phone_no ?? "—"} />
+            <DataCardField
+              label="Joined"
+              value={new Date(m.created_at).toISOString().slice(0, 10)}
+            />
+
+            <div className="pt-2 border-t border-border">
+              <MemberActions
+                member={m}
+                currentUserId={userId}
+                onEdit={openEdit}
+                onToggleActive={toggleActive}
+                onDelete={deleteMember}
+              />
+            </div>
+          </DataCard>
+        ))}
+        {filtered.length === 0 && (
+          <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+            {members.length === 0 ? "No staff found" : "No staff match this filter"}
+          </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

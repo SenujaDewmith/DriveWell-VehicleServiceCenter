@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { StatusBadge } from "@/components/manager/ManagerOverview";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Star } from "lucide-react";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 
 function todayKey() {
   const now = new Date();
@@ -137,7 +138,8 @@ export function StaffDashboard() {
       {/* My Contributions */}
       <div className="rounded-lg border border-border bg-card p-4">
         <h3 className="text-sm font-semibold text-foreground mb-4">My Service Contributions</h3>
-        <div className="overflow-x-auto">
+        {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+        <div className="hidden lg:block overflow-x-auto scroll-fade-x">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
@@ -198,6 +200,49 @@ export function StaffDashboard() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+        <div className="lg:hidden space-y-3">
+          {loading && (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              Loading...
+            </div>
+          )}
+          {!loading &&
+            services.map((s) => (
+              <DataCard key={s.reservation_id}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-foreground">
+                      {s.booking_ref ?? `#${s.reservation_id}`}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{s.service_date}</p>
+                  </div>
+                  <StatusBadge status={s.status} />
+                </div>
+                <DataCardField label="Customer" value={s.customer_name} />
+                <DataCardField label="Vehicle" value={`${s.plate_no} — ${s.make} ${s.model}`} />
+                <DataCardField label="Package" value={s.package_name} />
+                <DataCardField label="My Work" value={s.work_note} />
+                <DataCardField
+                  label="Rating"
+                  value={
+                    s.rating ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Star className="h-3 w-3 text-accent fill-accent" />
+                        {s.rating}
+                      </span>
+                    ) : null
+                  }
+                />
+              </DataCard>
+            ))}
+          {!loading && services.length === 0 && (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              No service contributions in this period
+            </div>
+          )}
         </div>
       </div>
     </div>

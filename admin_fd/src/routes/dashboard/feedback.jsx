@@ -3,6 +3,7 @@ import { Star, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 
 // Matches MAX_FEATURED_FEEDBACK in backend/src/controllers/feedback.controller.js —
 // the landing page's testimonials section only ever displays up to 4 entries.
@@ -122,7 +123,7 @@ export function FeedbackPage() {
           placeholder="Search by booking ref..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring w-64"
+          className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring w-full sm:w-64"
         />
         <div className="flex gap-1 flex-wrap">
           {["All", "Featured", "5", "4", "3", "2", "1"].map((f) => (
@@ -161,10 +162,14 @@ export function FeedbackPage() {
         )}
       </div>
 
-      <div className="rounded-lg border border-border bg-card overflow-x-auto">
-        {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
-        ) : (
+      {loading ? (
+        <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          Loading...
+        </div>
+      ) : (
+        <>
+      {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+      <div className="hidden lg:block rounded-lg border border-border bg-card overflow-x-auto scroll-fade-x">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
@@ -253,8 +258,81 @@ export function FeedbackPage() {
               )}
             </tbody>
           </table>
+      </div>
+
+      {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+      <div className="lg:hidden space-y-3">
+        {sortedFeedback.map((fb) => (
+          <DataCard key={fb.feedback_id}>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <p className="font-semibold text-foreground">{fb.customer_name ?? "—"}</p>
+                  {fb.is_featured && (
+                    <span
+                      title="Featured on landing page"
+                      className="flex items-center gap-0.5 rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent"
+                    >
+                      <Star className="h-2.5 w-2.5 fill-accent" /> Featured
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">{fb.booking_ref}</p>
+              </div>
+              <div className="shrink-0">
+                <Stars rating={fb.rating} />
+              </div>
+            </div>
+
+            <DataCardField
+              label="Comment"
+              value={
+                fb.comment ? (
+                  fb.comment
+                ) : (
+                  <span className="text-muted-foreground italic">No comment</span>
+                )
+              }
+            />
+            <DataCardField label="Package" value={fb.package_name} />
+            <DataCardField label="Date" value={new Date(fb.submitted_at).toLocaleDateString()} />
+
+            {canFeature && (
+              <div className="flex items-center gap-1.5 pt-2 border-t border-border">
+                <button
+                  onClick={() => toggleFeatured(fb)}
+                  disabled={
+                    !fb.is_featured && (featuredCount >= MAX_FEATURED_FEEDBACK || !fb.comment)
+                  }
+                  title={
+                    fb.is_featured
+                      ? "Remove from landing page"
+                      : !fb.comment
+                        ? "Feedback with no comment can't be featured"
+                        : featuredCount >= MAX_FEATURED_FEEDBACK
+                          ? `Already have ${MAX_FEATURED_FEEDBACK} testimonials selected`
+                          : "Feature on landing page"
+                  }
+                  className={`p-1 text-muted-foreground hover:text-foreground ${
+                    !fb.is_featured && (featuredCount >= MAX_FEATURED_FEEDBACK || !fb.comment)
+                      ? "opacity-30 cursor-not-allowed hover:text-muted-foreground"
+                      : ""
+                  }`}
+                >
+                  <Star className={`h-4 w-4 ${fb.is_featured ? "fill-accent text-accent" : ""}`} />
+                </button>
+              </div>
+            )}
+          </DataCard>
+        ))}
+        {sortedFeedback.length === 0 && (
+          <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+            {feedback.length === 0 ? "No feedback submitted yet." : `No feedback matches this filter.`}
+          </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

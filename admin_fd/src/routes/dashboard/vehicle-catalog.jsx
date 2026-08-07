@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Combobox } from "@/components/ui/combobox";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,6 +37,43 @@ const isDuplicateName = (items, name, idField, excludeId) =>
   );
 
 // ---- Makes tab --------------------------------------------------------------
+
+// Shared between the desktop table's Actions column and the mobile/tablet card
+// list's action row, so the delete confirmation copy only lives in one place.
+function MakeActions({ make, onEdit, onDelete }) {
+  return (
+    <div className="flex gap-1">
+      <button
+        onClick={() => onEdit(make)}
+        title="Edit"
+        className="p-1 text-muted-foreground hover:text-foreground"
+      >
+        <Pencil className="h-3 w-3" />
+      </button>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <button
+            title="Delete"
+            disabled={make.model_count > 0 || make.vehicle_count > 0}
+            className="p-1 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{make.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => onDelete(make)}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
 
 function MakesTab() {
   const [makes, setMakes] = useState([]);
@@ -142,7 +180,7 @@ function MakesTab() {
         placeholder="Search makes..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring w-64"
+        className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring w-full sm:w-64"
       />
 
       {pageError && (
@@ -191,82 +229,116 @@ function MakesTab() {
         </DialogContent>
       </Dialog>
 
-      <div className="rounded-lg border border-border bg-card overflow-x-auto">
-        {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Name</th>
-                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Models</th>
-                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Vehicles</th>
-                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* added: render filteredMakes instead of makes */}
-              {filteredMakes.map((make) => (
-                <tr
-                  key={make.make_id}
-                  className="border-b border-border last:border-0 hover:bg-muted/20"
-                >
-                  <td className="py-3 px-3 text-foreground font-semibold">{make.name}</td>
-                  <td className="py-3 px-3 text-foreground">{make.model_count}</td>
-                  <td className="py-3 px-3 text-foreground">{make.vehicle_count}</td>
-                  <td className="py-3 px-3">
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => openEdit(make)}
-                        title="Edit"
-                        className="p-1 text-muted-foreground hover:text-foreground"
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <button
-                            title="Delete"
-                            disabled={make.model_count > 0 || make.vehicle_count > 0}
-                            className="p-1 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete "{make.name}"?</AlertDialogTitle>
-                            <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => remove(make)}>
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </td>
+      {loading ? (
+        <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          Loading...
+        </div>
+      ) : (
+        <>
+          {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+          <div className="hidden lg:block rounded-lg border border-border bg-card overflow-x-auto scroll-fade-x">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-3 px-3 font-medium text-muted-foreground">Name</th>
+                  <th className="text-left py-3 px-3 font-medium text-muted-foreground">Models</th>
+                  <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                    Vehicles
+                  </th>
+                  <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                    Actions
+                  </th>
                 </tr>
-              ))}
-              {/* added: check filteredMakes and show a distinct message when search has no results */}
-              {filteredMakes.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="py-8 text-center text-muted-foreground">
-                    {makes.length === 0 ? "No makes yet." : "No makes match your search."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {/* added: render filteredMakes instead of makes */}
+                {filteredMakes.map((make) => (
+                  <tr
+                    key={make.make_id}
+                    className="border-b border-border last:border-0 hover:bg-muted/20"
+                  >
+                    <td className="py-3 px-3 text-foreground font-semibold">{make.name}</td>
+                    <td className="py-3 px-3 text-foreground">{make.model_count}</td>
+                    <td className="py-3 px-3 text-foreground">{make.vehicle_count}</td>
+                    <td className="py-3 px-3">
+                      <MakeActions make={make} onEdit={openEdit} onDelete={remove} />
+                    </td>
+                  </tr>
+                ))}
+                {/* added: check filteredMakes and show a distinct message when search has no results */}
+                {filteredMakes.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                      {makes.length === 0 ? "No makes yet." : "No makes match your search."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+          <div className="lg:hidden space-y-3">
+            {filteredMakes.map((make) => (
+              <DataCard key={make.make_id}>
+                <p className="font-semibold text-foreground">{make.name}</p>
+                <DataCardField label="Models" value={make.model_count} />
+                <DataCardField label="Vehicles" value={make.vehicle_count} />
+                <div className="pt-2 border-t border-border">
+                  <MakeActions make={make} onEdit={openEdit} onDelete={remove} />
+                </div>
+              </DataCard>
+            ))}
+            {filteredMakes.length === 0 && (
+              <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                {makes.length === 0 ? "No makes yet." : "No makes match your search."}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
 // ---- Types tab --------------------------------------------------------------
+
+// Shared between the desktop table's Actions column and the mobile/tablet card
+// list's action row, so the delete confirmation copy only lives in one place.
+function TypeActions({ type, onEdit, onDelete }) {
+  return (
+    <div className="flex gap-1">
+      <button
+        onClick={() => onEdit(type)}
+        title="Edit"
+        className="p-1 text-muted-foreground hover:text-foreground"
+      >
+        <Pencil className="h-3 w-3" />
+      </button>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <button
+            title="Delete"
+            disabled={type.model_count > 0 || type.vehicle_count > 0}
+            className="p-1 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{type.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => onDelete(type)}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
 
 function TypesTab() {
   const [types, setTypes] = useState([]);
@@ -407,75 +479,72 @@ function TypesTab() {
         </DialogContent>
       </Dialog>
 
-      <div className="rounded-lg border border-border bg-card overflow-x-auto">
-        {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Name</th>
-                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Models</th>
-                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Vehicles</th>
-                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {types.map((type) => (
-                <tr
-                  key={type.type_id}
-                  className="border-b border-border last:border-0 hover:bg-muted/20"
-                >
-                  <td className="py-3 px-3 text-foreground font-semibold">{type.name}</td>
-                  <td className="py-3 px-3 text-foreground">{type.model_count}</td>
-                  <td className="py-3 px-3 text-foreground">{type.vehicle_count}</td>
-                  <td className="py-3 px-3">
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => openEdit(type)}
-                        title="Edit"
-                        className="p-1 text-muted-foreground hover:text-foreground"
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <button
-                            title="Delete"
-                            disabled={type.model_count > 0 || type.vehicle_count > 0}
-                            className="p-1 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete "{type.name}"?</AlertDialogTitle>
-                            <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => remove(type)}>
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </td>
+      {loading ? (
+        <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          Loading...
+        </div>
+      ) : (
+        <>
+          {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+          <div className="hidden lg:block rounded-lg border border-border bg-card overflow-x-auto scroll-fade-x">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-3 px-3 font-medium text-muted-foreground">Name</th>
+                  <th className="text-left py-3 px-3 font-medium text-muted-foreground">Models</th>
+                  <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                    Vehicles
+                  </th>
+                  <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                    Actions
+                  </th>
                 </tr>
-              ))}
-              {types.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="py-8 text-center text-muted-foreground">
-                    No types yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        )}
-      </div>
+              </thead>
+              <tbody>
+                {types.map((type) => (
+                  <tr
+                    key={type.type_id}
+                    className="border-b border-border last:border-0 hover:bg-muted/20"
+                  >
+                    <td className="py-3 px-3 text-foreground font-semibold">{type.name}</td>
+                    <td className="py-3 px-3 text-foreground">{type.model_count}</td>
+                    <td className="py-3 px-3 text-foreground">{type.vehicle_count}</td>
+                    <td className="py-3 px-3">
+                      <TypeActions type={type} onEdit={openEdit} onDelete={remove} />
+                    </td>
+                  </tr>
+                ))}
+                {types.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                      No types yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+          <div className="lg:hidden space-y-3">
+            {types.map((type) => (
+              <DataCard key={type.type_id}>
+                <p className="font-semibold text-foreground">{type.name}</p>
+                <DataCardField label="Models" value={type.model_count} />
+                <DataCardField label="Vehicles" value={type.vehicle_count} />
+                <div className="pt-2 border-t border-border">
+                  <TypeActions type={type} onEdit={openEdit} onDelete={remove} />
+                </div>
+              </DataCard>
+            ))}
+            {types.length === 0 && (
+              <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                No types yet.
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -489,6 +558,43 @@ const EMPTY_MODEL_FORM = {
   start_year: "",
   end_year: "",
 };
+
+// Shared between the desktop table's Actions column and the mobile/tablet card
+// list's action row, so the delete confirmation copy only lives in one place.
+function ModelActions({ model, onEdit, onDelete }) {
+  return (
+    <div className="flex gap-1">
+      <button
+        onClick={() => onEdit(model)}
+        title="Edit"
+        className="p-1 text-muted-foreground hover:text-foreground"
+      >
+        <Pencil className="h-3 w-3" />
+      </button>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <button
+            title="Delete"
+            disabled={model.vehicle_count > 0}
+            className="p-1 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{model.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => onDelete(model)}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
 
 function ModelsTab() {
   const [models, setModels] = useState([]);
@@ -639,7 +745,7 @@ function ModelsTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="w-64">
+        <div className="w-full sm:w-64">
           <Combobox
             options={makeOptions}
             value={makeFilter}
@@ -725,7 +831,7 @@ function ModelsTab() {
               {typeError && <p className="text-sm text-destructive">{typeError}</p>}
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="space-y-1">
                 <label className="text-sm font-medium text-muted-foreground">Start Year</label>
                 <input
@@ -777,83 +883,97 @@ function ModelsTab() {
         </DialogContent>
       </Dialog>
 
-      <div className="rounded-lg border border-border bg-card overflow-x-auto">
-        {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Name</th>
-                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Make</th>
-                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Type</th>
-                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Years</th>
-                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Vehicles</th>
-                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {models.map((model) => (
-                <tr
-                  key={model.model_id}
-                  className="border-b border-border last:border-0 hover:bg-muted/20"
-                >
-                  <td className="py-3 px-3 text-foreground font-semibold">{model.name}</td>
-                  <td className="py-3 px-3 text-foreground">{model.make_name}</td>
-                  <td className="py-3 px-3 text-foreground">{model.vehicle_type_name ?? "—"}</td>
-                  <td className="py-3 px-3 text-foreground">
-                    {model.start_year || model.end_year
+      {loading ? (
+        <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          Loading...
+        </div>
+      ) : (
+        <>
+          {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+          <div className="hidden lg:block rounded-lg border border-border bg-card overflow-x-auto scroll-fade-x">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-3 px-3 font-medium text-muted-foreground">Name</th>
+                  <th className="text-left py-3 px-3 font-medium text-muted-foreground">Make</th>
+                  <th className="text-left py-3 px-3 font-medium text-muted-foreground">Type</th>
+                  <th className="text-left py-3 px-3 font-medium text-muted-foreground">Years</th>
+                  <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                    Vehicles
+                  </th>
+                  <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {models.map((model) => (
+                  <tr
+                    key={model.model_id}
+                    className="border-b border-border last:border-0 hover:bg-muted/20"
+                  >
+                    <td className="py-3 px-3 text-foreground font-semibold">{model.name}</td>
+                    <td className="py-3 px-3 text-foreground">{model.make_name}</td>
+                    <td className="py-3 px-3 text-foreground">{model.vehicle_type_name ?? "—"}</td>
+                    <td className="py-3 px-3 text-foreground">
+                      {model.start_year || model.end_year
+                        ? `${model.start_year ?? ""}–${model.end_year ?? ""}`
+                        : "—"}
+                    </td>
+                    <td className="py-3 px-3 text-foreground">{model.vehicle_count}</td>
+                    <td className="py-3 px-3">
+                      <ModelActions model={model} onEdit={openEdit} onDelete={remove} />
+                    </td>
+                  </tr>
+                ))}
+                {models.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                      No models found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+          <div className="lg:hidden space-y-3">
+            {models.map((model) => (
+              <DataCard key={model.model_id}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-foreground">{model.name}</p>
+                    <p className="text-xs text-muted-foreground">{model.make_name}</p>
+                  </div>
+                  {model.vehicle_type_name && (
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                      {model.vehicle_type_name}
+                    </span>
+                  )}
+                </div>
+                <DataCardField
+                  label="Years"
+                  value={
+                    model.start_year || model.end_year
                       ? `${model.start_year ?? ""}–${model.end_year ?? ""}`
-                      : "—"}
-                  </td>
-                  <td className="py-3 px-3 text-foreground">{model.vehicle_count}</td>
-                  <td className="py-3 px-3">
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => openEdit(model)}
-                        title="Edit"
-                        className="p-1 text-muted-foreground hover:text-foreground"
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <button
-                            title="Delete"
-                            disabled={model.vehicle_count > 0}
-                            className="p-1 text-muted-foreground hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete "{model.name}"?</AlertDialogTitle>
-                            <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => remove(model)}>
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {models.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-muted-foreground">
-                    No models found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        )}
-      </div>
+                      : "—"
+                  }
+                />
+                <DataCardField label="Vehicles" value={model.vehicle_count} />
+                <div className="pt-2 border-t border-border">
+                  <ModelActions model={model} onEdit={openEdit} onDelete={remove} />
+                </div>
+              </DataCard>
+            ))}
+            {models.length === 0 && (
+              <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                No models found.
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

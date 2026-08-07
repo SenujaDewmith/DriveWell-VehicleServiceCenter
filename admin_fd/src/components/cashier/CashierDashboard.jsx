@@ -6,6 +6,7 @@ import {
   InvoiceViewModal,
   SupervisorServiceDetails,
 } from "@/components/invoices/InvoiceView";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +21,40 @@ import {
 import { Eye, Printer, Plus, Search, Trash2, X } from "lucide-react";
 
 const SEARCH_DEBOUNCE_MS = 500;
+
+// Shared between the "Awaiting Payment" desktop table's Action column and the
+// mobile/tablet card list's action row, so the confirmation copy only lives in one place.
+function MarkPaidAlertDialog({ invoice, marking, onConfirm }) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button
+          disabled={marking}
+          className="rounded-md border border-chart-1 px-2 py-1 text-sm font-medium text-chart-1 hover:bg-chart-1 hover:text-accent-foreground transition-colors disabled:opacity-50"
+        >
+          {marking ? "..." : "Mark as Paid"}
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            Mark {invoice.booking_ref ?? `#${invoice.invoice_id}`} as paid?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            Confirms LKR {parseFloat(invoice.total_amount).toLocaleString()} was received
+            from {invoice.customer_name} ({invoice.payment_method ?? "Cash"}). This marks the
+            service as Completed & Paid — the Supervisor will then verify payment and
+            release the vehicle. This can't be undone from here.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>Confirm Payment</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 export function CashierDashboard() {
   const [bookings, setBookings] = useState([]);
@@ -231,12 +266,14 @@ export function CashierDashboard() {
       {/* Ready for billing table */}
       <div className="rounded-lg border border-border bg-card p-4">
         <h3 className="text-sm font-semibold text-foreground mb-4">Ready for Billing</h3>
-        <div className="overflow-x-auto">
+        {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+        <div className="hidden lg:block overflow-x-auto scroll-fade-x">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Ref</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Customer</th>
+                <th className="text-left py-2 px-2 font-medium text-muted-foreground">Phone</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Vehicle</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Package</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Status</th>
@@ -246,7 +283,7 @@ export function CashierDashboard() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
                     Loading...
                   </td>
                 </tr>
@@ -258,6 +295,7 @@ export function CashierDashboard() {
                       {b.booking_ref ?? `#${b.reservation_id}`}
                     </td>
                     <td className="py-2 px-2 text-foreground">{b.customer_name}</td>
+                    <td className="py-2 px-2 text-foreground">{b.customer_phone ?? "—"}</td>
                     <td className="py-2 px-2 text-foreground">{b.plate_no}</td>
                     <td className="py-2 px-2 text-foreground">{b.package_name}</td>
                     <td className="py-2 px-2">
@@ -275,7 +313,7 @@ export function CashierDashboard() {
                 ))}
               {!loading && bookings.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
                     No vehicles ready for billing
                   </td>
                 </tr>
@@ -284,14 +322,53 @@ export function CashierDashboard() {
           </table>
         </div>
 
+        {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+        <div className="lg:hidden space-y-3">
+          {loading && (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              Loading...
+            </div>
+          )}
+          {!loading &&
+            bookings.map((b) => (
+              <DataCard key={b.reservation_id}>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold text-foreground">
+                    {b.booking_ref ?? `#${b.reservation_id}`}
+                  </p>
+                  <StatusBadge status={b.status} />
+                </div>
+                <DataCardField label="Customer" value={b.customer_name} />
+                <DataCardField label="Phone" value={b.customer_phone} />
+                <DataCardField label="Vehicle" value={b.plate_no} />
+                <DataCardField label="Package" value={b.package_name} />
+                <div className="pt-2 border-t border-border">
+                  <button
+                    onClick={() => selectBooking(b.reservation_id)}
+                    className="rounded-md border border-accent px-2 py-1 text-sm font-medium text-accent hover:bg-accent hover:text-accent-foreground transition-colors"
+                  >
+                    Bill
+                  </button>
+                </div>
+              </DataCard>
+            ))}
+          {!loading && bookings.length === 0 && (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              No vehicles ready for billing
+            </div>
+          )}
+        </div>
+
         {/* Unpaid invoices awaiting payment */}
         <h3 className="text-sm font-semibold text-foreground mb-4 mt-6">Awaiting Payment</h3>
-        <div className="overflow-x-auto">
+        {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+        <div className="hidden lg:block overflow-x-auto scroll-fade-x">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Ref</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Customer</th>
+                <th className="text-left py-2 px-2 font-medium text-muted-foreground">Phone</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Vehicle</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">
                   Total (LKR)
@@ -307,55 +384,61 @@ export function CashierDashboard() {
                     {inv.booking_ref ?? `#${inv.invoice_id}`}
                   </td>
                   <td className="py-2 px-2 text-foreground">{inv.customer_name}</td>
+                  <td className="py-2 px-2 text-foreground">{inv.customer_phone ?? "—"}</td>
                   <td className="py-2 px-2 text-foreground">{inv.plate_no}</td>
                   <td className="py-2 px-2 text-foreground">
                     {parseFloat(inv.total_amount).toLocaleString()}
                   </td>
                   <td className="py-2 px-2 text-foreground">{inv.payment_method ?? "—"}</td>
                   <td className="py-2 px-2">
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <button
-                          disabled={markingPaidId === inv.invoice_id}
-                          className="rounded-md border border-chart-1 px-2 py-1 text-sm font-medium text-chart-1 hover:bg-chart-1 hover:text-accent-foreground transition-colors disabled:opacity-50"
-                        >
-                          {markingPaidId === inv.invoice_id ? "..." : "Mark as Paid"}
-                        </button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            Mark {inv.booking_ref ?? `#${inv.invoice_id}`} as paid?
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Confirms LKR {parseFloat(inv.total_amount).toLocaleString()} was received
-                            from {inv.customer_name} ({inv.payment_method ?? "Cash"}). This marks the
-                            service as Completed & Paid — the Supervisor will then verify payment and
-                            release the vehicle. This can't be undone from here.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => markInvoicePaid(inv.invoice_id, inv.payment_method ?? "Cash")}
-                          >
-                            Confirm Payment
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <MarkPaidAlertDialog
+                      invoice={inv}
+                      marking={markingPaidId === inv.invoice_id}
+                      onConfirm={() => markInvoicePaid(inv.invoice_id, inv.payment_method ?? "Cash")}
+                    />
                   </td>
                 </tr>
               ))}
               {unpaidInvoices.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
                     No unpaid invoices
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+        <div className="lg:hidden space-y-3">
+          {unpaidInvoices.map((inv) => (
+            <DataCard key={inv.invoice_id}>
+              <p className="font-semibold text-foreground">
+                {inv.booking_ref ?? `#${inv.invoice_id}`}
+              </p>
+              <DataCardField label="Customer" value={inv.customer_name} />
+              <DataCardField label="Phone" value={inv.customer_phone} />
+              <DataCardField label="Vehicle" value={inv.plate_no} />
+              <DataCardField
+                label="Total (LKR)"
+                value={parseFloat(inv.total_amount).toLocaleString()}
+              />
+              <DataCardField label="Method" value={inv.payment_method ?? "—"} />
+              <div className="pt-2 border-t border-border">
+                <MarkPaidAlertDialog
+                  invoice={inv}
+                  marking={markingPaidId === inv.invoice_id}
+                  onConfirm={() => markInvoicePaid(inv.invoice_id, inv.payment_method ?? "Cash")}
+                />
+              </div>
+            </DataCard>
+          ))}
+          {unpaidInvoices.length === 0 && (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              No unpaid invoices
+            </div>
+          )}
         </div>
 
         {/* Invoice history — searchable by date range and ref/customer name */}
@@ -384,13 +467,15 @@ export function CashierDashboard() {
             />
           </div>
         </div>
-        <div className="overflow-x-auto">
+        {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+        <div className="hidden lg:block overflow-x-auto scroll-fade-x">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Ref</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Date</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Customer</th>
+                <th className="text-left py-2 px-2 font-medium text-muted-foreground">Phone</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Vehicle</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">
                   Total (LKR)
@@ -402,7 +487,7 @@ export function CashierDashboard() {
             <tbody>
               {historyLoading && (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="py-8 text-center text-muted-foreground">
                     Loading...
                   </td>
                 </tr>
@@ -415,6 +500,7 @@ export function CashierDashboard() {
                     </td>
                     <td className="py-2 px-2 text-foreground">{inv.service_date ?? "—"}</td>
                     <td className="py-2 px-2 text-foreground">{inv.customer_name}</td>
+                    <td className="py-2 px-2 text-foreground">{inv.customer_phone ?? "—"}</td>
                     <td className="py-2 px-2 text-foreground">{inv.plate_no}</td>
                     <td className="py-2 px-2 text-foreground">
                       {parseFloat(inv.total_amount).toLocaleString()}
@@ -440,13 +526,62 @@ export function CashierDashboard() {
                 ))}
               {!historyLoading && historyInvoices.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="py-8 text-center text-muted-foreground">
                     No invoices match this search
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+        <div className="lg:hidden space-y-3">
+          {historyLoading && (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              Loading...
+            </div>
+          )}
+          {!historyLoading &&
+            historyInvoices.map((inv) => (
+              <DataCard key={inv.invoice_id}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-foreground">
+                      {inv.booking_ref ?? `#${inv.invoice_id}`}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{inv.service_date ?? "—"}</p>
+                  </div>
+                  <span
+                    className={`text-sm font-medium shrink-0 ${
+                      inv.payment_status === "Paid" ? "text-chart-1" : "text-muted-foreground"
+                    }`}
+                  >
+                    {inv.payment_status}
+                  </span>
+                </div>
+                <DataCardField label="Customer" value={inv.customer_name} />
+                <DataCardField label="Phone" value={inv.customer_phone} />
+                <DataCardField label="Vehicle" value={inv.plate_no} />
+                <DataCardField
+                  label="Total (LKR)"
+                  value={parseFloat(inv.total_amount).toLocaleString()}
+                />
+                <div className="pt-2 border-t border-border">
+                  <button
+                    onClick={() => setViewInvoice(inv)}
+                    className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                  >
+                    <Eye className="h-3 w-3" /> View
+                  </button>
+                </div>
+              </DataCard>
+            ))}
+          {!historyLoading && historyInvoices.length === 0 && (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              No invoices match this search
+            </div>
+          )}
         </div>
       </div>
 
@@ -478,6 +613,11 @@ export function CashierDashboard() {
                   <p>
                     <span className="text-muted-foreground">Customer:</span> {draft.customer_name}
                   </p>
+                  {draft.customer_phone && (
+                    <p>
+                      <span className="text-muted-foreground">Phone:</span> {draft.customer_phone}
+                    </p>
+                  )}
                   <p>
                     <span className="text-muted-foreground">Vehicle:</span> {draft.plate_no} —{" "}
                     {draft.make} {draft.model} ({draft.vehicle_type})
@@ -655,6 +795,7 @@ export function CashierDashboard() {
               bookingRef={draft.booking_ref}
               dateLabel={new Date().toLocaleDateString()}
               customerName={draft.customer_name}
+              customerPhone={draft.customer_phone}
               vehicleLine={`${draft.plate_no} — ${draft.make} ${draft.model} (${draft.vehicle_type})`}
               packageName={draft.package_name}
               baseAmount={parseFloat(createdInvoice.base_amount)}

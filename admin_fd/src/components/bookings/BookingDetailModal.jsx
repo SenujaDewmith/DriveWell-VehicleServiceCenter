@@ -99,8 +99,9 @@ export function BookingDetailModal({ reservationId, invoice, onClose, onViewInvo
             </div>
 
             <Section title="Customer">
-              <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                 <Field label="Name" value={booking.customer_name} />
+                <Field label="Phone" value={booking.customer_phone} />
                 <Field label="Email" value={booking.customer_email} />
                 {booking.customer_no_show_count > 0 && (
                   <Field label="Previous No-shows" value={booking.customer_no_show_count} />
@@ -109,7 +110,7 @@ export function BookingDetailModal({ reservationId, invoice, onClose, onViewInvo
             </Section>
 
             <Section title="Vehicle & Package">
-              <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                 <Field label="Plate No." value={booking.plate_no} />
                 <Field
                   label="Vehicle"
@@ -129,7 +130,7 @@ export function BookingDetailModal({ reservationId, invoice, onClose, onViewInvo
 
             {record && (
               <Section title="Service Record">
-                <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                   <Field label="Quality Checked" value={record.quality_checked ? "Yes" : "No"} />
                   <Field
                     label="Started"

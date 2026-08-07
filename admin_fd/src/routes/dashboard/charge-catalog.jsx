@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Pencil, ToggleLeft, ToggleRight, X } from "lucide-react";
 import { api } from "@/lib/api";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 
 const EMPTY_FORM = { name: "", description: "", default_price: "", category: "" };
 
@@ -220,10 +221,14 @@ export function ChargeCatalogPage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-card overflow-x-auto">
-        {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
-        ) : (
+      {loading ? (
+        <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          Loading...
+        </div>
+      ) : (
+        <>
+      {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+      <div className="hidden lg:block rounded-lg border border-border bg-card overflow-x-auto scroll-fade-x">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
@@ -294,8 +299,62 @@ export function ChargeCatalogPage() {
               )}
             </tbody>
           </table>
+      </div>
+
+      {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+      <div className="lg:hidden space-y-3">
+        {items.map((item) => (
+          <DataCard key={item.catalog_item_id}>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-semibold text-foreground">{item.name}</p>
+                {item.description && (
+                  <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
+                )}
+              </div>
+              <span
+                className={`text-sm font-medium shrink-0 ${item.is_active ? "text-accent" : "text-muted-foreground"}`}
+              >
+                {item.is_active ? "Active" : "Inactive"}
+              </span>
+            </div>
+
+            <DataCardField label="Category" value={item.category ?? "—"} />
+            <DataCardField
+              label="Default Price (LKR)"
+              value={parseFloat(item.default_price).toLocaleString()}
+            />
+
+            <div className="flex items-center gap-1.5 pt-2 border-t border-border">
+              <button
+                onClick={() => openEdit(item)}
+                title="Edit"
+                className="p-1 text-muted-foreground hover:text-foreground"
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
+              <button
+                onClick={() => toggleActive(item)}
+                title={item.is_active ? "Deactivate" : "Activate"}
+                className="p-1 text-muted-foreground hover:text-foreground"
+              >
+                {item.is_active ? (
+                  <ToggleRight className="h-3 w-3 text-accent" />
+                ) : (
+                  <ToggleLeft className="h-3 w-3" />
+                )}
+              </button>
+            </div>
+          </DataCard>
+        ))}
+        {items.length === 0 && (
+          <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+            No charge catalog items yet. Click &ldquo;Add Charge&rdquo; to create one.
+          </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

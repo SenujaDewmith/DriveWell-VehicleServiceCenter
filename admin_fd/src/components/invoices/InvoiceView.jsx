@@ -6,6 +6,7 @@ export function InvoiceDocument({
   bookingRef,
   dateLabel,
   customerName,
+  customerPhone,
   vehicleLine,
   packageName,
   baseAmount,
@@ -29,6 +30,7 @@ export function InvoiceDocument({
 
       <div className="space-y-0.5 text-sm mb-3">
         <p>Customer: {customerName}</p>
+        {customerPhone && <p>Phone: {customerPhone}</p>}
         <p>Vehicle: {vehicleLine}</p>
       </div>
 
@@ -162,6 +164,7 @@ export function InvoiceViewModal({ invoice, onClose }) {
           bookingRef={invoice.booking_ref}
           dateLabel={new Date(invoice.generated_at).toLocaleDateString()}
           customerName={invoice.customer_name}
+          customerPhone={invoice.customer_phone}
           vehicleLine={`${invoice.plate_no} — ${invoice.make} ${invoice.model} (${invoice.vehicle_type})`}
           packageName={invoice.package_name}
           baseAmount={parseFloat(invoice.base_amount)}

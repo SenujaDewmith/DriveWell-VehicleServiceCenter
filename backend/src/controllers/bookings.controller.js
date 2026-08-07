@@ -48,6 +48,7 @@ const flattenBooking = (r, { hideCustomerIdentity = false, hidePaymentStatus = f
   package_id: r.package_id,
   customer_name: hideCustomerIdentity ? undefined : r.customer_user?.customer?.full_name,
   customer_email: hideCustomerIdentity ? undefined : r.customer_user?.email,
+  customer_phone: hideCustomerIdentity ? undefined : r.customer_user?.customer?.phone,
   ...flattenVehicleRef(r.vehicle),
   package_name: r.package?.name,
   package_price: r.package?.price,
@@ -62,7 +63,7 @@ const BOOKING_INCLUDE = {
   customer_user: {
     select: {
       email: true,
-      customer: { select: { full_name: true } },
+      customer: { select: { full_name: true, phone: true } },
     },
   },
   vehicle: VEHICLE_SELECT,

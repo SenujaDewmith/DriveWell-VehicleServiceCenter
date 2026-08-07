@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { getDefaultSidebarCollapsed } from "@/hooks/use-sidebar-breakpoint";
+import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   Package,
@@ -20,6 +22,8 @@ import {
   Car,
   MessageSquare,
   History,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 
@@ -70,7 +74,8 @@ const supervisorNav = [
 export function DashboardLayout({ children }) {
   const { username, role, logout } = useAuth();
   const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(getDefaultSidebarCollapsed);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -90,21 +95,46 @@ export function DashboardLayout({ children }) {
       {/* Sidebar - manager and supervisor only */}
       {hasSidebar && (
         <>
-          {/* Mobile overlay */}
+          {/* Mobile overlay - only below md, since md+ shows the sidebar in normal flow */}
           {sidebarOpen && (
             <div
-              className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+              className="fixed inset-0 bg-black/50 z-40 md:hidden"
               onClick={() => setSidebarOpen(false)}
             />
           )}
           <aside
-            className={`fixed lg:static z-50 h-screen w-64 border-r border-border bg-card flex flex-col transition-transform lg:translate-x-0 ${
-              sidebarOpen ? "translate-x-0" : "-translate-x-full"
-            }`}
+            className={cn(
+              "fixed md:static z-50 h-screen w-64 border-r border-border bg-card flex flex-col transition-[transform,width] duration-200 md:translate-x-0",
+              sidebarOpen ? "translate-x-0" : "-translate-x-full",
+              collapsed ? "md:w-16" : "md:w-64",
+            )}
           >
-            <div className="p-4 border-b border-border">
-              <Logo className="h-8" />
-              <p className="text-xs text-muted-foreground mt-2">{role} Panel</p>
+            <div
+              className={cn(
+                "flex items-center border-b border-border p-4",
+                collapsed ? "md:justify-center md:px-2" : "justify-between",
+              )}
+            >
+              <div className={cn(collapsed && "md:hidden")}>
+                <Logo className="h-8" />
+                <p className="text-xs text-muted-foreground mt-2">{role} Panel</p>
+              </div>
+              {collapsed && (
+                <div className="hidden md:block">
+                  <Logo variant="icon" className="h-8" alt="DriveWell" />
+                </div>
+              )}
+              <button
+                onClick={() => setCollapsed(!collapsed)}
+                className="hidden shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground md:inline-flex"
+                title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                {collapsed ? (
+                  <ChevronsRight className="h-4 w-4" />
+                ) : (
+                  <ChevronsLeft className="h-4 w-4" />
+                )}
+              </button>
             </div>
 
             <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
@@ -118,14 +148,17 @@ export function DashboardLayout({ children }) {
                     key={item.to}
                     to={item.to}
                     onClick={() => setSidebarOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    title={collapsed ? item.label : undefined}
+                    className={cn(
+                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                      collapsed && "md:justify-center md:px-0",
                       isActive
                         ? "bg-accent text-accent-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }`}
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
                   >
                     {item.icon}
-                    {item.label}
+                    <span className={cn(collapsed && "md:hidden")}>{item.label}</span>
                   </Link>
                 );
               })}
@@ -135,26 +168,26 @@ export function DashboardLayout({ children }) {
       )}
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-h-0">
-        <header className="h-16 shrink-0 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 flex items-center justify-between px-4">
-          <div className="flex items-center gap-3">
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+        <header className="h-16 shrink-0 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 flex items-center justify-between px-3 sm:px-4">
+          <div className="flex items-center gap-3 min-w-0">
             {hasSidebar && (
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="lg:hidden p-1 text-foreground"
+                className="md:hidden p-1 text-foreground shrink-0"
               >
                 {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
             )}
             {!hasSidebar && (
-              <div className="flex items-center gap-2">
-                <Logo className="h-7" />
-                <span className="text-sm text-muted-foreground">// {role}</span>
+              <div className="flex items-center gap-2 min-w-0">
+                <Logo className="h-7 shrink-0" />
+                <span className="text-sm text-muted-foreground truncate">// {role}</span>
               </div>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground">{username}</span>
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <span className="hidden sm:inline text-sm text-muted-foreground">{username}</span>
             <ThemeToggle />
             <button
               onClick={() => setShowLogoutConfirm(true)}
@@ -165,7 +198,7 @@ export function DashboardLayout({ children }) {
           </div>
         </header>
 
-        <main className="flex-1 min-h-0 p-4 lg:p-6 overflow-auto">{children}</main>
+        <main className="flex-1 min-h-0 p-4 md:p-5 lg:p-6 overflow-auto">{children}</main>
       </div>
 
       {showLogoutConfirm && (

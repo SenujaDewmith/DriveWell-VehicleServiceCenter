@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 import {
   BarChart,
   Bar,
@@ -175,13 +176,17 @@ export function ManagerOverview() {
 
           <div className="border border-border rounded-lg bg-card p-4">
             <h3 className="text-sm font-semibold text-foreground mb-4">Recent Bookings</h3>
-            <div className="overflow-x-auto">
+            {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+            <div className="hidden lg:block overflow-x-auto scroll-fade-x">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
                     <th className="text-left py-2 px-2 font-medium text-muted-foreground">Ref</th>
                     <th className="text-left py-2 px-2 font-medium text-muted-foreground">
                       Customer
+                    </th>
+                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">
+                      Phone
                     </th>
                     <th className="text-left py-2 px-2 font-medium text-muted-foreground">
                       Vehicle
@@ -201,6 +206,7 @@ export function ManagerOverview() {
                         {b.booking_ref ?? `#${b.reservation_id}`}
                       </td>
                       <td className="py-2 px-2 text-foreground">{b.customer_name}</td>
+                      <td className="py-2 px-2 text-foreground">{b.customer_phone ?? "—"}</td>
                       <td className="py-2 px-2 text-foreground">{b.plate_no}</td>
                       <td className="py-2 px-2 text-foreground">{b.package_name}</td>
                       <td className="py-2 px-2">
@@ -210,13 +216,36 @@ export function ManagerOverview() {
                   ))}
                   {recentBookings.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                      <td colSpan={6} className="py-8 text-center text-muted-foreground">
                         No bookings yet
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+            <div className="lg:hidden space-y-3">
+              {recentBookings.map((b) => (
+                <DataCard key={b.reservation_id}>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-foreground">
+                      {b.booking_ref ?? `#${b.reservation_id}`}
+                    </p>
+                    <StatusBadge status={b.status} />
+                  </div>
+                  <DataCardField label="Customer" value={b.customer_name} />
+                  <DataCardField label="Phone" value={b.customer_phone} />
+                  <DataCardField label="Vehicle" value={b.plate_no} />
+                  <DataCardField label="Package" value={b.package_name} />
+                </DataCard>
+              ))}
+              {recentBookings.length === 0 && (
+                <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                  No bookings yet
+                </div>
+              )}
             </div>
           </div>
         </>

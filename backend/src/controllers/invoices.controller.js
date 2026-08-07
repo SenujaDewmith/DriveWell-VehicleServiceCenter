@@ -29,6 +29,7 @@ const flattenInvoice = (i, { includeSupervisorNotes = false } = {}) => ({
   booking_status: i.reservation?.status,
   customer_name: i.reservation?.customer_user?.customer?.full_name,
   customer_email: i.reservation?.customer_user?.email,
+  customer_phone: i.reservation?.customer_user?.customer?.phone,
   ...flattenVehicleRef(i.reservation?.vehicle),
   package_name: i.reservation?.package?.name,
   // Prefer the live join (reflects a name change while the account still
@@ -67,7 +68,7 @@ const INVOICE_INCLUDE = {
       customer_user: {
         select: {
           email: true,
-          customer: { select: { full_name: true } },
+          customer: { select: { full_name: true, phone: true } },
         },
       },
       vehicle: VEHICLE_SELECT,
@@ -165,7 +166,7 @@ const getInvoiceDraft = async (req, res) => {
     const booking = await prisma.reservation.findUnique({
       where: { reservation_id: parseInt(booking_id) },
       include: {
-        customer_user: { select: { email: true, customer: { select: { full_name: true } } } },
+        customer_user: { select: { email: true, customer: { select: { full_name: true, phone: true } } } },
         vehicle: VEHICLE_SELECT,
         package: { select: { name: true, price: true } },
         service_record: {
@@ -179,6 +180,7 @@ const getInvoiceDraft = async (req, res) => {
       reservation_id: booking.reservation_id,
       booking_ref: booking.booking_ref,
       customer_name: booking.customer_user?.customer?.full_name,
+      customer_phone: booking.customer_user?.customer?.phone,
       ...flattenVehicleRef(booking.vehicle),
       package_name: booking.package?.name,
       package_price: booking.package?.price,

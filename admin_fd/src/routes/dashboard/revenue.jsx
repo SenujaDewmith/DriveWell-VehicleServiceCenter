@@ -13,6 +13,7 @@ import {
   LineChart,
   Line,
 } from "recharts";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -184,7 +185,8 @@ export function RevenuePage() {
                 </ResponsiveContainer>
               </div>
 
-              <div className="rounded-lg border border-border bg-card overflow-x-auto">
+              {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+              <div className="hidden lg:block rounded-lg border border-border bg-card overflow-x-auto scroll-fade-x">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
@@ -211,6 +213,20 @@ export function RevenuePage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+              <div className="lg:hidden space-y-3">
+                {byPackage.map((p) => (
+                  <DataCard key={p.package_name}>
+                    <p className="font-semibold text-foreground">{p.package_name}</p>
+                    <DataCardField label="Invoices" value={p.count} />
+                    <DataCardField
+                      label="Revenue (LKR)"
+                      value={parseFloat(p.revenue).toLocaleString()}
+                    />
+                  </DataCard>
+                ))}
               </div>
             </>
           ) : (

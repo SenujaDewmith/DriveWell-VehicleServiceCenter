@@ -13,6 +13,7 @@ import {
   PieChart,
   Pie,
 } from "recharts";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 
 const COLORS = ["#A7D129", "#616F39", "#3E432E", "#8B9D4A", "#D4E157"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -191,7 +192,8 @@ export function VolumePage() {
                 </div>
               )}
 
-              <div className="rounded-lg border border-border bg-card overflow-x-auto">
+              {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+              <div className="hidden lg:block rounded-lg border border-border bg-card overflow-x-auto scroll-fade-x">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
@@ -212,6 +214,16 @@ export function VolumePage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+              <div className="lg:hidden space-y-3">
+                {byStatus.map((s) => (
+                  <DataCard key={s.status}>
+                    <p className="font-semibold text-foreground">{s.status}</p>
+                    <DataCardField label="Count" value={s.count} />
+                  </DataCard>
+                ))}
               </div>
             </>
           ) : (

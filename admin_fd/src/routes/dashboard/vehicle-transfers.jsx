@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 import { PlateNumberInput } from "@/components/PlateNumberInput";
 import { isValidSriLankanPlate } from "@/lib/plateNumber";
 
@@ -250,71 +251,137 @@ export function VehicleTransfersPage() {
         </TabsList>
 
         <TabsContent value="requests">
-          <div className="rounded-lg border border-border bg-card">
-            {requestsLoading ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Plate</TableHead>
-                    <TableHead>Vehicle</TableHead>
-                    <TableHead>Requester</TableHead>
-                    <TableHead>Current Owner</TableHead>
-                    <TableHead>Submitted</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {requests.map((r) => (
-                    <TableRow key={r.request_id}>
-                      <TableCell className="font-medium text-foreground">
-                        {r.vehicle.plate_no}
-                      </TableCell>
-                      <TableCell className="text-foreground">
-                        {r.vehicle.make} {r.vehicle.model} ({r.vehicle.vehicle_type})
-                        {r.vehicle.year ? ` — ${r.vehicle.year}` : ""}
-                      </TableCell>
-                      <TableCell className="text-foreground">
-                        {r.requester.full_name ?? "—"}
-                        <div className="text-xs text-muted-foreground">{r.requester.email}</div>
-                      </TableCell>
-                      <TableCell className="text-foreground">
-                        {r.current_owner ? (
-                          <>
+          {requestsLoading ? (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              Loading...
+            </div>
+          ) : (
+            <>
+              {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+              <div className="hidden lg:block rounded-lg border border-border bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Plate</TableHead>
+                      <TableHead>Vehicle</TableHead>
+                      <TableHead>Requester</TableHead>
+                      <TableHead>Current Owner</TableHead>
+                      <TableHead>Submitted</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {requests.map((r) => (
+                      <TableRow key={r.request_id}>
+                        <TableCell className="font-medium text-foreground">
+                          {r.vehicle.plate_no}
+                        </TableCell>
+                        <TableCell className="text-foreground">
+                          {r.vehicle.make} {r.vehicle.model} ({r.vehicle.vehicle_type})
+                          {r.vehicle.year ? ` — ${r.vehicle.year}` : ""}
+                        </TableCell>
+                        <TableCell className="text-foreground">
+                          {r.requester.full_name ?? "—"}
+                          <div className="text-xs text-muted-foreground">{r.requester.email}</div>
+                        </TableCell>
+                        <TableCell className="text-foreground">
+                          {r.current_owner ? (
+                            <>
+                              {r.current_owner.full_name ?? "—"}
+                              <div className="text-xs text-muted-foreground">
+                                {r.current_owner.email}
+                              </div>
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(r.created_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <button
+                            onClick={() => openReview(r)}
+                            className="text-xs font-medium text-accent hover:underline"
+                          >
+                            Review
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {requests.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                          No pending transfer requests
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+              <div className="lg:hidden space-y-3">
+                {requests.map((r) => (
+                  <DataCard key={r.request_id}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-foreground">{r.vehicle.plate_no}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {r.vehicle.make} {r.vehicle.model} ({r.vehicle.vehicle_type})
+                          {r.vehicle.year ? ` — ${r.vehicle.year}` : ""}
+                        </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground shrink-0 text-right">
+                        {new Date(r.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+
+                    <DataCardField
+                      label="Requester"
+                      value={
+                        <span>
+                          {r.requester.full_name ?? "—"}
+                          <span className="block text-xs text-muted-foreground">
+                            {r.requester.email}
+                          </span>
+                        </span>
+                      }
+                    />
+                    <DataCardField
+                      label="Current Owner"
+                      value={
+                        r.current_owner ? (
+                          <span>
                             {r.current_owner.full_name ?? "—"}
-                            <div className="text-xs text-muted-foreground">
+                            <span className="block text-xs text-muted-foreground">
                               {r.current_owner.email}
-                            </div>
-                          </>
+                            </span>
+                          </span>
                         ) : (
                           "—"
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {new Date(r.created_at).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <button
-                          onClick={() => openReview(r)}
-                          className="text-xs font-medium text-accent hover:underline"
-                        >
-                          Review
-                        </button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {requests.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                        No pending transfer requests
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </div>
+                        )
+                      }
+                    />
+
+                    <div className="pt-2 border-t border-border">
+                      <button
+                        onClick={() => openReview(r)}
+                        className="text-xs font-medium text-accent hover:underline"
+                      >
+                        Review
+                      </button>
+                    </div>
+                  </DataCard>
+                ))}
+                {requests.length === 0 && (
+                  <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                    No pending transfer requests
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="detached" className="space-y-4">
@@ -337,63 +404,117 @@ export function VehicleTransfersPage() {
             </button>
           </div>
 
-          <div className="rounded-lg border border-border bg-card">
-            {loading ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Plate</TableHead>
-                    <TableHead>Vehicle</TableHead>
-                    <TableHead>Previous Owner</TableHead>
-                    <TableHead>Detached On</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {vehicles.map((v) => (
-                    <TableRow key={v.vehicle_id}>
-                      <TableCell className="font-medium text-foreground">{v.plate_no}</TableCell>
-                      <TableCell className="text-foreground">
-                        {v.make} {v.model} ({v.vehicle_type}){v.year ? ` — ${v.year}` : ""}
-                      </TableCell>
-                      <TableCell className="text-foreground">
-                        {v.previous_owner ? (
-                          <>
+          {loading ? (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              Loading...
+            </div>
+          ) : (
+            <>
+              {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+              <div className="hidden lg:block rounded-lg border border-border bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Plate</TableHead>
+                      <TableHead>Vehicle</TableHead>
+                      <TableHead>Previous Owner</TableHead>
+                      <TableHead>Detached On</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {vehicles.map((v) => (
+                      <TableRow key={v.vehicle_id}>
+                        <TableCell className="font-medium text-foreground">{v.plate_no}</TableCell>
+                        <TableCell className="text-foreground">
+                          {v.make} {v.model} ({v.vehicle_type}){v.year ? ` — ${v.year}` : ""}
+                        </TableCell>
+                        <TableCell className="text-foreground">
+                          {v.previous_owner ? (
+                            <>
+                              {v.previous_owner.full_name ?? "—"}
+                              <div className="text-xs text-muted-foreground">
+                                {v.previous_owner.email}
+                              </div>
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {v.detached_at ? new Date(v.detached_at).toLocaleDateString() : "—"}
+                        </TableCell>
+                        <TableCell>
+                          <button
+                            onClick={() => openTransferDialog(v.plate_no)}
+                            className="text-xs font-medium text-accent hover:underline"
+                          >
+                            Force Transfer
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {vehicles.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                          No detached vehicles found
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+              <div className="lg:hidden space-y-3">
+                {vehicles.map((v) => (
+                  <DataCard key={v.vehicle_id}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-foreground">{v.plate_no}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {v.make} {v.model} ({v.vehicle_type}){v.year ? ` — ${v.year}` : ""}
+                        </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground shrink-0 text-right">
+                        {v.detached_at ? new Date(v.detached_at).toLocaleDateString() : "—"}
+                      </p>
+                    </div>
+
+                    <DataCardField
+                      label="Previous Owner"
+                      value={
+                        v.previous_owner ? (
+                          <span>
                             {v.previous_owner.full_name ?? "—"}
-                            <div className="text-xs text-muted-foreground">
+                            <span className="block text-xs text-muted-foreground">
                               {v.previous_owner.email}
-                            </div>
-                          </>
+                            </span>
+                          </span>
                         ) : (
                           "—"
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {v.detached_at ? new Date(v.detached_at).toLocaleDateString() : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <button
-                          onClick={() => openTransferDialog(v.plate_no)}
-                          className="text-xs font-medium text-accent hover:underline"
-                        >
-                          Force Transfer
-                        </button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {vehicles.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                        No detached vehicles found
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </div>
+                        )
+                      }
+                    />
+
+                    <div className="pt-2 border-t border-border">
+                      <button
+                        onClick={() => openTransferDialog(v.plate_no)}
+                        className="text-xs font-medium text-accent hover:underline"
+                      >
+                        Force Transfer
+                      </button>
+                    </div>
+                  </DataCard>
+                ))}
+                {vehicles.length === 0 && (
+                  <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                    No detached vehicles found
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="history" className="space-y-4">
@@ -416,85 +537,162 @@ export function VehicleTransfersPage() {
             </button>
           </div>
 
-          <div className="rounded-lg border border-border bg-card">
-            {historyLoading ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Plate</TableHead>
-                    <TableHead>Vehicle</TableHead>
-                    <TableHead>New Owner</TableHead>
-                    <TableHead>Previous Owner</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Reviewed By</TableHead>
-                    <TableHead>Reviewed On</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {history.map((r) => (
-                    <TableRow key={r.request_id}>
-                      <TableCell className="font-medium text-foreground">
-                        {r.vehicle.plate_no}
-                      </TableCell>
-                      <TableCell className="text-foreground">
-                        {r.vehicle.make} {r.vehicle.model} ({r.vehicle.vehicle_type})
-                        {r.vehicle.year ? ` — ${r.vehicle.year}` : ""}
-                      </TableCell>
-                      <TableCell className="text-foreground">
-                        {r.requester.full_name ?? "—"}
-                        <div className="text-xs text-muted-foreground">{r.requester.email}</div>
-                      </TableCell>
-                      <TableCell className="text-foreground">
-                        {r.current_owner ? (
-                          <>
+          {historyLoading ? (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              Loading...
+            </div>
+          ) : (
+            <>
+              {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+              <div className="hidden lg:block rounded-lg border border-border bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Plate</TableHead>
+                      <TableHead>Vehicle</TableHead>
+                      <TableHead>New Owner</TableHead>
+                      <TableHead>Previous Owner</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Source</TableHead>
+                      <TableHead>Reviewed By</TableHead>
+                      <TableHead>Reviewed On</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {history.map((r) => (
+                      <TableRow key={r.request_id}>
+                        <TableCell className="font-medium text-foreground">
+                          {r.vehicle.plate_no}
+                        </TableCell>
+                        <TableCell className="text-foreground">
+                          {r.vehicle.make} {r.vehicle.model} ({r.vehicle.vehicle_type})
+                          {r.vehicle.year ? ` — ${r.vehicle.year}` : ""}
+                        </TableCell>
+                        <TableCell className="text-foreground">
+                          {r.requester.full_name ?? "—"}
+                          <div className="text-xs text-muted-foreground">{r.requester.email}</div>
+                        </TableCell>
+                        <TableCell className="text-foreground">
+                          {r.current_owner ? (
+                            <>
+                              {r.current_owner.full_name ?? "—"}
+                              <div className="text-xs text-muted-foreground">
+                                {r.current_owner.email}
+                              </div>
+                            </>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={`text-sm font-medium ${r.status === "Approved" ? "text-accent" : "text-destructive"}`}
+                          >
+                            {r.status}
+                          </span>
+                          {r.status === "Rejected" && r.rejection_reason && (
+                            <p className="text-xs text-muted-foreground mt-0.5 max-w-xs">
+                              {r.rejection_reason}
+                            </p>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {r.source === "Staff" ? "Staff Direct" : "Customer Request"}
+                        </TableCell>
+                        <TableCell className="text-foreground">
+                          {r.reviewer?.full_name ?? r.reviewer?.email ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {r.reviewed_at ? new Date(r.reviewed_at).toLocaleDateString() : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {history.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                          {historyPlateFilter
+                            ? `No resolved transfers found for "${historyPlateFilter}"`
+                            : "No resolved transfers yet"}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+              <div className="lg:hidden space-y-3">
+                {history.map((r) => (
+                  <DataCard key={r.request_id}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-foreground">{r.vehicle.plate_no}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {r.vehicle.make} {r.vehicle.model} ({r.vehicle.vehicle_type})
+                          {r.vehicle.year ? ` — ${r.vehicle.year}` : ""}
+                        </p>
+                      </div>
+                      <span
+                        className={`text-sm font-medium shrink-0 ${r.status === "Approved" ? "text-accent" : "text-destructive"}`}
+                      >
+                        {r.status}
+                      </span>
+                    </div>
+
+                    <DataCardField
+                      label="New Owner"
+                      value={
+                        <span>
+                          {r.requester.full_name ?? "—"}
+                          <span className="block text-xs text-muted-foreground">
+                            {r.requester.email}
+                          </span>
+                        </span>
+                      }
+                    />
+                    <DataCardField
+                      label="Previous Owner"
+                      value={
+                        r.current_owner ? (
+                          <span>
                             {r.current_owner.full_name ?? "—"}
-                            <div className="text-xs text-muted-foreground">
+                            <span className="block text-xs text-muted-foreground">
                               {r.current_owner.email}
-                            </div>
-                          </>
+                            </span>
+                          </span>
                         ) : (
                           "—"
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`text-sm font-medium ${r.status === "Approved" ? "text-accent" : "text-destructive"}`}
-                        >
-                          {r.status}
-                        </span>
-                        {r.status === "Rejected" && r.rejection_reason && (
-                          <p className="text-xs text-muted-foreground mt-0.5 max-w-xs">
-                            {r.rejection_reason}
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {r.source === "Staff" ? "Staff Direct" : "Customer Request"}
-                      </TableCell>
-                      <TableCell className="text-foreground">
-                        {r.reviewer?.full_name ?? r.reviewer?.email ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {r.reviewed_at ? new Date(r.reviewed_at).toLocaleDateString() : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {history.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
-                        {historyPlateFilter
-                          ? `No resolved transfers found for "${historyPlateFilter}"`
-                          : "No resolved transfers yet"}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </div>
+                        )
+                      }
+                    />
+                    <DataCardField
+                      label="Rejection Reason"
+                      value={r.status === "Rejected" ? r.rejection_reason : null}
+                    />
+                    <DataCardField
+                      label="Source"
+                      value={r.source === "Staff" ? "Staff Direct" : "Customer Request"}
+                    />
+                    <DataCardField
+                      label="Reviewed By"
+                      value={r.reviewer?.full_name ?? r.reviewer?.email ?? "—"}
+                    />
+                    <DataCardField
+                      label="Reviewed On"
+                      value={r.reviewed_at ? new Date(r.reviewed_at).toLocaleDateString() : "—"}
+                    />
+                  </DataCard>
+                ))}
+                {history.length === 0 && (
+                  <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                    {historyPlateFilter
+                      ? `No resolved transfers found for "${historyPlateFilter}"`
+                      : "No resolved transfers yet"}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </TabsContent>
       </Tabs>
 
@@ -564,7 +762,7 @@ export function VehicleTransfersPage() {
           </DialogHeader>
           {reviewRequest && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Vehicle</p>
                   <p className="font-medium text-foreground">
@@ -611,7 +809,7 @@ export function VehicleTransfersPage() {
                 </p>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground mb-1">
                     Registration Book Photo

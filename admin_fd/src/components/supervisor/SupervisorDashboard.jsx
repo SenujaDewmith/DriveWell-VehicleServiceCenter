@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import { StatusBadge, PaymentBadge } from "@/components/manager/ManagerOverview";
 import { Combobox } from "@/components/ui/combobox";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -100,6 +101,40 @@ function StatusStepBar({ status }) {
         );
       })}
     </div>
+  );
+}
+
+// Shared between the desktop table's Action column and the mobile/tablet card
+// list's action row, so the confirmation copy only lives in one place.
+function ReleaseVehicleAlertDialog({ booking, releasing, onConfirm }) {
+  const isPaid = booking.payment_status === "Paid";
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button
+          disabled={!isPaid || releasing}
+          title={!isPaid ? "Cannot release until payment is marked Paid" : undefined}
+          className="rounded-md border border-chart-1 px-2 py-1 text-sm font-medium text-chart-1 hover:bg-chart-1 hover:text-accent-foreground transition-colors disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-chart-1"
+        >
+          {releasing ? "..." : "Release Vehicle"}
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            Release {booking.booking_ref ?? `#${booking.reservation_id}`} to the customer?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            Confirms {booking.customer_name}'s {booking.plate_no} is being handed over now that
+            payment has been received. This can't be undone from here.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>Confirm Release</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -697,12 +732,14 @@ export function SupervisorDashboard() {
             {releaseError}
           </p>
         )}
-        <div className="overflow-x-auto">
+        {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+        <div className="hidden lg:block overflow-x-auto scroll-fade-x">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Ref</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Customer</th>
+                <th className="text-left py-2 px-2 font-medium text-muted-foreground">Phone</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Vehicle</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Package</th>
                 <th className="text-left py-2 px-2 font-medium text-muted-foreground">Payment</th>
@@ -712,7 +749,7 @@ export function SupervisorDashboard() {
             <tbody>
               {releaseLoading && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
                     Loading...
                   </td>
                 </tr>
@@ -726,6 +763,7 @@ export function SupervisorDashboard() {
                         {b.booking_ref ?? `#${b.reservation_id}`}
                       </td>
                       <td className="py-2 px-2 text-foreground">{b.customer_name}</td>
+                      <td className="py-2 px-2 text-foreground">{b.customer_phone ?? "—"}</td>
                       <td className="py-2 px-2 text-foreground">{b.plate_no}</td>
                       <td className="py-2 px-2 text-foreground">{b.package_name}</td>
                       <td className="py-2 px-2">
@@ -766,13 +804,49 @@ export function SupervisorDashboard() {
                 })}
               {!releaseLoading && releaseQueue.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
                     No vehicles waiting for release
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+        <div className="lg:hidden space-y-3">
+          {releaseLoading && (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              Loading...
+            </div>
+          )}
+          {!releaseLoading &&
+            releaseQueue.map((b) => (
+              <DataCard key={b.reservation_id}>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold text-foreground">
+                    {b.booking_ref ?? `#${b.reservation_id}`}
+                  </p>
+                  <PaymentBadge paymentStatus={b.payment_status} />
+                </div>
+                <DataCardField label="Customer" value={b.customer_name} />
+                <DataCardField label="Phone" value={b.customer_phone} />
+                <DataCardField label="Vehicle" value={b.plate_no} />
+                <DataCardField label="Package" value={b.package_name} />
+                <div className="pt-2 border-t border-border">
+                  <ReleaseVehicleAlertDialog
+                    booking={b}
+                    releasing={releasingId === b.reservation_id}
+                    onConfirm={() => releaseVehicleAction(b.reservation_id)}
+                  />
+                </div>
+              </DataCard>
+            ))}
+          {!releaseLoading && releaseQueue.length === 0 && (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              No vehicles waiting for release
+            </div>
+          )}
         </div>
       </div>
 
@@ -802,6 +876,9 @@ export function SupervisorDashboard() {
               <StatusBadge status={b.status} />
             </div>
             <p className="text-sm font-semibold text-foreground">{b.customer_name}</p>
+            {b.customer_phone && (
+              <p className="text-sm text-muted-foreground">{b.customer_phone}</p>
+            )}
             <p className="text-sm text-muted-foreground">
               {b.plate_no} — {b.make} {b.model} ({b.vehicle_type})
             </p>
@@ -838,6 +915,11 @@ export function SupervisorDashboard() {
               <p>
                 <span className="text-muted-foreground">Customer:</span> {selected.customer_name}
               </p>
+              {selected.customer_phone && (
+                <p>
+                  <span className="text-muted-foreground">Phone:</span> {selected.customer_phone}
+                </p>
+              )}
               <p>
                 <span className="text-muted-foreground">Vehicle:</span> {selected.plate_no} —{" "}
                 {selected.make} {selected.model} ({selected.vehicle_type})
@@ -948,7 +1030,7 @@ export function SupervisorDashboard() {
                       </label>
 
                       {oilChangeChecked && (
-                        <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                           <div>
                             <label className="text-xs text-muted-foreground">
                               Current Reading (km)

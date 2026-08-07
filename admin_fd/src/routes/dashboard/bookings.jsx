@@ -6,6 +6,7 @@ import { InvoiceViewModal } from "@/components/invoices/InvoiceView";
 import { BookingDetailModal } from "@/components/bookings/BookingDetailModal";
 import { RescheduleBookingModal } from "@/components/bookings/RescheduleBookingModal";
 import { Eye, FileText, X, AlertTriangle, CalendarClock } from "lucide-react";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,6 +57,67 @@ const minutesSinceStart = (b) => {
   const appointment = new Date(`${b.service_date}T${b.slot_time}`);
   return (Date.now() - appointment.getTime()) / 60000;
 };
+
+// Shared between the desktop table's Actions column and the mobile/tablet card
+// list's action row, so the confirmation copy only lives in one place.
+function NoShowAlertDialog({ booking, marking, onConfirm }) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button
+          disabled={marking}
+          className="rounded-md border border-destructive/30 px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/5 transition-colors disabled:opacity-50"
+        >
+          {marking ? "Marking..." : "Mark No-show"}
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            Mark {booking.booking_ref ?? `#${booking.reservation_id}`} as No-show?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            This frees up the slot and emails {booking.customer_name} that they missed their
+            appointment.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>Mark No-show</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function CancelBookingAlertDialog({ booking, cancelling, onConfirm }) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button
+          disabled={cancelling}
+          className="rounded-md bg-destructive px-2 py-1 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-50"
+        >
+          {cancelling ? "Cancelling..." : "Cancel"}
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Cancel {booking.booking_ref ?? `#${booking.reservation_id}`}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This cancels the booking and emails {booking.customer_name} — use this when a customer
+            calls in to cancel, including inside the 24-hour self-cancel window customers are
+            normally held to.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Back</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>Cancel Booking</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 export function BookingsPage() {
   const { role } = useAuth();
@@ -180,7 +242,7 @@ export function BookingsPage() {
           placeholder="Search customer, plate, ref..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring w-64"
+          className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring w-full sm:w-64"
         />
         <div className="flex gap-1 flex-wrap">
           <button
@@ -229,10 +291,14 @@ export function BookingsPage() {
         )}
       </div>
 
-      <div className="rounded-lg border border-border bg-card overflow-x-auto">
-        {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
-        ) : (
+      {loading ? (
+        <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          Loading...
+        </div>
+      ) : (
+        <>
+      {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+      <div className="hidden lg:block rounded-lg border border-border bg-card overflow-x-auto scroll-fade-x">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
@@ -240,6 +306,7 @@ export function BookingsPage() {
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Date</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Time</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Customer</th>
+                <th className="text-left py-3 px-3 font-medium text-muted-foreground">Phone</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Vehicle</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Package</th>
                 <th className="text-left py-3 px-3 font-medium text-muted-foreground">Status</th>
@@ -276,6 +343,7 @@ export function BookingsPage() {
                         )}
                       </div>
                     </td>
+                    <td className="py-2 px-3 text-foreground">{b.customer_phone ?? "—"}</td>
                     <td className="py-2 px-3 text-foreground">{b.plate_no}</td>
                     <td className="py-2 px-3 text-foreground">{b.package_name}</td>
                     <td className="py-2 px-3">
@@ -317,33 +385,11 @@ export function BookingsPage() {
                     <td className="py-2 px-3">
                       <div className="flex items-center gap-1.5">
                         {isOverdue && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <button
-                                disabled={markingId === b.reservation_id}
-                                className="rounded-md border border-destructive/30 px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/5 transition-colors disabled:opacity-50"
-                              >
-                                {markingId === b.reservation_id ? "Marking..." : "Mark No-show"}
-                              </button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  Mark {b.booking_ref ?? `#${b.reservation_id}`} as No-show?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This frees up the slot and emails {b.customer_name} that they missed
-                                  their appointment.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => markNoShow(b.reservation_id)}>
-                                  Mark No-show
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          <NoShowAlertDialog
+                            booking={b}
+                            marking={markingId === b.reservation_id}
+                            onConfirm={() => markNoShow(b.reservation_id)}
+                          />
                         )}
                         {role === "manager" && b.status === "Booked" && (
                           <button
@@ -354,34 +400,11 @@ export function BookingsPage() {
                           </button>
                         )}
                         {role === "manager" && b.status === "Booked" && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <button
-                                disabled={cancellingId === b.reservation_id}
-                                className="rounded-md bg-destructive px-2 py-1 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-50"
-                              >
-                                {cancellingId === b.reservation_id ? "Cancelling..." : "Cancel"}
-                              </button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  Cancel {b.booking_ref ?? `#${b.reservation_id}`}?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This cancels the booking and emails {b.customer_name} — use this
-                                  when a customer calls in to cancel, including inside the 24-hour
-                                  self-cancel window customers are normally held to.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Back</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => cancelBooking(b.reservation_id)}>
-                                  Cancel Booking
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          <CancelBookingAlertDialog
+                            booking={b}
+                            cancelling={cancellingId === b.reservation_id}
+                            onConfirm={() => cancelBooking(b.reservation_id)}
+                          />
                         )}
                         {!isOverdue && !(role === "manager" && b.status === "Booked") && (
                           <span className="text-muted-foreground">—</span>
@@ -393,15 +416,118 @@ export function BookingsPage() {
               })}
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={12} className="py-8 text-center text-muted-foreground">
                     No bookings match filter
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+      </div>
+
+      {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+      <div className="lg:hidden space-y-3">
+        {sorted.map((b) => {
+          const invoice = invoicesByReservation[b.reservation_id];
+          const isOverdue =
+            b.status === "Booked" && minutesSinceStart(b) >= NO_SHOW_GRACE_MINUTES;
+          return (
+            <DataCard key={b.reservation_id}>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-semibold text-foreground">
+                    {b.booking_ref ?? `#${b.reservation_id}`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {b.service_date} {b.slot_time ? `— ${b.slot_time.slice(0, 5)}` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <StatusBadge status={b.status} />
+                  {isOverdue && (
+                    <span
+                      title="Past its scheduled time and still marked Booked"
+                      className="rounded-full bg-status-cancelled/10 px-1.5 py-0.5 text-xs font-medium text-status-cancelled"
+                    >
+                      Overdue
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <DataCardField
+                label="Customer"
+                value={
+                  <span className="inline-flex items-center gap-1.5">
+                    {b.customer_name}
+                    {b.customer_no_show_count > 0 && (
+                      <span
+                        title={`${b.customer_no_show_count} previous no-show${b.customer_no_show_count > 1 ? "s" : ""}`}
+                        className="flex items-center gap-0.5 rounded-full bg-destructive/10 px-1.5 py-0.5 text-xs font-medium text-destructive"
+                      >
+                        <AlertTriangle className="h-3 w-3" /> {b.customer_no_show_count}
+                      </span>
+                    )}
+                  </span>
+                }
+              />
+              <DataCardField label="Phone" value={b.customer_phone} />
+              <DataCardField label="Vehicle" value={b.plate_no} />
+              <DataCardField label="Package" value={b.package_name} />
+              <DataCardField
+                label="Payment"
+                value={<PaymentBadge paymentStatus={invoice?.payment_status} />}
+              />
+
+              <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-border">
+                <button
+                  onClick={() => setViewDetailsId(b.reservation_id)}
+                  className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                >
+                  <FileText className="h-3 w-3" /> Details
+                </button>
+                {invoice && (
+                  <button
+                    onClick={() => setViewInvoice(invoice)}
+                    className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                  >
+                    <Eye className="h-3 w-3" /> Invoice
+                  </button>
+                )}
+                {isOverdue && (
+                  <NoShowAlertDialog
+                    booking={b}
+                    marking={markingId === b.reservation_id}
+                    onConfirm={() => markNoShow(b.reservation_id)}
+                  />
+                )}
+                {role === "manager" && b.status === "Booked" && (
+                  <button
+                    onClick={() => setRescheduleBooking(b)}
+                    className="flex items-center gap-1 rounded-md border border-accent px-2 py-1 text-xs font-medium text-accent hover:bg-accent/10 transition-colors"
+                  >
+                    <CalendarClock className="h-3 w-3" /> Reschedule
+                  </button>
+                )}
+                {role === "manager" && b.status === "Booked" && (
+                  <CancelBookingAlertDialog
+                    booking={b}
+                    cancelling={cancellingId === b.reservation_id}
+                    onConfirm={() => cancelBooking(b.reservation_id)}
+                  />
+                )}
+              </div>
+            </DataCard>
+          );
+        })}
+        {sorted.length === 0 && (
+          <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+            No bookings match filter
+          </div>
         )}
       </div>
+        </>
+      )}
 
       {viewInvoice && (
         <InvoiceViewModal invoice={viewInvoice} onClose={() => setViewInvoice(null)} />

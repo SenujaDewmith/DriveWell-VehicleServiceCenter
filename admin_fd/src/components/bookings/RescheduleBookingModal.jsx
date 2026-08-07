@@ -122,7 +122,7 @@ export function RescheduleBookingModal({ booking, onClose, onRescheduled }) {
               ) : slots.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-2">{slotsMessage || "No slots for this date"}</p>
               ) : (
-                <div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto">
                   {slots.map((slot) => {
                     const isSelected = selectedSlot?.start_time === slot.start_time;
                     const isDisabled = slot.remaining <= 0 || slot.vehicle_conflict;

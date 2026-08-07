@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { StatusBadge, PaymentBadge } from "@/components/manager/ManagerOverview";
 import { BookingDetailModal } from "@/components/bookings/BookingDetailModal";
 import { generateVehicleHistoryPdf } from "@/lib/vehicleHistoryPdf";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 
 function fmtDate(d) {
   return d
@@ -362,73 +363,121 @@ export function VehicleHistoryPage() {
             </div>
           </div>
 
-          <div className="rounded-lg border border-border bg-card overflow-x-auto">
-            {visits.length === 0 ? (
-              <div className="p-12 text-center">
-                <Wrench className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-                <p className="text-sm font-medium text-foreground">No service history yet</p>
-                <p className="text-sm text-muted-foreground">
-                  This vehicle hasn't had any bookings.
-                </p>
-              </div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-3 px-3 font-medium text-muted-foreground">Date</th>
-                    <th className="text-left py-3 px-3 font-medium text-muted-foreground">
-                      Package
-                    </th>
-                    <th className="text-left py-3 px-3 font-medium text-muted-foreground">
-                      Odometer
-                    </th>
-                    <th className="text-left py-3 px-3 font-medium text-muted-foreground">
-                      Status
-                    </th>
-                    <th className="text-left py-3 px-3 font-medium text-muted-foreground">
-                      Payment
-                    </th>
-                    <th className="text-left py-3 px-3 font-medium text-muted-foreground">Total</th>
-                    <th className="text-left py-3 px-3 font-medium text-muted-foreground">
-                      Details
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visits.map((v) => (
-                    <tr key={v.reservation_id} className="border-b border-border last:border-0">
-                      <td className="py-2 px-3 text-foreground">{fmtDate(v.service_date)}</td>
-                      <td className="py-2 px-3 text-foreground">{v.package_name}</td>
-                      <td className="py-2 px-3 text-foreground">
-                        {v.service_record?.current_odometer != null
-                          ? `${v.service_record.current_odometer.toLocaleString()} km`
-                          : "—"}
-                      </td>
-                      <td className="py-2 px-3">
-                        <StatusBadge status={v.status} />
-                      </td>
-                      <td className="py-2 px-3">
-                        <PaymentBadge paymentStatus={v.invoice?.payment_status} />
-                      </td>
-                      <td className="py-2 px-3 text-foreground">
-                        {v.invoice
-                          ? `LKR ${parseFloat(v.invoice.total_amount).toLocaleString()}`
-                          : "—"}
-                      </td>
-                      <td className="py-2 px-3">
-                        <button
-                          onClick={() => setDetailsId(v.reservation_id)}
-                          className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm font-medium text-foreground hover:bg-muted transition-colors"
-                        >
-                          <FileText className="h-3 w-3" /> Details
-                        </button>
-                      </td>
+          {visits.length === 0 ? (
+            <div className="rounded-lg border border-border bg-card p-12 text-center">
+              <Wrench className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm font-medium text-foreground">No service history yet</p>
+              <p className="text-sm text-muted-foreground">
+                This vehicle hasn't had any bookings.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+              <div className="hidden lg:block rounded-lg border border-border bg-card overflow-x-auto scroll-fade-x">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                        Date
+                      </th>
+                      <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                        Package
+                      </th>
+                      <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                        Odometer
+                      </th>
+                      <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                        Status
+                      </th>
+                      <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                        Payment
+                      </th>
+                      <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                        Total
+                      </th>
+                      <th className="text-left py-3 px-3 font-medium text-muted-foreground">
+                        Details
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+                  </thead>
+                  <tbody>
+                    {visits.map((v) => (
+                      <tr key={v.reservation_id} className="border-b border-border last:border-0">
+                        <td className="py-2 px-3 text-foreground">{fmtDate(v.service_date)}</td>
+                        <td className="py-2 px-3 text-foreground">{v.package_name}</td>
+                        <td className="py-2 px-3 text-foreground">
+                          {v.service_record?.current_odometer != null
+                            ? `${v.service_record.current_odometer.toLocaleString()} km`
+                            : "—"}
+                        </td>
+                        <td className="py-2 px-3">
+                          <StatusBadge status={v.status} />
+                        </td>
+                        <td className="py-2 px-3">
+                          <PaymentBadge paymentStatus={v.invoice?.payment_status} />
+                        </td>
+                        <td className="py-2 px-3 text-foreground">
+                          {v.invoice
+                            ? `LKR ${parseFloat(v.invoice.total_amount).toLocaleString()}`
+                            : "—"}
+                        </td>
+                        <td className="py-2 px-3">
+                          <button
+                            onClick={() => setDetailsId(v.reservation_id)}
+                            className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                          >
+                            <FileText className="h-3 w-3" /> Details
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+              <div className="lg:hidden space-y-3">
+                {visits.map((v) => (
+                  <DataCard key={v.reservation_id}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-semibold text-foreground">{fmtDate(v.service_date)}</p>
+                      <StatusBadge status={v.status} />
+                    </div>
+                    <DataCardField label="Package" value={v.package_name} />
+                    <DataCardField
+                      label="Odometer"
+                      value={
+                        v.service_record?.current_odometer != null
+                          ? `${v.service_record.current_odometer.toLocaleString()} km`
+                          : "—"
+                      }
+                    />
+                    <DataCardField
+                      label="Payment"
+                      value={<PaymentBadge paymentStatus={v.invoice?.payment_status} />}
+                    />
+                    <DataCardField
+                      label="Total"
+                      value={
+                        v.invoice
+                          ? `LKR ${parseFloat(v.invoice.total_amount).toLocaleString()}`
+                          : "—"
+                      }
+                    />
+                    <div className="pt-2 border-t border-border">
+                      <button
+                        onClick={() => setDetailsId(v.reservation_id)}
+                        className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-sm font-medium text-foreground hover:bg-muted transition-colors"
+                      >
+                        <FileText className="h-3 w-3" /> Details
+                      </button>
+                    </div>
+                  </DataCard>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 

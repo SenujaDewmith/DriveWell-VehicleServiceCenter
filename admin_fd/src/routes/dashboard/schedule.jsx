@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, CalendarOff } from "lucide-react";
 import { api } from "@/lib/api";
 import { PhoneNumberInput } from "@/components/ui/phone-number-input";
 import { isValidSriLankanPhone } from "@/lib/phoneNumber";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 
 const ALL_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DAY_TO_NUM = {
@@ -420,7 +421,7 @@ export function SchedulePage() {
         </p>
         <div className="space-y-1">
           <label className="block text-sm font-medium text-muted-foreground">Support Phone Number</label>
-          <div className="w-64">
+          <div className="w-full sm:w-64">
             <PhoneNumberInput value={contactPhone} onChange={setContactPhone} />
           </div>
         </div>
@@ -467,7 +468,8 @@ export function SchedulePage() {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+        <div className="hidden lg:block overflow-x-auto scroll-fade-x">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
@@ -501,6 +503,30 @@ export function SchedulePage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+        <div className="lg:hidden space-y-3">
+          {holidays.map((h) => (
+            <DataCard key={h.block_id}>
+              <p className="font-semibold text-foreground">{h.date}</p>
+              <DataCardField label="Reason" value={h.reason ?? "—"} />
+              <div className="flex items-center gap-1.5 pt-2 border-t border-border">
+                <button
+                  onClick={() => removeBlockedTime(h)}
+                  title="Delete"
+                  className="p-1 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            </DataCard>
+          ))}
+          {holidays.length === 0 && (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              No holidays configured
+            </div>
+          )}
         </div>
       </div>
 
@@ -580,7 +606,8 @@ export function SchedulePage() {
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+        <div className="hidden lg:block overflow-x-auto scroll-fade-x">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
@@ -633,6 +660,44 @@ export function SchedulePage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+        <div className="lg:hidden space-y-3">
+          {partialBlocks.map((b) => (
+            <DataCard key={b.block_id}>
+              <div>
+                <p className="font-semibold text-foreground">
+                  {b.date ? b.date : <span className="text-accent">Every day</span>}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {toHHMM(b.start_time)} – {toHHMM(b.end_time)}
+                </p>
+              </div>
+              <DataCardField label="Reason" value={b.reason ?? "—"} />
+              <div className="flex items-center gap-1.5 pt-2 border-t border-border">
+                <button
+                  onClick={() => startEditBlock(b)}
+                  title="Edit"
+                  className="p-1 text-muted-foreground hover:text-foreground"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={() => removeBlockedTime(b)}
+                  title="Delete"
+                  className="p-1 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+            </DataCard>
+          ))}
+          {partialBlocks.length === 0 && (
+            <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              No blocked times configured
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { DateRangeFilter } from "@/components/reports/DateRangeFilter";
 import { DownloadPdfButton } from "@/components/reports/DownloadPdfButton";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Star } from "lucide-react";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 
 export function PerformancePage() {
   const [data, setData] = useState([]);
@@ -91,7 +92,8 @@ export function PerformancePage() {
                 </ResponsiveContainer>
               </div>
 
-              <div className="rounded-lg border border-border bg-card overflow-x-auto">
+              {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+              <div className="hidden lg:block rounded-lg border border-border bg-card overflow-x-auto scroll-fade-x">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
@@ -131,6 +133,29 @@ export function PerformancePage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+              <div className="lg:hidden space-y-3">
+                {data.map((s) => (
+                  <DataCard key={s.staff_id}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-semibold text-foreground">{s.full_name}</p>
+                      {s.avg_rating ? (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Star className="h-3 w-3 text-accent fill-accent" />
+                          <span className="text-foreground text-sm">
+                            {parseFloat(s.avg_rating).toFixed(1)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm shrink-0">—</span>
+                      )}
+                    </div>
+                    <DataCardField label="Completed" value={s.jobs_completed} />
+                    <DataCardField label="Feedback Count" value={s.feedback_count} />
+                  </DataCard>
+                ))}
               </div>
             </>
           ) : (

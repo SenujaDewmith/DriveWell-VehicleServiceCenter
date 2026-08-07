@@ -23,6 +23,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { DataCard, DataCardField } from "@/components/ui/data-card";
 
 const PACKAGE_CODE_PREFIX = "DWP-";
 const EMPTY_FORM = {
@@ -109,6 +110,45 @@ function fmtDuration(mins) {
   const h = Math.floor(mins / 60),
     m = mins % 60;
   return m ? `${h}h ${m}min` : `${h}h`;
+}
+
+// Shared between the desktop table's Actions column and the mobile/tablet card
+// list's action row, so the confirmation copy only lives in one place.
+function TogglePackageActiveDialog({ pkg, onConfirm }) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button
+          title={pkg.is_active ? "Deactivate" : "Activate"}
+          className="p-1 text-muted-foreground hover:text-foreground"
+        >
+          {pkg.is_active ? (
+            <ToggleRight className="h-3 w-3 text-accent" />
+          ) : (
+            <ToggleLeft className="h-3 w-3" />
+          )}
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {pkg.is_active ? "Deactivate this package?" : "Activate this package?"}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {pkg.is_active
+              ? `"${pkg.name}" will be hidden from customers and can no longer be booked. Existing bookings for this package are not affected.`
+              : `"${pkg.name}" will become visible to customers and available for booking again.`}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>
+            {pkg.is_active ? "Deactivate" : "Activate"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }
 
 export function PackagesPage() {
@@ -652,10 +692,14 @@ export function PackagesPage() {
         </div>
       )}
 
-      <div className="rounded-lg border border-border bg-card overflow-x-auto">
-        {loading ? (
-          <div className="p-8 text-center text-sm text-muted-foreground">Loading...</div>
-        ) : (
+      {loading ? (
+        <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          Loading...
+        </div>
+      ) : (
+        <>
+      {/* Desktop table — lg+ only; below that, the card list further down takes over. */}
+      <div className="hidden lg:block rounded-lg border border-border bg-card overflow-x-auto scroll-fade-x">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
@@ -735,40 +779,7 @@ export function PackagesPage() {
                       >
                         <Pencil className="h-3 w-3" />
                       </button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <button
-                            title={pkg.is_active ? "Deactivate" : "Activate"}
-                            className="p-1 text-muted-foreground hover:text-foreground"
-                          >
-                            {pkg.is_active ? (
-                              <ToggleRight className="h-3 w-3 text-accent" />
-                            ) : (
-                              <ToggleLeft className="h-3 w-3" />
-                            )}
-                          </button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              {pkg.is_active
-                                ? "Deactivate this package?"
-                                : "Activate this package?"}
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              {pkg.is_active
-                                ? `"${pkg.name}" will be hidden from customers and can no longer be booked. Existing bookings for this package are not affected.`
-                                : `"${pkg.name}" will become visible to customers and available for booking again.`}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => toggleActive(pkg)}>
-                              {pkg.is_active ? "Deactivate" : "Activate"}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <TogglePackageActiveDialog pkg={pkg} onConfirm={() => toggleActive(pkg)} />
                       <button
                         onClick={() => toggleFeatured(pkg)}
                         disabled={!pkg.is_featured && featuredCount >= MAX_FEATURED_PACKAGES}
@@ -806,8 +817,103 @@ export function PackagesPage() {
               )}
             </tbody>
           </table>
+      </div>
+
+      {/* Mobile/tablet card list — lg:hidden, mirrors the table above row-for-row. */}
+      <div className="lg:hidden space-y-3">
+        {filteredPackages.map((pkg) => (
+          <DataCard key={pkg.package_id}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-3">
+                <div className="h-12 w-16 rounded-md border border-border bg-background flex items-center justify-center overflow-hidden shrink-0">
+                  {pkg.image_url ? (
+                    <img
+                      src={imageSrc(pkg.image_url)}
+                      alt={pkg.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <ImagePlus className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-semibold text-foreground">{pkg.name}</p>
+                    {pkg.is_featured && (
+                      <span
+                        title="Featured on landing page"
+                        className="flex items-center gap-0.5 rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent"
+                      >
+                        <Star className="h-2.5 w-2.5 fill-accent" /> Featured
+                      </span>
+                    )}
+                  </div>
+                  {pkg.package_code && (
+                    <p className="text-xs font-mono text-muted-foreground mt-0.5">
+                      {pkg.package_code}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <span
+                className={`text-sm font-medium shrink-0 ${pkg.is_active ? "text-accent" : "text-muted-foreground"}`}
+              >
+                {pkg.is_active ? "Active" : "Inactive"}
+              </span>
+            </div>
+
+            {pkg.description && (
+              <p className="text-sm text-muted-foreground line-clamp-2">
+                {pkg.description.split("\n").filter(Boolean).join(" · ")}
+              </p>
+            )}
+
+            <DataCardField label="Price (LKR)" value={parseFloat(pkg.price).toLocaleString()} />
+            <DataCardField label="Duration" value={fmtDuration(pkg.estimated_duration)} />
+            <DataCardField label="Capacity" value={pkg.max_capacity} />
+
+            <div className="flex items-center gap-1.5 pt-2 border-t border-border">
+              <button
+                onClick={() => openEdit(pkg)}
+                title="Edit"
+                className="p-1 text-muted-foreground hover:text-foreground"
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
+              <TogglePackageActiveDialog pkg={pkg} onConfirm={() => toggleActive(pkg)} />
+              <button
+                onClick={() => toggleFeatured(pkg)}
+                disabled={!pkg.is_featured && featuredCount >= MAX_FEATURED_PACKAGES}
+                title={
+                  pkg.is_featured
+                    ? "Remove from Popular Packages"
+                    : featuredCount >= MAX_FEATURED_PACKAGES
+                      ? `Already have ${MAX_FEATURED_PACKAGES} popular packages selected`
+                      : "Feature on landing page"
+                }
+                className={`p-1 text-muted-foreground hover:text-foreground ${
+                  !pkg.is_featured && featuredCount >= MAX_FEATURED_PACKAGES
+                    ? "opacity-30 cursor-not-allowed hover:text-muted-foreground"
+                    : ""
+                }`}
+              >
+                <Star className={`h-3 w-3 ${pkg.is_featured ? "fill-accent text-accent" : ""}`} />
+              </button>
+            </div>
+          </DataCard>
+        ))}
+        {filteredPackages.length === 0 && (
+          <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+            {packages.length === 0 ? (
+              <>No packages found. Click &ldquo;Add Package&rdquo; to create one.</>
+            ) : (
+              `No ${statusFilter.toLowerCase()} packages found.`
+            )}
+          </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
