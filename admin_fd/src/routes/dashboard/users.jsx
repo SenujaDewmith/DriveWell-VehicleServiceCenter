@@ -3,6 +3,14 @@ import { Plus, Pencil, UserX, UserCheck, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { DataCard, DataCardField } from "@/components/ui/data-card";
+import { PhoneNumberInput } from "@/components/ui/phone-number-input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +34,22 @@ const STATUS_FILTERS = [
   { value: "inactive", label: "Inactive" },
   { value: "pending", label: "Pending" },
 ];
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const blockSpaceKey = (e) => {
+  if (e.key === " ") e.preventDefault();
+};
+// Full name accepts letters and spaces only — anything else (digits, symbols)
+// is silently dropped as the manager types, rather than rejected after the fact.
+const lettersAndSpacesOnly = (value) => value.replace(/[^a-zA-Z\s]/g, "");
+
+function RequiredLabel({ children }) {
+  return (
+    <label className="text-xs font-medium text-muted-foreground">
+      {children} <span className="text-destructive">*</span>
+    </label>
+  );
+}
 
 // Shared between the desktop table's Actions column and the mobile/tablet card
 // list's action row, so the confirmation copy only lives in one place.
@@ -139,6 +163,9 @@ export function UsersPage() {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [nameError, setNameError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
 
   const load = () => {
     setLoading(true);
@@ -156,6 +183,9 @@ export function UsersPage() {
     setEditing(null);
     setShowForm(true);
     setError("");
+    setNameError("");
+    setEmailError("");
+    setPhoneError("");
   };
 
   const openEdit = (m) => {
@@ -168,9 +198,20 @@ export function UsersPage() {
     setEditing(m);
     setShowForm(true);
     setError("");
+    setNameError("");
+    setEmailError("");
+    setPhoneError("");
   };
 
   const save = async () => {
+    const nameOk = form.full_name.trim().length > 0;
+    const emailOk = EMAIL_REGEX.test(form.email);
+    const phoneOk = Boolean(form.phone_no);
+    setNameError(nameOk ? "" : "Full name is required");
+    setEmailError(emailOk ? "" : "Enter a valid email address");
+    setPhoneError(phoneOk ? "" : "Phone number is required");
+    if (!nameOk || !emailOk || !phoneOk) return;
+
     setSaving(true);
     setError("");
     try {
@@ -272,51 +313,98 @@ export function UsersPage() {
         ))}
       </div>
 
-      {showForm && (
-        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-          <h3 className="text-base font-semibold text-foreground">
-            {editing ? "Edit" : "New"} Staff
-          </h3>
-          {!editing && (
-            <p className="text-xs text-muted-foreground">
-              An email will be sent to set their password. The account stays pending until they do.
-            </p>
-          )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input
-              placeholder="Full Name"
-              value={form.full_name}
-              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-              className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-            <input
-              placeholder="Phone"
-              value={form.phone_no}
-              onChange={(e) => setForm({ ...form, phone_no: e.target.value })}
-              className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-            <input
-              placeholder="Email"
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+      <Dialog open={showForm} onOpenChange={(open) => !saving && setShowForm(open)}>
+        <DialogContent overlayClassName="bg-black/50">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit" : "New"} Staff</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
             {!editing && (
-              <select
-                value={form.role_id}
-                onChange={(e) => setForm({ ...form, role_id: Number(e.target.value) })}
-                className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                {ROLE_OPTIONS.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
+              <p className="text-xs text-muted-foreground">
+                An email will be sent to set their password. The account stays pending until they
+                do.
+              </p>
             )}
+            {error && (
+              <p className="text-sm text-destructive border border-destructive/30 bg-destructive/5 rounded-md px-3 py-2">
+                {error}
+              </p>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <RequiredLabel>Full Name</RequiredLabel>
+                <input
+                  placeholder="Full Name"
+                  value={form.full_name}
+                  onChange={(e) => {
+                    setForm({ ...form, full_name: lettersAndSpacesOnly(e.target.value) });
+                    if (nameError) setNameError("");
+                  }}
+                  className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${
+                    nameError ? "border-destructive" : "border-border"
+                  }`}
+                />
+                {nameError && <p className="text-xs text-destructive">{nameError}</p>}
+              </div>
+              <div className="space-y-1">
+                <RequiredLabel>Phone</RequiredLabel>
+                <PhoneNumberInput
+                  value={form.phone_no}
+                  error={!!phoneError}
+                  onChange={(v) => {
+                    setForm({ ...form, phone_no: v });
+                    if (phoneError) setPhoneError("");
+                  }}
+                />
+                {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
+              </div>
+              <div className="space-y-1">
+                <RequiredLabel>Email</RequiredLabel>
+                <input
+                  placeholder="Email"
+                  type="email"
+                  value={form.email}
+                  onKeyDown={blockSpaceKey}
+                  onChange={(e) => {
+                    setForm({ ...form, email: e.target.value.replace(/\s/g, "") });
+                    if (emailError) setEmailError("");
+                  }}
+                  onBlur={() => {
+                    if (form.email && !EMAIL_REGEX.test(form.email))
+                      setEmailError("Enter a valid email address");
+                  }}
+                  className={`w-full border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring ${
+                    emailError ? "border-destructive" : "border-border"
+                  }`}
+                />
+                {emailError && <p className="text-xs text-destructive">{emailError}</p>}
+              </div>
+              {!editing && (
+                <div className="space-y-1">
+                  <RequiredLabel>Role</RequiredLabel>
+                  <select
+                    value={form.role_id}
+                    onChange={(e) => setForm({ ...form, role_id: Number(e.target.value) })}
+                    className="w-full border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {ROLE_OPTIONS.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="flex gap-2">
+          <DialogFooter>
+            <button
+              onClick={() => setShowForm(false)}
+              disabled={saving}
+              className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
             <button
               onClick={save}
               disabled={saving}
@@ -324,15 +412,9 @@ export function UsersPage() {
             >
               {saving ? "Saving..." : "Save"}
             </button>
-            <button
-              onClick={() => setShowForm(false)}
-              className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground hover:border-muted-foreground transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {loading ? (
         <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
