@@ -13,19 +13,20 @@ export function PerformancePage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+
   const load = useCallback(() => {
     setLoading(true);
     setError("");
-    const params = new URLSearchParams();
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
-    const qs = params.toString() ? `?${params.toString()}` : "";
     api
       .get(`/api/reports/staff-performance${qs}`)
       .then((d) => setData(d.staff_performance))
       .catch(() => setError("Failed to load performance data"))
       .finally(() => setLoading(false));
-  }, [from, to]);
+  }, [qs]);
 
   useEffect(load, [load]);
 
@@ -39,9 +40,8 @@ export function PerformancePage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-foreground">Staff Performance</h1>
         <DownloadPdfButton
-          elementId="performance-report-content"
+          path={`/api/reports/staff-performance/pdf${qs}`}
           filename="drivewell-staff-performance-report.pdf"
-          title="Staff Performance Report"
         />
       </div>
 
@@ -65,7 +65,7 @@ export function PerformancePage() {
       {loading ? (
         <div className="text-sm text-muted-foreground p-8">Loading...</div>
       ) : (
-        <div id="performance-report-content" className="space-y-6 bg-background p-1">
+        <div className="space-y-6 bg-background p-1">
           {data.length > 0 ? (
             <>
               <div className="rounded-lg border border-border bg-card p-4">

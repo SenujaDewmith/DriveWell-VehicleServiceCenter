@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { listInvoices, getInvoice, getInvoiceDraft, createInvoice, updatePaymentStatus } = require("../controllers/invoices.controller");
+const { listInvoices, getInvoice, getInvoicePdf, getInvoiceDraft, createInvoice, updatePaymentStatus } = require("../controllers/invoices.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
 
 const cashierOrManager = [verifyToken, authorizeRoles("Cashier", "Service Center Manager")];
@@ -100,6 +100,32 @@ router.get("/draft/:booking_id", cashierOrManager, getInvoiceDraft);
  *       500: { description: Server error }
  */
 router.get("/:id", verifyToken, getInvoice);
+
+/**
+ * @swagger
+ * /api/invoices/{id}/pdf:
+ *   get:
+ *     summary: Download a single invoice as a PDF (same access rules as GET /{id} — customers see only their own)
+ *     tags: [Invoices]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: PDF file
+ *         content:
+ *           application/pdf:
+ *             schema: { type: string, format: binary }
+ *       401: { description: Not authenticated }
+ *       403: { description: Access denied }
+ *       404: { description: Invoice not found }
+ *       500: { description: Server error }
+ */
+router.get("/:id/pdf", verifyToken, getInvoicePdf);
 
 /**
  * @swagger

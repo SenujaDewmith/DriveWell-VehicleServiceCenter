@@ -1,4 +1,7 @@
-import { Printer, X } from "lucide-react";
+import { useState } from "react";
+import { Download, Loader2, Printer, X } from "lucide-react";
+import { api } from "@/lib/api";
+import { saveBlob } from "@/lib/downloadBlob";
 
 // The printable invoice body — the single receipt layout every admin surface
 // (Cashier, Manager, Supervisor) renders, so they can never visually drift apart.
@@ -127,7 +130,41 @@ export function SupervisorServiceDetails({ remarks, items, className = "" }) {
 // Full read-only "view an existing invoice" modal — used anywhere an admin actor
 // (Cashier, Manager, Supervisor) looks up a bill that's already been generated.
 export function InvoiceViewModal({ invoice, onClose }) {
+  const [downloading, setDownloading] = useState(false);
   const handlePrint = () => setTimeout(() => window.print(), 300);
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const { blob, filename } = await api.downloadFile(`/api/invoices/${invoice.invoice_id}/pdf`);
+      saveBlob(
+        blob,
+        filename || `drivewell-invoice-${invoice.booking_ref ?? invoice.invoice_id}.pdf`,
+      );
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const docProps = {
+    bookingRef: invoice.booking_ref,
+    dateLabel: new Date(invoice.generated_at).toLocaleDateString(),
+    customerName: invoice.customer_name,
+    customerPhone: invoice.customer_phone,
+    vehicleLine: `${invoice.plate_no} — ${invoice.make} ${invoice.model} (${invoice.vehicle_type})`,
+    packageName: invoice.package_name,
+    baseAmount: parseFloat(invoice.base_amount),
+    items: invoice.items.map((it) => ({
+      description: it.description,
+      quantity: it.quantity,
+      lineTotal: parseFloat(it.line_total),
+    })),
+    discount: parseFloat(invoice.discount),
+    totalAmount: parseFloat(invoice.total_amount),
+    paymentMethod: invoice.payment_method,
+    hasOilChange: invoice.has_oil_change,
+    currentOdometer: invoice.current_odometer,
+    nextServiceOdometer: invoice.next_service_odometer,
+  };
 
   return (
     <div
@@ -141,6 +178,18 @@ export function InvoiceViewModal({ invoice, onClose }) {
         <div className="flex justify-between items-center p-3 border-b border-border no-print">
           <span className="text-sm font-medium text-muted-foreground">Invoice Preview</span>
           <div className="flex gap-2">
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="rounded-md border border-accent px-3 py-1 text-sm text-accent hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50"
+            >
+              {downloading ? (
+                <Loader2 className="h-3 w-3 inline mr-1 animate-spin" />
+              ) : (
+                <Download className="h-3 w-3 inline mr-1" />
+              )}
+              Download
+            </button>
             <button
               onClick={handlePrint}
               className="rounded-md border border-accent px-3 py-1 text-sm text-accent hover:bg-accent hover:text-accent-foreground transition-colors"
@@ -160,26 +209,7 @@ export function InvoiceViewModal({ invoice, onClose }) {
           className="mx-3 mt-3"
         />
 
-        <InvoiceDocument
-          bookingRef={invoice.booking_ref}
-          dateLabel={new Date(invoice.generated_at).toLocaleDateString()}
-          customerName={invoice.customer_name}
-          customerPhone={invoice.customer_phone}
-          vehicleLine={`${invoice.plate_no} — ${invoice.make} ${invoice.model} (${invoice.vehicle_type})`}
-          packageName={invoice.package_name}
-          baseAmount={parseFloat(invoice.base_amount)}
-          items={invoice.items.map((it) => ({
-            description: it.description,
-            quantity: it.quantity,
-            lineTotal: parseFloat(it.line_total),
-          }))}
-          discount={parseFloat(invoice.discount)}
-          totalAmount={parseFloat(invoice.total_amount)}
-          paymentMethod={invoice.payment_method}
-          hasOilChange={invoice.has_oil_change}
-          currentOdometer={invoice.current_odometer}
-          nextServiceOdometer={invoice.next_service_odometer}
-        />
+        <InvoiceDocument {...docProps} />
 
         <div className="p-3 border-t border-border no-print">
           <span

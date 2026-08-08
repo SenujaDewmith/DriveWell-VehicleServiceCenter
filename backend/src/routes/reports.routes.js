@@ -1,6 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const { revenueReport, volumeReport, staffPerformanceReport, activityLog } = require("../controllers/reports.controller");
+const {
+  revenueReport,
+  volumeReport,
+  staffPerformanceReport,
+  activityLog,
+  revenueReportPdf,
+  volumeReportPdf,
+  staffPerformanceReportPdf,
+  activityLogPdf,
+} = require("../controllers/reports.controller");
 const { verifyToken, authorizeRoles } = require("../middlewares/auth.middleware");
 
 const managerOnly = [verifyToken, authorizeRoles("Service Center Manager")];
@@ -65,6 +74,32 @@ router.get("/revenue", managerOnly, revenueReport);
 
 /**
  * @swagger
+ * /api/reports/revenue/pdf:
+ *   get:
+ *     summary: Revenue report as a downloadable PDF, with period-over-period comparison and insights (Manager only)
+ *     tags: [Reports]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date, example: "2025-01-01" }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date, example: "2025-12-31" }
+ *     responses:
+ *       200:
+ *         description: PDF file
+ *         content:
+ *           application/pdf:
+ *             schema: { type: string, format: binary }
+ *       403: { description: Manager only }
+ *       500: { description: Server error }
+ */
+router.get("/revenue/pdf", managerOnly, revenueReportPdf);
+
+/**
+ * @swagger
  * /api/reports/volume:
  *   get:
  *     summary: Service volume report — by status, by package, by date (Manager only)
@@ -114,6 +149,32 @@ router.get("/volume", managerOnly, volumeReport);
 
 /**
  * @swagger
+ * /api/reports/volume/pdf:
+ *   get:
+ *     summary: Service volume report as a downloadable PDF, with insights (Manager only)
+ *     tags: [Reports]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: PDF file
+ *         content:
+ *           application/pdf:
+ *             schema: { type: string, format: binary }
+ *       403: { description: Manager only }
+ *       500: { description: Server error }
+ */
+router.get("/volume/pdf", managerOnly, volumeReportPdf);
+
+/**
+ * @swagger
  * /api/reports/staff-performance:
  *   get:
  *     summary: Staff performance report — jobs completed and average rating (Manager only)
@@ -150,6 +211,32 @@ router.get("/volume", managerOnly, volumeReport);
  *       500: { description: Server error }
  */
 router.get("/staff-performance", managerOnly, staffPerformanceReport);
+
+/**
+ * @swagger
+ * /api/reports/staff-performance/pdf:
+ *   get:
+ *     summary: Staff performance report as a downloadable PDF, with insights (Manager only)
+ *     tags: [Reports]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: PDF file
+ *         content:
+ *           application/pdf:
+ *             schema: { type: string, format: binary }
+ *       403: { description: Manager only }
+ *       500: { description: Server error }
+ */
+router.get("/staff-performance/pdf", managerOnly, staffPerformanceReportPdf);
 
 /**
  * @swagger
@@ -192,5 +279,34 @@ router.get("/staff-performance", managerOnly, staffPerformanceReport);
  *       500: { description: Server error }
  */
 router.get("/activity", managerOnly, activityLog);
+
+/**
+ * @swagger
+ * /api/reports/activity/pdf:
+ *   get:
+ *     summary: Activity log as a downloadable PDF, with insights (Manager only)
+ *     tags: [Reports]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: to
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 200 }
+ *     responses:
+ *       200:
+ *         description: PDF file
+ *         content:
+ *           application/pdf:
+ *             schema: { type: string, format: binary }
+ *       403: { description: Manager only }
+ *       500: { description: Server error }
+ */
+router.get("/activity/pdf", managerOnly, activityLogPdf);
 
 module.exports = router;

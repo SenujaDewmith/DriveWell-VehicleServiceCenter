@@ -5,6 +5,8 @@ const { logActivity } = require("../lib/activityLogger");
 const { VEHICLE_SELECT, flattenVehicleRef } = require("../lib/vehicleFlatten");
 const { sendInvoiceReady, sendPaymentReceived } = require("../services/email.service");
 const { RESERVATION_STATUS, PAYMENT_STATUS } = require("../constants/status");
+const { sendPdf } = require("../lib/pdf");
+const { buildInvoicePdf } = require("../lib/invoicePdfBuilder");
 
 const CUSTOMER_ROLE = 5;
 
@@ -135,27 +137,56 @@ const listInvoices = async (req, res) => {
   }
 };
 
-const getInvoice = async (req, res) => {
+// Shared by the JSON detail route and the PDF route below, so "customers see
+// only their own invoice" is enforced in exactly one place. Sends the error
+// response itself and returns null when the caller isn't authorized to see
+// this invoice — callers just need to bail out when they get null back.
+async function loadAuthorizedInvoice(req, res) {
   const { user_id, role_id } = req.user;
-  try {
-    const row = await prisma.invoice.findUnique({
-      where: { invoice_id: parseInt(req.params.id) },
-      include: INVOICE_INCLUDE,
+  const row = await prisma.invoice.findUnique({
+    where: { invoice_id: parseInt(req.params.id) },
+    include: INVOICE_INCLUDE,
+  });
+  if (!row) {
+    res.status(404).json({ message: "Invoice not found" });
+    return null;
+  }
+
+  if (role_id === CUSTOMER_ROLE) {
+    const booking = await prisma.reservation.findUnique({
+      where: { reservation_id: row.reservation_id },
+      select: { customer_id: true },
     });
-    if (!row) return res.status(404).json({ message: "Invoice not found" });
-
-    if (role_id === CUSTOMER_ROLE) {
-      const booking = await prisma.reservation.findUnique({
-        where: { reservation_id: row.reservation_id },
-        select: { customer_id: true },
-      });
-      if (booking?.customer_id !== user_id)
-        return res.status(403).json({ message: "Access denied" });
+    if (booking?.customer_id !== user_id) {
+      res.status(403).json({ message: "Access denied" });
+      return null;
     }
+  }
 
-    res.status(200).json({ invoice: flattenInvoice(row, { includeSupervisorNotes: role_id !== CUSTOMER_ROLE }) });
+  return flattenInvoice(row, { includeSupervisorNotes: role_id !== CUSTOMER_ROLE });
+}
+
+const getInvoice = async (req, res) => {
+  try {
+    const invoice = await loadAuthorizedInvoice(req, res);
+    if (!invoice) return;
+    res.status(200).json({ invoice });
   } catch (error) {
     logger.error(`getInvoice failed — ${error.message}`);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Same document customers see on screen and admin staff print/preview — just
+// rendered server-side (real vector PDF) instead of duplicated per-client.
+const getInvoicePdf = async (req, res) => {
+  try {
+    const invoice = await loadAuthorizedInvoice(req, res);
+    if (!invoice) return;
+    const doc = buildInvoicePdf(invoice);
+    sendPdf(res, doc, `drivewell-invoice-${invoice.booking_ref ?? invoice.invoice_id}.pdf`);
+  } catch (error) {
+    logger.error(`getInvoicePdf failed — ${error.message}`);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -325,4 +356,4 @@ const updatePaymentStatus = async (req, res) => {
   }
 };
 
-module.exports = { listInvoices, getInvoice, getInvoiceDraft, createInvoice, updatePaymentStatus };
+module.exports = { listInvoices, getInvoice, getInvoicePdf, getInvoiceDraft, createInvoice, updatePaymentStatus };

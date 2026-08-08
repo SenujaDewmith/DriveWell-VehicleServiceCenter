@@ -175,6 +175,75 @@ describe("GET /api/invoices and /api/invoices/:id", () => {
   });
 });
 
+describe("GET /api/invoices/:id/pdf", () => {
+  async function pdfBuffer(agent, url, portal = "staff") {
+    return agent
+      .get(url)
+      .set("X-Portal", portal)
+      .buffer(true)
+      .parse((response, cb) => {
+        const chunks = [];
+        response.on("data", (chunk) => chunks.push(chunk));
+        response.on("end", () => cb(null, Buffer.concat(chunks)));
+      });
+  }
+
+  test("cashier downloads a real PDF for any invoice", async () => {
+    const { reservation } = await completedBookingFixture();
+    const cashier = await createUser("Cashier");
+    const cashierAgent = await agentFor(cashier, "staff");
+    const created = await cashierAgent.post("/api/invoices").set("X-Portal", "staff").send({
+      reservation_id: reservation.reservation_id,
+      base_amount: 5000,
+      discount: 500,
+      items: [{ description: "Brake pads", unit_price: 1500, quantity: 2 }],
+    });
+
+    const res = await pdfBuffer(cashierAgent, `/api/invoices/${created.body.invoice.invoice_id}/pdf`);
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe("application/pdf");
+    expect(res.headers["content-disposition"]).toContain(".pdf");
+    expect(res.body.subarray(0, 4).toString()).toBe("%PDF");
+    expect(res.body.length).toBeGreaterThan(500);
+  });
+
+  test("owning customer can download their own invoice PDF", async () => {
+    const { reservation, customer } = await completedBookingFixture();
+    const cashier = await createUser("Cashier");
+    const cashierAgent = await agentFor(cashier, "staff");
+    const created = await cashierAgent.post("/api/invoices").set("X-Portal", "staff").send({ reservation_id: reservation.reservation_id, base_amount: 5000 });
+
+    const customerAgent = await agentFor(customer, "customer");
+    const res = await pdfBuffer(customerAgent, `/api/invoices/${created.body.invoice.invoice_id}/pdf`, "customer");
+    expect(res.status).toBe(200);
+    expect(res.body.subarray(0, 4).toString()).toBe("%PDF");
+  });
+
+  test("403 when a customer requests another customer's invoice PDF", async () => {
+    const { reservation } = await completedBookingFixture();
+    const cashier = await createUser("Cashier");
+    const cashierAgent = await agentFor(cashier, "staff");
+    const created = await cashierAgent.post("/api/invoices").set("X-Portal", "staff").send({ reservation_id: reservation.reservation_id, base_amount: 5000 });
+
+    const intruder = await createUser("Customer", { email: "invoice-pdf-intruder@test.local" });
+    const intruderAgent = await agentFor(intruder, "customer");
+    const res = await intruderAgent.get(`/api/invoices/${created.body.invoice.invoice_id}/pdf`).set("X-Portal", "customer");
+    expect(res.status).toBe(403);
+  });
+
+  test("404 for a non-existent invoice", async () => {
+    const cashier = await createUser("Cashier");
+    const agent = await agentFor(cashier, "staff");
+    const res = await agent.get("/api/invoices/999999/pdf").set("X-Portal", "staff");
+    expect(res.status).toBe(404);
+  });
+
+  test("401 when not authenticated", async () => {
+    const res = await request(app).get("/api/invoices/1/pdf");
+    expect(res.status).toBe(401);
+  });
+});
+
 describe("GET /api/invoices/draft/:booking_id", () => {
   test("returns package price and suggested items for the cashier to build an invoice from", async () => {
     const { reservation, pkg } = await completedBookingFixture();

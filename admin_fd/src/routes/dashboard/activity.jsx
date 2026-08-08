@@ -23,19 +23,21 @@ export function ActivityPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  params.set("limit", "200");
+  const qs = `?${params.toString()}`;
+
   const load = useCallback(() => {
     setLoading(true);
     setError("");
-    const params = new URLSearchParams();
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
-    params.set("limit", "200");
     api
-      .get(`/api/reports/activity?${params.toString()}`)
+      .get(`/api/reports/activity${qs}`)
       .then((d) => setLogs(d.logs))
       .catch(() => setError("Failed to load activity log"))
       .finally(() => setLoading(false));
-  }, [from, to]);
+  }, [qs]);
 
   useEffect(load, [load]);
 
@@ -44,9 +46,8 @@ export function ActivityPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-foreground">Activity Log</h1>
         <DownloadPdfButton
-          elementId="activity-report-content"
+          path={`/api/reports/activity/pdf${qs}`}
           filename="drivewell-activity-log.pdf"
-          title="Activity Log"
         />
       </div>
 
@@ -70,7 +71,7 @@ export function ActivityPage() {
       {loading ? (
         <div className="text-sm text-muted-foreground p-8">Loading...</div>
       ) : (
-        <div id="activity-report-content" className="rounded-lg border border-border bg-card">
+        <div className="rounded-lg border border-border bg-card">
           {logs.length === 0 ? (
             <div className="p-8 text-center text-sm text-muted-foreground">
               No activity logged for this period.

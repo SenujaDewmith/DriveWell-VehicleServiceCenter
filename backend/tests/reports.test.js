@@ -93,6 +93,107 @@ describe("GET /api/reports/staff-performance", () => {
   });
 });
 
+describe("GET /api/reports/revenue/pdf", () => {
+  test("returns a real PDF with revenue data baked in", async () => {
+    const pkg = await seedPackage({ price: 5000, name: "Standard Service" });
+    const customer = await createUser("Customer");
+    const vehicle = await createVehicle(customer.user_id);
+    const reservation = await createReservation({ customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Completed" });
+
+    const cashier = await createUser("Cashier");
+    const cashierAgent = await agentFor(cashier, "staff");
+    const created = await cashierAgent.post("/api/invoices").set("X-Portal", "staff").send({ reservation_id: reservation.reservation_id, base_amount: 5000 });
+    await cashierAgent.patch(`/api/invoices/${created.body.invoice.invoice_id}/payment`).set("X-Portal", "staff").send({ payment_status: "Paid" });
+
+    const agent = await managerAgent();
+    const res = await agent.get("/api/reports/revenue/pdf").set("X-Portal", "staff").buffer(true).parse((response, cb) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => cb(null, Buffer.concat(chunks)));
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe("application/pdf");
+    expect(res.headers["content-disposition"]).toContain("drivewell-revenue-report.pdf");
+    expect(res.body.subarray(0, 4).toString()).toBe("%PDF");
+    expect(res.body.length).toBeGreaterThan(1000);
+  });
+
+  test("403 for a non-manager", async () => {
+    const cashier = await createUser("Cashier");
+    const agent = await agentFor(cashier, "staff");
+    const res = await agent.get("/api/reports/revenue/pdf").set("X-Portal", "staff");
+    expect(res.status).toBe(403);
+  });
+});
+
+describe("GET /api/reports/volume/pdf", () => {
+  test("returns a real PDF", async () => {
+    const pkg = await seedPackage();
+    const customer = await createUser("Customer");
+    const vehicle = await createVehicle(customer.user_id);
+    await createReservation({ customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Completed" });
+
+    const agent = await managerAgent();
+    const res = await agent.get("/api/reports/volume/pdf").set("X-Portal", "staff").buffer(true).parse((response, cb) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => cb(null, Buffer.concat(chunks)));
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe("application/pdf");
+    expect(res.body.subarray(0, 4).toString()).toBe("%PDF");
+  });
+});
+
+describe("GET /api/reports/staff-performance/pdf", () => {
+  test("returns a real PDF", async () => {
+    const pkg = await seedPackage();
+    const customer = await createUser("Customer");
+    const vehicle = await createVehicle(customer.user_id);
+    const reservation = await createReservation({ customerId: customer.user_id, vehicleId: vehicle.vehicle_id, packageId: pkg.package_id, status: "Completed" });
+
+    const svcStaff = await createUser("Service Staff", { full_name: "Nimal Perera" });
+    const record = await prisma.serviceRecord.create({ data: { reservation_id: reservation.reservation_id } });
+    await prisma.serviceStaffAssignment.create({ data: { record_id: record.record_id, staff_id: svcStaff.user_id } });
+    await prisma.feedback.create({ data: { reservation_id: reservation.reservation_id, customer_id: customer.user_id, rating: 4 } });
+
+    const agent = await managerAgent();
+    const res = await agent.get("/api/reports/staff-performance/pdf").set("X-Portal", "staff").buffer(true).parse((response, cb) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => cb(null, Buffer.concat(chunks)));
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe("application/pdf");
+    expect(res.body.subarray(0, 4).toString()).toBe("%PDF");
+  });
+});
+
+describe("GET /api/reports/activity/pdf", () => {
+  test("returns a real PDF", async () => {
+    const agent = await managerAgent();
+    const res = await agent.get("/api/reports/activity/pdf").set("X-Portal", "staff").buffer(true).parse((response, cb) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => cb(null, Buffer.concat(chunks)));
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe("application/pdf");
+    expect(res.body.subarray(0, 4).toString()).toBe("%PDF");
+  });
+
+  test("403 for a non-manager", async () => {
+    const supervisor = await createUser("Supervisor");
+    const agent = await agentFor(supervisor, "staff");
+    const res = await agent.get("/api/reports/activity/pdf").set("X-Portal", "staff");
+    expect(res.status).toBe(403);
+  });
+});
+
 describe("GET /api/reports/activity", () => {
   test("logs a booking creation and returns it in the activity feed", async () => {
     const pkg = await seedPackage();

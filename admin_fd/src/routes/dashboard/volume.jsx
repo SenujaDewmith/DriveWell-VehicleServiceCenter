@@ -25,19 +25,20 @@ export function VolumePage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+
   const load = useCallback(() => {
     setLoading(true);
     setError("");
-    const params = new URLSearchParams();
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
-    const qs = params.toString() ? `?${params.toString()}` : "";
     api
       .get(`/api/reports/volume${qs}`)
       .then(setData)
       .catch(() => setError("Failed to load volume data"))
       .finally(() => setLoading(false));
-  }, [from, to]);
+  }, [qs]);
 
   useEffect(load, [load]);
 
@@ -66,9 +67,8 @@ export function VolumePage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-foreground">Service Volume</h1>
         <DownloadPdfButton
-          elementId="volume-report-content"
+          path={`/api/reports/volume/pdf${qs}`}
           filename="drivewell-volume-report.pdf"
-          title="Service Volume Report"
         />
       </div>
 
@@ -92,7 +92,7 @@ export function VolumePage() {
       {loading ? (
         <div className="text-sm text-muted-foreground p-8">Loading...</div>
       ) : (
-        <div id="volume-report-content" className="space-y-6 bg-background p-1">
+        <div className="space-y-6 bg-background p-1">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground">Total Services</p>

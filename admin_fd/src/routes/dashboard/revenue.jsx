@@ -41,13 +41,14 @@ export function RevenuePage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+
   const load = useCallback(() => {
     setLoading(true);
     setError("");
-    const params = new URLSearchParams();
-    if (from) params.set("from", from);
-    if (to) params.set("to", to);
-    const qs = params.toString() ? `?${params.toString()}` : "";
     api
       .get(`/api/reports/revenue${qs}`)
       .then(({ summary: s, by_package, by_date }) => {
@@ -57,7 +58,7 @@ export function RevenuePage() {
       })
       .catch(() => setError("Failed to load revenue data"))
       .finally(() => setLoading(false));
-  }, [from, to]);
+  }, [qs]);
 
   useEffect(load, [load]);
 
@@ -79,9 +80,8 @@ export function RevenuePage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-foreground">Revenue Reports</h1>
         <DownloadPdfButton
-          elementId="revenue-report-content"
+          path={`/api/reports/revenue/pdf${qs}`}
           filename="drivewell-revenue-report.pdf"
-          title="Revenue Report"
         />
       </div>
 
@@ -105,7 +105,7 @@ export function RevenuePage() {
       {loading ? (
         <div className="text-sm text-muted-foreground p-8">Loading...</div>
       ) : (
-        <div id="revenue-report-content" className="space-y-6 bg-background p-1">
+        <div className="space-y-6 bg-background p-1">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="rounded-lg border border-border bg-card p-4">
               <p className="text-sm text-muted-foreground">Total Revenue</p>

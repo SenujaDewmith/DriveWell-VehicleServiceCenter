@@ -50,4 +50,21 @@ export const api = {
       }
       return res.json();
     }),
+  // Binary downloads (PDF reports, etc.) — returns a Blob plus the filename
+  // the server suggested via Content-Disposition, instead of parsing JSON.
+  downloadFile: (path) =>
+    fetch(`${BASE}${path}`, {
+      credentials: "include",
+      headers: { "X-Portal": "staff" },
+    }).then(async (res) => {
+      if (!res.ok) {
+        if (res.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+        const err = await res.json().catch(() => ({ message: res.statusText }));
+        throw new Error(err.message || "Download failed");
+      }
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const blob = await res.blob();
+      return { blob, filename: match?.[1] };
+    }),
 };

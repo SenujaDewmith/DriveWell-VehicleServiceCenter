@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { Download, Loader2 } from "lucide-react";
-import { exportElementToPdf } from "@/lib/pdfExport";
+import { api } from "@/lib/api";
+import { saveBlob } from "@/lib/downloadBlob";
 
-export function DownloadPdfButton({ elementId, filename, title }) {
+// Fetches a server-rendered PDF (real vector text/tables/charts, not a DOM
+// screenshot) and saves it via a throwaway object URL.
+export function DownloadPdfButton({ path, filename }) {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
 
@@ -10,7 +13,8 @@ export function DownloadPdfButton({ elementId, filename, title }) {
     setDownloading(true);
     setError("");
     try {
-      await exportElementToPdf(elementId, filename, title);
+      const { blob, filename: serverFilename } = await api.downloadFile(path);
+      saveBlob(blob, serverFilename || filename);
     } catch {
       setError("Failed to generate PDF");
     } finally {

@@ -18,7 +18,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Eye, Printer, Plus, Search, Trash2, X } from "lucide-react";
+import { Download, Eye, Loader2, Printer, Plus, Search, Trash2, X } from "lucide-react";
+import { saveBlob } from "@/lib/downloadBlob";
 
 const SEARCH_DEBOUNCE_MS = 500;
 
@@ -41,10 +42,10 @@ function MarkPaidAlertDialog({ invoice, marking, onConfirm }) {
             Mark {invoice.booking_ref ?? `#${invoice.invoice_id}`} as paid?
           </AlertDialogTitle>
           <AlertDialogDescription>
-            Confirms LKR {parseFloat(invoice.total_amount).toLocaleString()} was received
-            from {invoice.customer_name} ({invoice.payment_method ?? "Cash"}). This marks the
-            service as Completed & Paid — the Supervisor will then verify payment and
-            release the vehicle. This can't be undone from here.
+            Confirms LKR {parseFloat(invoice.total_amount).toLocaleString()} was received from{" "}
+            {invoice.customer_name} ({invoice.payment_method ?? "Cash"}). This marks the service as
+            Completed & Paid — the Supervisor will then verify payment and release the vehicle. This
+            can't be undone from here.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -53,6 +54,111 @@ function MarkPaidAlertDialog({ invoice, marking, onConfirm }) {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+// The just-generated, not-yet-paid invoice — shown right after "Generate
+// Invoice" so the cashier can download/print a receipt before collecting
+// payment or marking it paid.
+function PendingInvoicePreviewModal({
+  draft,
+  createdInvoice,
+  paymentMethod,
+  marking,
+  onPrint,
+  onClose,
+  onMarkPaid,
+}) {
+  const [downloading, setDownloading] = useState(false);
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const { blob, filename } = await api.downloadFile(
+        `/api/invoices/${createdInvoice.invoice_id}/pdf`,
+      );
+      saveBlob(
+        blob,
+        filename || `drivewell-invoice-${draft.booking_ref ?? createdInvoice.invoice_id}.pdf`,
+      );
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const docProps = {
+    bookingRef: draft.booking_ref,
+    dateLabel: new Date().toLocaleDateString(),
+    customerName: draft.customer_name,
+    customerPhone: draft.customer_phone,
+    vehicleLine: `${draft.plate_no} — ${draft.make} ${draft.model} (${draft.vehicle_type})`,
+    packageName: draft.package_name,
+    baseAmount: parseFloat(createdInvoice.base_amount),
+    items: createdInvoice.items.map((it) => ({
+      description: it.description,
+      quantity: it.quantity,
+      lineTotal: parseFloat(it.line_total),
+    })),
+    discount: parseFloat(createdInvoice.discount),
+    totalAmount: parseFloat(createdInvoice.total_amount),
+    paymentMethod,
+    hasOilChange: draft.has_oil_change,
+    currentOdometer: draft.current_odometer,
+    nextServiceOdometer: draft.next_service_odometer,
+  };
+
+  return (
+    <div className="fixed inset-0 bg-background/95 z-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-card border border-border rounded-xl shadow-lg">
+        <div className="flex justify-between items-center p-3 border-b border-border no-print">
+          <span className="text-sm font-medium text-muted-foreground">Invoice Preview</span>
+          <div className="flex gap-2">
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="rounded-md border border-accent px-3 py-1 text-sm text-accent hover:bg-accent hover:text-accent-foreground transition-colors disabled:opacity-50"
+            >
+              {downloading ? (
+                <Loader2 className="h-3 w-3 inline mr-1 animate-spin" />
+              ) : (
+                <Download className="h-3 w-3 inline mr-1" />
+              )}
+              Download
+            </button>
+            <button
+              onClick={onPrint}
+              className="rounded-md border border-accent px-3 py-1 text-sm text-accent hover:bg-accent hover:text-accent-foreground transition-colors"
+            >
+              <Printer className="h-3 w-3 inline mr-1" />
+              Print
+            </button>
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <SupervisorServiceDetails
+          remarks={draft.remarks}
+          items={draft.suggested_items}
+          className="mx-3 mt-3"
+        />
+        <InvoiceDocument {...docProps} />
+        <div className="p-3 border-t border-border no-print flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-md border border-border py-2 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
+          >
+            Close (Awaiting Payment)
+          </button>
+          <button
+            onClick={onMarkPaid}
+            disabled={marking}
+            className="flex-1 flex items-center justify-center gap-2 rounded-md bg-chart-1 py-2 text-sm font-semibold text-accent-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            {marking ? "Updating..." : "Mark as Paid Now"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -394,7 +500,9 @@ export function CashierDashboard() {
                     <MarkPaidAlertDialog
                       invoice={inv}
                       marking={markingPaidId === inv.invoice_id}
-                      onConfirm={() => markInvoicePaid(inv.invoice_id, inv.payment_method ?? "Cash")}
+                      onConfirm={() =>
+                        markInvoicePaid(inv.invoice_id, inv.payment_method ?? "Cash")
+                      }
                     />
                   </td>
                 </tr>
@@ -763,78 +871,22 @@ export function CashierDashboard() {
 
       {/* Print-ready invoice */}
       {showInvoice && createdInvoice && draft && (
-        <div className="fixed inset-0 bg-background/95 z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-card border border-border rounded-xl shadow-lg">
-            <div className="flex justify-between items-center p-3 border-b border-border no-print">
-              <span className="text-sm font-medium text-muted-foreground">Invoice Preview</span>
-              <div className="flex gap-2">
-                <button
-                  onClick={handlePrint}
-                  className="rounded-md border border-accent px-3 py-1 text-sm text-accent hover:bg-accent hover:text-accent-foreground transition-colors"
-                >
-                  <Printer className="h-3 w-3 inline mr-1" />
-                  Print
-                </button>
-                <button
-                  onClick={() => {
-                    setShowInvoice(false);
-                    setSelectedId(null);
-                  }}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            <SupervisorServiceDetails
-              remarks={draft.remarks}
-              items={draft.suggested_items}
-              className="mx-3 mt-3"
-            />
-            <InvoiceDocument
-              bookingRef={draft.booking_ref}
-              dateLabel={new Date().toLocaleDateString()}
-              customerName={draft.customer_name}
-              customerPhone={draft.customer_phone}
-              vehicleLine={`${draft.plate_no} — ${draft.make} ${draft.model} (${draft.vehicle_type})`}
-              packageName={draft.package_name}
-              baseAmount={parseFloat(createdInvoice.base_amount)}
-              items={createdInvoice.items.map((it) => ({
-                description: it.description,
-                quantity: it.quantity,
-                lineTotal: parseFloat(it.line_total),
-              }))}
-              discount={parseFloat(createdInvoice.discount)}
-              totalAmount={parseFloat(createdInvoice.total_amount)}
-              paymentMethod={paymentMethod}
-              hasOilChange={draft.has_oil_change}
-              currentOdometer={draft.current_odometer}
-              nextServiceOdometer={draft.next_service_odometer}
-            />
-            <div className="p-3 border-t border-border no-print flex gap-2">
-              <button
-                onClick={() => {
-                  setShowInvoice(false);
-                  setSelectedId(null);
-                }}
-                className="flex-1 rounded-md border border-border py-2 text-sm font-semibold text-foreground hover:bg-muted transition-colors"
-              >
-                Close (Awaiting Payment)
-              </button>
-              <button
-                onClick={async () => {
-                  await markInvoicePaid(createdInvoice.invoice_id, paymentMethod);
-                  setShowInvoice(false);
-                  setSelectedId(null);
-                }}
-                disabled={markingPaidId === createdInvoice.invoice_id}
-                className="flex-1 flex items-center justify-center gap-2 rounded-md bg-chart-1 py-2 text-sm font-semibold text-accent-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
-              >
-                {markingPaidId === createdInvoice.invoice_id ? "Updating..." : "Mark as Paid Now"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <PendingInvoicePreviewModal
+          draft={draft}
+          createdInvoice={createdInvoice}
+          paymentMethod={paymentMethod}
+          marking={markingPaidId === createdInvoice.invoice_id}
+          onPrint={handlePrint}
+          onClose={() => {
+            setShowInvoice(false);
+            setSelectedId(null);
+          }}
+          onMarkPaid={async () => {
+            await markInvoicePaid(createdInvoice.invoice_id, paymentMethod);
+            setShowInvoice(false);
+            setSelectedId(null);
+          }}
+        />
       )}
 
       {/* Read-only view of a past invoice, opened from Invoice History */}
