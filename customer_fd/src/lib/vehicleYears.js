@@ -1,2 +1,3 @@
 const MIN_YEAR = 1980;
-export const YEAR_OPTIONS = Array.from({ length: new Date().getFullYear() + 1 - MIN_YEAR + 1 }, (_, i) => new Date().getFullYear() + 1 - i).map((y) => ({ value: y.toString(), label: y.toString() }));
+const MAX_YEAR = new Date().getFullYear();
+export const YEAR_OPTIONS = Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MAX_YEAR - i).map((y) => ({ value: y.toString(), label: y.toString() }));

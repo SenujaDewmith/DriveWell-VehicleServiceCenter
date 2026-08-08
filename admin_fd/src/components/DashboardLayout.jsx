@@ -30,6 +30,7 @@ import { Logo } from "@/components/Logo";
 
 const managerNav = [
   { label: "Overview", to: "/dashboard", icon: <LayoutDashboard className="h-4 w-4" /> },
+    { label: "All Bookings", to: "/dashboard/bookings", icon: <BookOpen className="h-4 w-4" /> },
   { label: "Service Packages", to: "/dashboard/packages", icon: <Package className="h-4 w-4" /> },
   { label: "Feedback", to: "/dashboard/feedback", icon: <MessageSquare className="h-4 w-4" /> },
   {
@@ -55,7 +56,7 @@ const managerNav = [
     to: "/dashboard/vehicle-history",
     icon: <History className="h-4 w-4" />,
   },
-  { label: "All Bookings", to: "/dashboard/bookings", icon: <BookOpen className="h-4 w-4" /> },
+
   { label: "Revenue Reports", to: "/dashboard/revenue", icon: <DollarSign className="h-4 w-4" /> },
   { label: "Service Volume", to: "/dashboard/volume", icon: <BarChart3 className="h-4 w-4" /> },
   {

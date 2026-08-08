@@ -5,7 +5,7 @@ import { StatusBadge, PaymentBadge } from "@/components/manager/ManagerOverview"
 import { InvoiceViewModal } from "@/components/invoices/InvoiceView";
 import { BookingDetailModal } from "@/components/bookings/BookingDetailModal";
 import { RescheduleBookingModal } from "@/components/bookings/RescheduleBookingModal";
-import { Eye, FileText, X, AlertTriangle, CalendarClock } from "lucide-react";
+import { Eye, FileText, X, AlertTriangle, CalendarClock, CalendarDays, Calendar as CalendarIcon } from "lucide-react";
 import { DataCard, DataCardField } from "@/components/ui/data-card";
 import {
   AlertDialog,
@@ -19,6 +19,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 
 const statuses = [
   "Booked",
@@ -44,6 +46,19 @@ function sortByServiceDate(list, order) {
     return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
   });
   return order === "latest" ? sorted.reverse() : sorted;
+}
+
+// service_date is business-local (see getLocalNow() on the backend); build "today" the same
+// way rather than toISOString(), which is UTC and can land on the wrong day near midnight.
+function getLocalDateString(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatDateShort(date) {
+  return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
 // Must match NO_SHOW_GRACE_MINUTES in backend/src/controllers/bookings.controller.js — kept
@@ -127,6 +142,9 @@ export function BookingsPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [search, setSearch] = useState("");
   const [sortOrder, setSortOrder] = useState("latest");
+  // Date object (local, no time component) or null when no date filter is active.
+  const [dateFilter, setDateFilter] = useState(null);
+  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
 
   // Keyed by reservation_id so each row can look up its own invoice (if any)
   // without a separate fetch per row.
@@ -195,8 +213,13 @@ export function BookingsPage() {
       .catch(() => {});
   }, []);
 
+  const today = getLocalDateString();
+  const dateFilterStr = dateFilter ? getLocalDateString(dateFilter) : null;
+  const isTodaySelected = dateFilterStr === today;
+
   const filtered = bookings.filter((b) => {
     if (statusFilter !== "All" && b.status !== statusFilter) return false;
+    if (dateFilterStr && b.service_date !== dateFilterStr) return false;
     if (search) {
       const q = search.toLowerCase();
       return (
@@ -209,17 +232,19 @@ export function BookingsPage() {
   });
   const sorted = sortByServiceDate(filtered, sortOrder);
 
-  // Counts reflect the status filter only (not the search box) — so switching
-  // status tabs shows how many bookings are in each, independent of search text.
+  // Counts reflect the status filter only (not the search box or date filter) — so
+  // switching status tabs shows how many bookings are in each, independent of the rest.
   const statusCounts = statuses.reduce((acc, s) => {
     acc[s] = bookings.filter((b) => b.status === s).length;
     return acc;
   }, {});
+  const todayCount = bookings.filter((b) => b.service_date === today).length;
 
-  const hasFilter = statusFilter !== "All" || search !== "";
+  const hasFilter = statusFilter !== "All" || search !== "" || Boolean(dateFilterStr);
   const clearFilter = () => {
     setStatusFilter("All");
     setSearch("");
+    setDateFilter(null);
   };
 
   return (
@@ -244,6 +269,54 @@ export function BookingsPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="border border-border rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring w-full sm:w-64"
         />
+        <button
+          onClick={() => setDateFilter(isTodaySelected ? null : new Date())}
+          className={`flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-sm font-medium transition-colors ${
+            isTodaySelected
+              ? "border-accent bg-accent text-accent-foreground"
+              : "border-border text-muted-foreground"
+          }`}
+        >
+          <CalendarDays className="h-3.5 w-3.5" /> Today ({todayCount})
+        </button>
+        <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
+          <PopoverTrigger asChild>
+            <button
+              className={`flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-sm font-medium transition-colors ${
+                dateFilterStr && !isTodaySelected
+                  ? "border-accent bg-accent text-accent-foreground"
+                  : "border-border text-muted-foreground"
+              }`}
+            >
+              <CalendarIcon className="h-3.5 w-3.5" />
+              {dateFilter ? formatDateShort(dateFilter) : "Pick a date"}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={dateFilter ?? undefined}
+              onSelect={(d) => {
+                setDateFilter(d ?? null);
+                setDatePopoverOpen(false);
+              }}
+              autoFocus
+            />
+            {dateFilter && (
+              <div className="border-t border-border p-2">
+                <button
+                  onClick={() => {
+                    setDateFilter(null);
+                    setDatePopoverOpen(false);
+                  }}
+                  className="flex w-full items-center justify-center gap-1 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted transition-colors"
+                >
+                  <X className="h-3 w-3" /> Clear date
+                </button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
         <div className="flex gap-1 flex-wrap">
           <button
             onClick={() => setStatusFilter("All")}
