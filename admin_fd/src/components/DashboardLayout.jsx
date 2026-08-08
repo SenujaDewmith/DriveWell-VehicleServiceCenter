@@ -25,6 +25,7 @@ import {
   History,
   ChevronsLeft,
   ChevronsRight,
+  Settings,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 
@@ -65,6 +66,7 @@ const managerNav = [
     icon: <UserCheck className="h-4 w-4" />,
   },
   { label: "Activity Log", to: "/dashboard/activity", icon: <Activity className="h-4 w-4" /> },
+  { label: "Business Settings", to: "/dashboard/settings", icon: <Settings className="h-4 w-4" /> },
 ];
 
 const supervisorNav = [
@@ -76,6 +78,11 @@ const supervisorNav = [
     icon: <History className="h-4 w-4" />,
   },
   { label: "Feedback", to: "/dashboard/feedback", icon: <MessageSquare className="h-4 w-4" /> },
+  {
+    label: "Slot Availability",
+    to: "/dashboard/slot-availability",
+    icon: <Calendar className="h-4 w-4" />,
+  },
   {
     // Read-only for supervisors — the page itself hides Add/Edit/Activate based on role.
     label: "Customer Management",

@@ -854,9 +854,16 @@ const releaseVehicle = async (req, res) => {
 // into back-to-back windows sized to the package's own duration, with each window's
 // capacity coming from the package's max_capacity (concurrent bookings of that package).
 const getAvailableSlots = async (req, res) => {
-  const { date, package_id, vehicle_id, exclude_reservation_id } = req.query;
+  const { date, package_id, vehicle_id, exclude_reservation_id, ignore_restrictions } = req.query;
   if (!date || !package_id)
     return res.status(400).json({ message: "date and package_id query params are required" });
+
+  // Staff checking slot status (not booking one) don't need the customer-facing
+  // eligibility gates below — a manager should be able to see how full any date
+  // was/is/will be, not just what a customer could book right now. Real closures
+  // (non-working day, holidays/blocks) still apply since those are facts about
+  // the day, not booking-window restrictions.
+  const bypassEligibility = ignore_restrictions === "true" && req.user.role_id !== CUSTOMER_ROLE;
 
   try {
     const config = await prisma.workingConfig.findFirst();
@@ -867,9 +874,9 @@ const getAvailableSlots = async (req, res) => {
       return res.status(200).json({ available: false, reason: "Not a working day", slots: [] });
 
     const { todayKey, nowMinutes } = getLocalNow();
-    if (date < todayKey)
+    if (!bypassEligibility && date < todayKey)
       return res.status(200).json({ available: false, reason: "This date has already passed", slots: [] });
-    if (date > getMaxAdvanceDateKey(config.max_advance_days))
+    if (!bypassEligibility && date > getMaxAdvanceDateKey(config.max_advance_days))
       return res.status(200).json({
         available: false,
         reason: `Bookings can only be made up to ${config.max_advance_days} days in advance`,
@@ -879,7 +886,7 @@ const getAvailableSlots = async (req, res) => {
     const dayStartMin = dateColToMinutes(config.day_start_time);
     const dayEndMin = dateColToMinutes(config.day_end_time);
 
-    if (date === todayKey) {
+    if (!bypassEligibility && date === todayKey) {
       const cutoffStart = dayEndMin - config.same_day_cutoff_minutes;
       if (nowMinutes >= cutoffStart) {
         return res.status(200).json({
@@ -897,7 +904,7 @@ const getAvailableSlots = async (req, res) => {
 
     const blocked = await getBlockedRangesForDate(prisma, date);
     let rawWindows = generateWindows(dayStartMin, dayEndMin, pkg.estimated_duration, blocked);
-    if (date === todayKey) {
+    if (!bypassEligibility && date === todayKey) {
       const minStart = nowMinutes + MIN_LEAD_MINUTES;
       rawWindows = rawWindows.filter((w) => w.start >= minStart);
     }

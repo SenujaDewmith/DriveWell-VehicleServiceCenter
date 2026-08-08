@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2, CalendarOff } from "lucide-react";
 import { api } from "@/lib/api";
-import { PhoneNumberInput } from "@/components/ui/phone-number-input";
-import { isValidSriLankanPhone } from "@/lib/phoneNumber";
+import { toLocalISODate, fmt12h } from "@/lib/date";
 import { DataCard, DataCardField } from "@/components/ui/data-card";
+import { SlotAvailability } from "@/components/schedule/SlotAvailability";
 
 const ALL_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DAY_TO_NUM = {
@@ -36,27 +36,12 @@ function subtractMinutes(hhmm, minutes) {
   return `${hh}:${mm}`;
 }
 
-function fmt12h(hhmm) {
-  const [h, m] = hhmm.split(":").map(Number);
-  const period = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${period}`;
-}
-
 function toHHMM(t) {
   return t.slice(0, 5);
 }
 
-// Local calendar date as YYYY-MM-DD — matches what a <input type="date">
-// produces, and avoids the UTC-shift bugs of Date#toISOString() for
-// timezones ahead of UTC (a holiday added at 1am local time shouldn't be
-// treated as "yesterday").
 function todayISODate() {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return toLocalISODate(new Date());
 }
 
 // A holiday is a blocked time that spans the entire day for a specific date
@@ -80,10 +65,6 @@ export function SchedulePage() {
   const [maxAdvanceDays, setMaxAdvanceDays] = useState(60);
   const [savedHours, setSavedHours] = useState(null);
   const [blockedTimes, setBlockedTimes] = useState([]);
-
-  const [contactPhone, setContactPhone] = useState("");
-  const [savedContactPhone, setSavedContactPhone] = useState("");
-  const [savingContact, setSavingContact] = useState(false);
 
   const [newBlockDate, setNewBlockDate] = useState("");
   const [newBlockStart, setNewBlockStart] = useState("");
@@ -121,8 +102,6 @@ export function SchedulePage() {
         setMaxAdvanceDays(advanceDays);
         setSavedHours({ workingDays: days, dayStart: start, dayEnd: end, cutoffHours: cutoff, maxAdvanceDays: advanceDays });
         setBlockedTimes(blocked_times);
-        setContactPhone(config.contact_phone ?? "");
-        setSavedContactPhone(config.contact_phone ?? "");
       })
       .catch(() => setError("Failed to load config"))
       .finally(() => setLoading(false));
@@ -172,25 +151,6 @@ export function SchedulePage() {
       setError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const saveContactPhone = async () => {
-    if (!isValidSriLankanPhone(contactPhone)) {
-      setError("Enter a valid 9-digit number after +94");
-      return;
-    }
-    setSavingContact(true);
-    setError("");
-    setSuccess("");
-    try {
-      await api.put("/api/config/contact", { contact_phone: contactPhone.trim() });
-      setSavedContactPhone(contactPhone.trim());
-      setSuccess("Contact phone saved.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Save failed");
-    } finally {
-      setSavingContact(false);
     }
   };
 
@@ -432,28 +392,7 @@ export function SchedulePage() {
         )}
       </div>
 
-      <div className="rounded-lg border border-border bg-card p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-foreground">Contact Information</h3>
-          <button
-            onClick={saveContactPhone}
-            disabled={savingContact || contactPhone.trim() === savedContactPhone}
-            className="rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-foreground hover:bg-accent/90 transition-colors disabled:opacity-50"
-          >
-            {savingContact ? "Saving..." : "Save Changes"}
-          </button>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Shown to customers on the public site and wherever they hit a self-service dead end
-          (e.g. a booking too close to its appointment time to cancel online).
-        </p>
-        <div className="space-y-1">
-          <label className="block text-sm font-medium text-muted-foreground">Support Phone Number</label>
-          <div className="w-full sm:w-64">
-            <PhoneNumberInput value={contactPhone} onChange={setContactPhone} />
-          </div>
-        </div>
-      </div>
+      <SlotAvailability />
 
       <div className="rounded-lg border border-border bg-card p-4 space-y-4">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">

@@ -15,6 +15,8 @@ import { PackagesPage } from "@/routes/dashboard/packages";
 import { PerformancePage } from "@/routes/dashboard/performance";
 import { RevenuePage } from "@/routes/dashboard/revenue";
 import { SchedulePage } from "@/routes/dashboard/schedule";
+import { SettingsPage } from "@/routes/dashboard/settings";
+import { SlotAvailabilityPage } from "@/routes/dashboard/slot-availability";
 import { UsersPage } from "@/routes/dashboard/users";
 import { VehicleCatalogPage } from "@/routes/dashboard/vehicle-catalog";
 import { VehicleHistoryPage } from "@/routes/dashboard/vehicle-history";
@@ -42,6 +44,8 @@ export default function App() {
               <Route path="performance" element={<PerformancePage />} />
               <Route path="revenue" element={<RevenuePage />} />
               <Route path="schedule" element={<SchedulePage />} />
+              <Route path="settings" element={<SettingsPage />} />
+              <Route path="slot-availability" element={<SlotAvailabilityPage />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="vehicle-catalog" element={<VehicleCatalogPage />} />
               <Route path="vehicle-history" element={<VehicleHistoryPage />} />
