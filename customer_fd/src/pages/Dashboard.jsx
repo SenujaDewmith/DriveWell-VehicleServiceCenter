@@ -93,7 +93,7 @@ export default function Dashboard() {
         .filter((b) => ACTIVE_SERVICE_STATUSES.includes(b.status))
         .sort((a, b) => new Date(a.service_date).getTime() - new Date(b.service_date).getTime());
     const lastService = bookings
-        .filter((b) => b.status === "Completed")
+        .filter((b) => b.status === "Collected")
         .sort((a, b) => new Date(b.service_date).getTime() - new Date(a.service_date).getTime())[0];
     const recentActivity = [...bookings]
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
