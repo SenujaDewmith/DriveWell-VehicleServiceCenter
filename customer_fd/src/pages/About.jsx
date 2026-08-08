@@ -66,7 +66,7 @@ export default function About() {
     ];
     return (<div className="min-h-screen">
       {/* Page header */}
-      <section className="relative py-28 md:py-36 overflow-hidden">
+      <section className="relative h-[calc(100vh-4rem)] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${headerImage})` }}>
           <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/70 to-black/50"/>
         </div>

@@ -59,7 +59,7 @@ export function LoginPage() {
 
         <div className="space-y-8 max-w-md">
           <div>
-            <h1 className="text-3xl font-bold leading-tight">Service Center Admin Portal</h1>
+            <h1 className="text-3xl font-bold leading-tight">DriveWell's Management Portal</h1>
             <p className="mt-3 text-sm text-secondary-foreground/80">
               One place for the whole team to run daily operations — bookings, job assignments,
               invoicing, and reporting.
