@@ -54,7 +54,7 @@ export function FeaturedPackages() {
             <Carousel opts={{ align: "start", loop: true }} setApi={setPackagesApi} className="px-1">
               <CarouselContent className="py-3">
                 {featuredPackages.map((pkg) => (<CarouselItem key={pkg.package_id} className="sm:basis-1/2 lg:basis-1/3">
-                    <Card className="relative border-cta border-2 shadow-lg transition-all hover:shadow-xl hover:-translate-y-1 h-full">
+                    <Card className="relative border-cta border-2 shadow-lg transition-all hover:shadow-xl hover:-translate-y-1 h-full flex flex-col">
                       <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
                         <span className="bg-cta text-cta-foreground text-xs font-semibold px-3 py-1 rounded-full">
                           Most Popular
@@ -75,14 +75,14 @@ export function FeaturedPackages() {
                           <span className="text-sm text-muted-foreground">/ {fmtDuration(pkg.estimated_duration)}</span>
                         </div>
                       </CardHeader>
-                      <CardContent className="p-5 pt-0">
-                        <ul className="space-y-1.5">
+                      <CardContent className="p-5 pt-0 flex flex-1 flex-col">
+                        <ul className="space-y-1.5 mb-4">
                           {getBullets(pkg.description).map((feature) => (<li key={feature} className="flex items-start gap-2">
                               <CheckCircle className="h-5 w-5 text-cta shrink-0 mt-0.5"/>
                               <span className="text-sm">{feature}</span>
                             </li>))}
                         </ul>
-                        <Button className="w-full mt-4 bg-cta text-cta-foreground hover:bg-cta/90" onClick={() => navigate(`/book?package=${pkg.package_id}`)}>
+                        <Button className="w-full mt-auto bg-cta text-cta-foreground hover:bg-cta/90" onClick={() => navigate(`/book?package=${pkg.package_id}`)}>
                           Book Now
                         </Button>
                       </CardContent>
